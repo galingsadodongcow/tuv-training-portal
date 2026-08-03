@@ -5,11 +5,12 @@ export const ROLE_LABEL = {
   sales: 'Sales',
 }
 
-// Nav items per role. Path, label, and which roles see it.
 export const NAV = [
   { path: '/dashboard', label: 'Dashboard', roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
   { path: '/calendar', label: 'Calendar', roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
   { path: '/orders', label: 'Orders', roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
+  { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'business_owner', 'sales'] },
+  { path: '/clients', label: 'Clients', roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
   { path: '/sales-entry', label: 'New sales order', roles: ['super_admin', 'sales'] },
   { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'sales'] },
   { path: '/approvals', label: 'Approvals', roles: ['super_admin', 'operations', 'business_owner'] },

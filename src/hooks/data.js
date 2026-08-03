@@ -7,7 +7,6 @@ const sel = async (q) => {
   return data
 }
 
-// ---- Schedules with course + channel pax ----
 export function useSchedules(year = 2026) {
   return useQuery({
     queryKey: ['schedules', year],
@@ -16,7 +15,7 @@ export function useSchedules(year = 2026) {
         supabase
           .from('schedule')
           .select(
-            'schedule_id, month, start_date, end_date, modality, private_run, price, forecast_revenue, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, sales_owner, course:course_id(course_name, training_type, category), calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, sales_owner, course:course_id(course_name, training_type, category), calendar_year:year_id(year)'
           )
           .order('start_date', { ascending: true })
       ).then((rows) => rows.filter((r) => r.calendar_year?.year === year)),
@@ -38,7 +37,28 @@ export function useChannelPax() {
   })
 }
 
-// ---- Orders ----
+export function useCourses() {
+  return useQuery({
+    queryKey: ['courses'],
+    queryFn: () =>
+      sel(supabase.from('course').select('course_id, course_name, training_type, category').order('course_name')),
+  })
+}
+
+export function useCourseFees() {
+  return useQuery({
+    queryKey: ['course_fees'],
+    queryFn: () => sel(supabase.from('course_fee').select('course_id, modality, fee_php')),
+  })
+}
+
+export function useActiveYear() {
+  return useQuery({
+    queryKey: ['active_year'],
+    queryFn: () => sel(supabase.from('calendar_year').select('*').eq('status', 'Active').order('year')),
+  })
+}
+
 export function useOrders() {
   return useQuery({
     queryKey: ['orders'],
@@ -47,7 +67,7 @@ export function useOrders() {
         supabase
           .from('orders')
           .select(
-            'order_id, order_date, channel, modality, seats, amount_php, payment_status, order_status, went_live, access_status, schedule_id, course_id, client:client_id(name, company, email), course:course_id(course_name)'
+            'order_id, order_date, channel, modality, seats, amount_php, payment_status, order_status, went_live, access_status, schedule_id, course_id, client:client_id(name, company, email), course:course_id(course_name), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
           )
           .order('order_date', { ascending: false })
           .limit(1000)
@@ -55,7 +75,6 @@ export function useOrders() {
   })
 }
 
-// ---- Salespeople (for entry + assignment) ----
 export function useSalespeople() {
   return useQuery({
     queryKey: ['salespeople'],
@@ -64,7 +83,6 @@ export function useSalespeople() {
   })
 }
 
-// ---- Courses & schedules for the sales entry dropdowns ----
 export function useOpenSchedules(year = 2026) {
   return useQuery({
     queryKey: ['open_schedules', year],
@@ -79,16 +97,13 @@ export function useOpenSchedules(year = 2026) {
   })
 }
 
-// ---- Duplicate queue ----
 export function useDuplicates() {
   return useQuery({
     queryKey: ['duplicates'],
-    queryFn: () =>
-      sel(supabase.from('duplicate_candidate').select('*').eq('status', 'Open')),
+    queryFn: () => sel(supabase.from('duplicate_candidate').select('*').eq('status', 'Open')),
   })
 }
 
-// ---- Approvals ----
 export function useApprovals() {
   return useQuery({
     queryKey: ['approvals'],
@@ -102,7 +117,6 @@ export function useApprovals() {
   })
 }
 
-// ---- E-learning pending access ----
 export function useElearningPending() {
   return useQuery({
     queryKey: ['elearning_pending'],
@@ -117,7 +131,6 @@ export function useElearningPending() {
   })
 }
 
-// ---- Calendar years ----
 export function useYears() {
   return useQuery({
     queryKey: ['years'],
@@ -125,12 +138,49 @@ export function useYears() {
   })
 }
 
-// ---- Mutations ----
-export function useMutate(invalidateKeys = []) {
+export function useSessionNotes(scheduleId) {
+  return useQuery({
+    queryKey: ['notes', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('session_note')
+          .select('note_id, note, date, author, profile:author(full_name, role)')
+          .eq('schedule_id', scheduleId)
+          .order('date', { ascending: false })
+      ),
+  })
+}
+
+export function useClients() {
+  return useQuery({
+    queryKey: ['clients'],
+    queryFn: () =>
+      sel(
+        supabase
+          .from('client')
+          .select('client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)')
+          .order('company')
+          .limit(1000)
+      ),
+  })
+}
+
+export function useAttribution() {
+  return useQuery({
+    queryKey: ['attribution'],
+    queryFn: () =>
+      sel(
+        supabase
+          .from('attribution')
+          .select('attribution_id, clients_brought, date_recorded, sales_id, schedule_id, salesperson:sales_id(name, code), schedule:schedule_id(start_date, course:course_id(course_name))')
+          .order('date_recorded', { ascending: false })
+      ),
+  })
+}
+
+export function useInvalidate() {
   const qc = useQueryClient()
-  return (fn) =>
-    useMutation({
-      mutationFn: fn,
-      onSuccess: () => invalidateKeys.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
-    })
+  return (keys) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }))
 }

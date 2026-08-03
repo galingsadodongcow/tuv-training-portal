@@ -1,14 +1,20 @@
 import { useMemo, useState } from 'react'
 import { useSchedules, useChannelPax } from '../hooks/data'
+import { useAuth } from '../hooks/useAuth'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
+import SessionDrawer from '../components/SessionDrawer'
 import { dateRange, php, daysUntil } from '../lib/format'
+import { Link } from 'react-router-dom'
 
 export default function Calendar() {
   const sched = useSchedules(2026)
   const pax = useChannelPax()
+  const { profile } = useAuth()
   const [month, setMonth] = useState('all')
   const [status, setStatus] = useState('all')
   const [cat, setCat] = useState('all')
+  const [open, setOpen] = useState(null)
+  const canCreate = ['operations', 'super_admin'].includes(profile?.role)
 
   const rows = useMemo(() => {
     if (!sched.data) return []
@@ -30,22 +36,21 @@ export default function Calendar() {
       <div className="page-head">
         <div>
           <h1>Training calendar</h1>
-          <p>Every 2026 session with live booked pax split by channel.</p>
+          <p>Every 2026 session with live booked pax split by channel. Click a row to open it.</p>
         </div>
+        {canCreate && (
+          <Link className="btn" to="/session/new">+ New session</Link>
+        )}
       </div>
 
       <div className="filters">
         <select value={month} onChange={(e) => setMonth(e.target.value)}>
           <option value="all">All months</option>
-          {months.map((m) => (
-            <option key={m}>{m}</option>
-          ))}
+          {months.map((m) => (<option key={m}>{m}</option>))}
         </select>
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All statuses</option>
-          {['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
+          {['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => (<option key={s}>{s}</option>))}
         </select>
         <select value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="all">All categories</option>
@@ -58,14 +63,8 @@ export default function Calendar() {
         <table>
           <thead>
             <tr>
-              <th>Course</th>
-              <th>Dates</th>
-              <th>Modality</th>
-              <th>Fill</th>
-              <th>Channels</th>
-              <th>Status</th>
-              <th>Go</th>
-              <th className="right">Fee</th>
+              <th>Course</th><th>Dates</th><th>Modality</th><th>Fill</th>
+              <th>Channels</th><th>Status</th><th>Go</th><th className="right">Fee</th>
             </tr>
           </thead>
           <tbody>
@@ -73,19 +72,14 @@ export default function Calendar() {
               const ch = pax.data?.[r.schedule_id] || {}
               const d = daysUntil(r.start_date)
               return (
-                <tr key={r.schedule_id}>
+                <tr key={r.schedule_id} className="clickable" onClick={() => setOpen(r)}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{r.course?.course_name}</div>
                     <div className="fill-label">{r.course?.training_type}</div>
                   </td>
-                  <td>
-                    {dateRange(r.start_date, r.end_date)}
-                    {d != null && d >= 0 && <div className="fill-label">in {d}d</div>}
-                  </td>
+                  <td>{dateRange(r.start_date, r.end_date)}{d != null && d >= 0 && <div className="fill-label">in {d}d</div>}</td>
                   <td>{r.modality}</td>
-                  <td style={{ minWidth: 120 }}>
-                    <FillBar booked={r.booked_participants} min={r.min_participants} />
-                  </td>
+                  <td style={{ minWidth: 120 }}><FillBar booked={r.booked_participants} min={r.min_participants} /></td>
                   <td>
                     <div className="chip-row">
                       {Object.entries(ch).length === 0 && <span className="muted fill-label">—</span>}
@@ -106,6 +100,8 @@ export default function Calendar() {
         </table>
         {rows.length === 0 && <div className="empty">No sessions match these filters.</div>}
       </div>
+
+      {open && <SessionDrawer schedule={open} channelPax={pax.data} onClose={() => setOpen(null)} />}
     </>
   )
 }
