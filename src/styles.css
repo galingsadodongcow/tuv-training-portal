@@ -150,3 +150,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--tr-blue); o
   .sidebar-foot { margin: 0 0 0 auto; border: none; padding: 0; }
   .main { padding: 18px 16px; }
 }
+
+/* Drawer */
+.drawer-scrim { position: fixed; inset: 0; background: rgba(16, 42, 67, 0.4); display: flex; justify-content: flex-end; z-index: 50; }
+.drawer { width: 480px; max-width: 94vw; background: var(--tr-card); height: 100vh; overflow-y: auto; box-shadow: -8px 0 30px rgba(16,42,67,0.18); animation: slidein 0.18s ease; }
+@keyframes slidein { from { transform: translateX(30px); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
+.drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--tr-line); position: sticky; top: 0; background: var(--tr-card); }
+.drawer-body { padding: 18px 20px 40px; }
+.drawer-section { border-top: 1px solid var(--tr-line); padding-top: 16px; margin-top: 16px; }
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.note { background: var(--tr-bg); border-radius: 8px; padding: 9px 12px; font-size: 14px; }
+.note-meta { font-size: 12px; margin-bottom: 3px; }
+.clickable { cursor: pointer; }
+.clickable:hover td:first-child { color: var(--tr-blue); }
