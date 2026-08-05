@@ -9,6 +9,8 @@ import TransferOrder from './TransferOrder'
 import CloseSession from './CloseSession'
 import CancelSession from './CancelSession'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner } from './ui'
+import { useToast } from './Toast'
+import { useEscape } from '../hooks/useEscape'
 import { php } from '../lib/format'
 import { lt, formatSegments } from '../lib/labels'
 import { shortDate } from '../lib/format'
@@ -19,6 +21,8 @@ const canOps = (r: any) => ['operations', 'super_admin'].includes(r)
 
 export default function SessionDrawer({ schedule, channelPax, onClose }: { schedule: any; channelPax: any; onClose: () => void }) {
   const router = useRouter()
+  const toast = useToast()
+  useEscape(onClose)
   const { profile } = useAuth()
   const role = profile?.role
   const notes = useSessionNotes(schedule?.schedule_id)
@@ -45,10 +49,11 @@ export default function SessionDrawer({ schedule, channelPax, onClose }: { sched
       author: profile?.user_id,
       note: noteText.trim(),
     })
-    if (error) setMsg({ ok: false, t: error.message })
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
     else {
       setNoteText('')
       invalidate(['notes'])
+      toast.success('Note posted.')
     }
     setBusy('')
   }
@@ -61,10 +66,11 @@ export default function SessionDrawer({ schedule, channelPax, onClose }: { sched
       p_revenue: fRev === '' ? null : Number(fRev),
       p_pax: fPax === '' ? null : Number(fPax),
     })
-    if (error) setMsg({ ok: false, t: error.message })
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
     else {
       setMsg({ ok: true, t: 'Forecast saved.' })
       invalidate(['schedules'])
+      toast.success('Forecast saved.')
     }
     setBusy('')
   }
@@ -78,10 +84,11 @@ export default function SessionDrawer({ schedule, channelPax, onClose }: { sched
       requested_by: profile?.user_id,
       note: `Proposed from calendar. Booked ${schedule.booked_participants} of ${schedule.min_participants} min.`,
     })
-    if (error) setMsg({ ok: false, t: error.message })
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
     else {
       setMsg({ ok: true, t: 'Cancellation proposed. The business owner decides on the Approvals screen.' })
       invalidate(['approvals'])
+      toast.success('Cancellation proposed.')
     }
     setBusy('')
   }
@@ -90,10 +97,11 @@ export default function SessionDrawer({ schedule, channelPax, onClose }: { sched
     setBusy('status')
     setMsg(null)
     const { error } = await supabase.from('schedule').update({ status }).eq('schedule_id', schedule.schedule_id)
-    if (error) setMsg({ ok: false, t: error.message })
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
     else {
       setMsg({ ok: true, t: `Status set to ${status}.` })
       invalidate(['schedules'])
+      toast.success(`Status set to ${status}.`)
     }
     setBusy('')
   }

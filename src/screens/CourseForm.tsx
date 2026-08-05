@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useCourses, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { useToast } from '../components/Toast'
 import { lt } from '../lib/labels'
 
 const MODS = ['Live Online Training', 'Face-to-face', 'E-learning']
@@ -16,6 +17,7 @@ export default function CourseForm() {
   const courses = useCourses()
   const invalidate = useInvalidate()
   const router = useRouter()
+  const toast = useToast()
   const [f, setF] = useState({ course_name: '', category: '', training_type: 'Professional', url: '' })
   const [mods, setMods] = useState<ModState>({ 'Live Online Training': { on: true, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } })
   const [busy, setBusy] = useState(false)
@@ -75,9 +77,11 @@ export default function CourseForm() {
         if (delErr) throw delErr
       }
       invalidate(['courses', 'course_fees'])
+      toast.success(editing ? 'Course saved.' : 'Course created.')
       router.push('/calendar')
     } catch (err: any) {
       setMsg(err.message)
+      toast.error(err.message)
       setBusy(false)
     }
   }

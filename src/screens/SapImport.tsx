@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useInvalidate } from '../hooks/data'
+import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
 
 // Accepts a SAP export pasted or uploaded as CSV.
@@ -28,6 +29,7 @@ function parseCsv(text) {
 export default function SapImport() {
   const { profile } = useAuth()
   const invalidate = useInvalidate()
+  const toast = useToast()
   const [raw, setRaw] = useState('')
   const [preview, setPreview] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -87,6 +89,8 @@ export default function SapImport() {
       if (error) fail++; else ok++
     }
     invalidate(['orders', 'fulfillment_queue'])
+    toast.success(`${ok} order(s) updated.`)
+    if (fail > 0) toast.error(`${fail} failed.`)
     setDone({ ok, fail, skipped: preview.length - toApply.length })
     setBusy(false)
   }

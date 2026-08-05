@@ -5,10 +5,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useYears } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { useToast } from '../components/Toast'
 
 export default function Rollover() {
   const years = useYears()
   const qc = useQueryClient()
+  const toast = useToast()
   const [mode, setMode] = useState('Copy')
   const [fromYear, setFromYear] = useState<any>(2026)
   const [toYear, setToYear] = useState<any>(2027)
@@ -42,14 +44,17 @@ export default function Rollover() {
         })
         if (error) throw error
         setResult({ ok: true, msg: `Copied ${data} sessions into ${y}. ${fromYear} archived.` })
+        toast.success(`Copied ${data} sessions into ${y}. ${fromYear} archived.`)
       } else {
         const { error } = await supabase.from('calendar_year').insert({ year: y, mode: 'Rebuild' })
         if (error) throw error
         setResult({ ok: true, msg: `Created a blank ${y} calendar against the existing course catalog.` })
+        toast.success(`Created a blank ${y} calendar against the existing course catalog.`)
       }
       qc.invalidateQueries({ queryKey: ['years'] })
     } catch (err) {
       setResult({ ok: false, msg: err.message })
+      toast.error(err.message)
     }
     setBusy(false)
   }

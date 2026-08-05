@@ -3,6 +3,7 @@ import { ReactNode, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import Shell from '@/components/Shell'
+import CommandPalette from '@/components/CommandPalette'
 import { Spinner } from '@/components/ui'
 
 // Authenticated shell: requires a session (redirects to /login otherwise) and a
@@ -30,5 +31,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </div>
     )
   }
-  return <Shell>{children}</Shell>
+  return (
+    <>
+      <Shell>{children}</Shell>
+      <CommandPalette />
+    </>
+  )
 }

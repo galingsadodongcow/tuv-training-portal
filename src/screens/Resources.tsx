@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useTrainers, useVenues, useTrainerLoad, useUnstaffed, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { useToast } from '../components/Toast'
+import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num } from '../lib/format'
 import Link from 'next/link'
 
@@ -17,6 +19,7 @@ export default function Resources() {
   const load = useTrainerLoad()
   const unstaffed = useUnstaffed()
   const invalidate = useInvalidate()
+  const toast = useToast()
   const [tab, setTab] = useState('trainers')
   const [tForm, setTForm] = useState({ name: '', code: '', email: '', trainer_type: 'Internal', daily_rate: '' })
   const [vForm, setVForm] = useState({ name: '', city: '', capacity: '', venue_type: 'Training Room', day_rate: '' })
@@ -36,8 +39,8 @@ export default function Resources() {
       trainer_type: tForm.trainer_type,
       daily_rate: tForm.daily_rate === '' ? null : Number(tForm.daily_rate),
     })
-    if (error) setMsg(error.message)
-    else { setTForm({ name: '', code: '', email: '', trainer_type: 'Internal', daily_rate: '' }); invalidate(['trainers', 'trainer_load']) }
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { setTForm({ name: '', code: '', email: '', trainer_type: 'Internal', daily_rate: '' }); invalidate(['trainers', 'trainer_load']); toast.success('Trainer added.') }
     setBusy(false)
   }
 
@@ -53,20 +56,20 @@ export default function Resources() {
       venue_type: vForm.venue_type,
       day_rate: vForm.day_rate === '' ? null : Number(vForm.day_rate),
     })
-    if (error) setMsg(error.message)
-    else { setVForm({ name: '', city: '', capacity: '', venue_type: 'Training Room', day_rate: '' }); invalidate(['venues']) }
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { setVForm({ name: '', city: '', capacity: '', venue_type: 'Training Room', day_rate: '' }); invalidate(['venues']); toast.success('Venue added.') }
     setBusy(false)
   }
 
   const toggle = async (table: string, idField: string, id: any, active: boolean) => {
     setBusy(true); setMsg(null)
     const { error } = await supabase.from(table).update({ active: !active }).eq(idField, id)
-    if (error) setMsg(error.message)
-    else invalidate([table === 'trainer' ? 'trainers' : 'venues', 'trainer_load'])
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { invalidate([table === 'trainer' ? 'trainers' : 'venues', 'trainer_load']); toast.success('Updated.') }
     setBusy(false)
   }
 
-  if (trainers.isLoading) return <Spinner label="Loading resources" />
+  if (trainers.isLoading) return <TableSkeleton rows={8} cols={6} />
   if (trainers.error) return <ErrorNote error={trainers.error} />
   if (venues.error) return <ErrorNote error={venues.error} />
 

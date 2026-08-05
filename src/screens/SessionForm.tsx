@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate, useTrainers, useVenues, checkConflicts } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import DateSegments from '../components/DateSegments'
+import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
 import { LEARNING_TYPES, lt, segmentsDays } from '../lib/labels'
 
@@ -22,6 +23,7 @@ export default function SessionForm() {
   const venues = useVenues()
   const invalidate = useInvalidate()
   const router = useRouter()
+  const toast = useToast()
 
   const [f, setF] = useState<any>({
     course_id: '', modality: 'Live Online Training',
@@ -120,9 +122,11 @@ export default function SessionForm() {
       }
       if (error) throw error
       invalidate(['schedules', 'open_schedules', 'channel_pax'])
+      toast.success(editing ? 'Session saved.' : 'Session created.')
       router.push('/calendar')
     } catch (err: any) {
       setMsg(err.message)
+      toast.error(err.message)
       setBusy(false)
     }
   }

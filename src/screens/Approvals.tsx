@@ -6,12 +6,15 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useApprovals } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
+import { useToast } from '../components/Toast'
+import { TableSkeleton } from '../components/Skeleton'
 import { shortDate } from '../lib/format'
 
 export default function Approvals() {
   const { profile } = useAuth()
   const approvals = useApprovals()
   const qc = useQueryClient()
+  const toast = useToast()
   const [msg, setMsg] = useState(null)
   const canDecide = ['business_owner', 'super_admin'].includes(profile?.role)
 
@@ -21,11 +24,12 @@ export default function Approvals() {
       .from('approval')
       .update({ decision, decided_by: profile.user_id, decision_date: new Date().toISOString().slice(0, 10) })
       .eq('approval_id', id)
-    if (error) { setMsg(error.message); return }
+    if (error) { setMsg(error.message); toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['approvals'] })
+    toast.success(`Marked ${decision}.`)
   }
 
-  if (approvals.isLoading) return <Spinner label="Loading approvals" />
+  if (approvals.isLoading) return <TableSkeleton rows={8} cols={5} />
   if (approvals.error) return <ErrorNote error={approvals.error} />
 
   const pending = approvals.data.filter((a) => a.decision === 'Pending')

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useCourses, useCourseFees, useClients, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 
@@ -14,6 +15,7 @@ const blankLine = () => ({ course_id: '', schedule_id: '', modality: 'Live Onlin
 
 export default function SalesEntry() {
   const { profile } = useAuth()
+  const toast = useToast()
   const sp = useSearchParams()
   const router = useRouter()
   const courses = useCourses()
@@ -152,8 +154,10 @@ export default function SalesEntry() {
       const goodSeats = good.reduce((n, l) => n + (Number(l.seats) || 0), 0)
       const goodTotal = payload.reduce((n, p) => n + (Number(p.amount_php) || 0), 0)
       setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: goodSeats, total: goodTotal, warning: assignWarning })
+      toast.success('Order created.')
     } catch (err: any) {
       setMsg(err.message)
+      toast.error(err.message)
     }
     setBusy(false)
   }
