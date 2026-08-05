@@ -1,8 +1,5 @@
 [build]
-  command = "npm run build"
-  publish = "dist"
+  command = "next build"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# The official Next.js runtime is auto-installed by Netlify when it detects a
+# Next.js app; it wires up routing, so the old SPA catch-all redirect is gone.
