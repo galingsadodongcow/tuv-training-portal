@@ -5,10 +5,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useDuplicates } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
+import { useToast } from '../components/Toast'
+import { TableSkeleton } from '../components/Skeleton'
 
 export default function Duplicates() {
   const dups = useDuplicates()
   const qc = useQueryClient()
+  const toast = useToast()
   const [msg, setMsg] = useState(null)
 
   // NOTE: this only records the reviewer's decision on the candidate. It does
@@ -25,11 +28,12 @@ export default function Duplicates() {
       .from('duplicate_candidate')
       .update({ status, resolved_date: new Date().toISOString().slice(0, 10) })
       .eq('candidate_id', id)
-    if (error) { setMsg(error.message); return }
+    if (error) { setMsg(error.message); toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['duplicates'] })
+    toast.success(`Marked ${status}.`)
   }
 
-  if (dups.isLoading) return <Spinner label="Loading duplicate queue" />
+  if (dups.isLoading) return <TableSkeleton rows={8} cols={4} />
   if (dups.error) return <ErrorNote error={dups.error} />
 
   return (

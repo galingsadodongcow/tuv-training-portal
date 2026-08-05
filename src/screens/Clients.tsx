@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useClients, useAttribution, useClientHistory } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num, php } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { StatusPill } from '../components/ui'
@@ -33,7 +34,7 @@ export default function Clients() {
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [attribution.data])
 
-  if (clients.isLoading) return <Spinner label="Loading clients" />
+  if (clients.isLoading) return <TableSkeleton rows={8} cols={5} />
   if (clients.error) return <ErrorNote error={clients.error} />
 
   return (

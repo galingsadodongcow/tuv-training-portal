@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { useSchedules, useOrders } from '../hooks/data'
 import Link from 'next/link'
 import { Spinner, ErrorNote } from '../components/ui'
+import { KpiSkeleton } from '../components/Skeleton'
 import { php, num } from '../lib/format'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -68,7 +69,13 @@ export default function Dashboard() {
     return { revenue, forecast, delivered, deliveredPax, atRisk, pending, byMonth, channelData, cancelRate }
   }, [sched.data, orders.data])
 
-  if (sched.isLoading || orders.isLoading) return <Spinner label="Loading dashboard" />
+  if (sched.isLoading || orders.isLoading)
+    return (
+      <>
+        <div className="page-head"><div><h1>Dashboard</h1></div></div>
+        <KpiSkeleton count={6} />
+      </>
+    )
   if (sched.error) return <ErrorNote error={sched.error} />
   if (orders.error) return <ErrorNote error={orders.error} />
   if (!model) return <Spinner label="Loading dashboard" />

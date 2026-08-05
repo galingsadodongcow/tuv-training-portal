@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useInvalidate, useTransferTargets } from '../hooks/data'
 import { ChannelPill } from './ui'
+import { useToast } from './Toast'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
 
@@ -14,6 +15,7 @@ const PAYMENTS = ['Unpaid', 'Partial', 'Paid']
 function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => void; onCancel: () => void }) {
   const targets = useTransferTargets(line.course_id, line.schedule_id)
   const invalidate = useInvalidate()
+  const toast = useToast()
   const [target, setTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -23,8 +25,9 @@ function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => voi
     const { error } = await supabase.rpc('fn_transfer_line', {
       p_line: line.line_id, p_new_schedule: target, p_reason: 'Moved from the order screen',
     })
-    if (error) { setErr(error.message); setBusy(false); return }
+    if (error) { setErr(error.message); toast.error(error.message); setBusy(false); return }
     invalidate(['orders', 'schedules', 'channel_pax', 'session_orders'])
+    toast.success('Line transferred.')
     onDone()
   }
 
@@ -50,6 +53,7 @@ function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => voi
 export default function OrderDrawer({ order, onClose }: { order: any; onClose: () => void }) {
   const { profile } = useAuth()
   const invalidate = useInvalidate()
+  const toast = useToast()
   const [stage, setStage] = useState(order.fulfillment_stage)
   const [sap, setSap] = useState(order.sap_order_no || '')
   const [pay, setPay] = useState(order.payment_status)
@@ -64,10 +68,11 @@ export default function OrderDrawer({ order, onClose }: { order: any; onClose: (
     const { error } = await supabase.from('orders')
       .update({ fulfillment_stage: stage, sap_order_no: sap.trim() || null, payment_status: pay })
       .eq('order_id', order.order_id)
-    if (error) setMsg({ ok: false, t: error.message })
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
     else {
       setMsg({ ok: true, t: 'Saved.' })
       invalidate(['orders', 'fulfillment_queue'])
+      toast.success('Order updated.')
     }
     setBusy(false)
   }

@@ -5,11 +5,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useElearningPending } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
+import { useToast } from '../components/Toast'
+import { TableSkeleton } from '../components/Skeleton'
 import { shortDate } from '../lib/format'
 
 export default function Elearning() {
   const orders = useElearningPending()
   const qc = useQueryClient()
+  const toast = useToast()
   const [msg, setMsg] = useState(null)
 
   const grant = async (lineId) => {
@@ -17,11 +20,12 @@ export default function Elearning() {
     const { error } = await supabase.from('order_line')
       .update({ access_status: 'Granted', access_granted_date: new Date().toISOString().slice(0, 10) })
       .eq('line_id', lineId)
-    if (error) { setMsg(error.message); return }
+    if (error) { setMsg(error.message); toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['elearning_pending'] })
+    toast.success('Access granted.')
   }
 
-  if (orders.isLoading) return <Spinner label="Loading e-learning orders" />
+  if (orders.isLoading) return <TableSkeleton rows={8} cols={6} />
   if (orders.error) return <ErrorNote error={orders.error} />
 
   const pending = orders.data.filter((o) => (o.access_status || 'Pending') !== 'Granted')

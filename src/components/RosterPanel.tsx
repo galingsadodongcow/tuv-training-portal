@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useRoster, useSessionOrders, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from './ui'
+import { useToast } from './Toast'
 
 // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or
 // tab/CR) is prefixed with a single quote so Excel/Sheets treat it as text.
@@ -18,6 +19,7 @@ const ATT = ['Registered', 'Attended', 'No Show']
 
 export default function RosterPanel({ schedule }: { schedule: any }) {
   const { profile } = useAuth()
+  const toast = useToast()
   const roster = useRoster(schedule.schedule_id)
   const orders = useSessionOrders(schedule.schedule_id)
   const invalidate = useInvalidate()
@@ -43,10 +45,11 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
       position_title: form.position_title.trim() || null,
       created_by: profile.user_id,
     })
-    if (error) setMsg(error.message)
+    if (error) { setMsg(error.message); toast.error(error.message) }
     else {
       setForm({ line_id: form.line_id, full_name: '', email: '', position_title: '' })
       invalidate(['roster'])
+      toast.success('Participant added.')
     }
     setBusy(false)
   }
@@ -54,15 +57,15 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
   const mark = async (pid, status) => {
     setMsg(null)
     const { error } = await supabase.from('participant').update({ attendance_status: status }).eq('participant_id', pid)
-    if (error) setMsg(error.message)
-    else invalidate(['roster'])
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { invalidate(['roster']); toast.success('Attendance updated.') }
   }
 
   const remove = async (pid) => {
     setMsg(null)
     const { error } = await supabase.from('participant').delete().eq('participant_id', pid)
-    if (error) setMsg(error.message)
-    else invalidate(['roster'])
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { invalidate(['roster']); toast.success('Participant removed.') }
   }
 
   const exportCsv = () => {
