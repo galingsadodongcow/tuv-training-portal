@@ -21,7 +21,7 @@ export default function SessionForm() {
 
   const [f, setF] = useState({
     course_id: '', modality: 'Live Online Training',
-    min_participants: 1, sales_owner: '', private_run: false, status: 'Tentative', price: '',
+    min_participants: 1, max_participants: '', sales_owner: '', private_run: false, status: 'Tentative', price: '',
   })
   const [segments, setSegments] = useState([{ start: '', end: '' }])
   const [busy, setBusy] = useState(false)
@@ -35,7 +35,7 @@ export default function SessionForm() {
         if (data) {
           setF({
             course_id: data.course_id, modality: data.modality,
-            min_participants: data.min_participants, sales_owner: data.sales_owner || '',
+            min_participants: data.min_participants, max_participants: data.max_participants ?? '', sales_owner: data.sales_owner || '',
             private_run: data.private_run, status: 'Tentative', price: data.price ?? '',
           })
         }
@@ -48,7 +48,7 @@ export default function SessionForm() {
       if (error || !data) { setMsg(error?.message || 'Session not found'); return }
       setF({
         course_id: data.course_id, modality: data.modality,
-        min_participants: data.min_participants, sales_owner: data.sales_owner || '',
+        min_participants: data.min_participants, max_participants: data.max_participants ?? '', sales_owner: data.sales_owner || '',
         private_run: data.private_run, status: data.status, price: data.price ?? '',
       })
       setSegments(data.date_segments?.length ? data.date_segments : [{ start: data.start_date, end: data.end_date }])
@@ -78,6 +78,7 @@ export default function SessionForm() {
         date_segments: sorted, modality: f.modality,
         private_run: f.private_run, min_participants: Number(f.min_participants),
         status: f.status, sales_owner: f.sales_owner || null,
+        max_participants: f.max_participants === '' ? null : Number(f.max_participants),
         duration_days: segmentsDays(sorted),
         price: f.price === '' ? null : Number(f.price),
       }
@@ -138,8 +139,11 @@ export default function SessionForm() {
           </div>
 
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <label className="field"><span>Minimum pax</span>
+            <label className="field"><span>Minimum pax (Go threshold)</span>
               <input type="number" min="1" value={f.min_participants} onChange={set('min_participants')} required />
+            </label>
+            <label className="field"><span>Maximum pax (blank = no limit)</span>
+              <input type="number" min="1" value={f.max_participants} onChange={set('max_participants')} placeholder="e.g. 20" />
             </label>
             <label className="field"><span>Sales owner</span>
               <select value={f.sales_owner} onChange={set('sales_owner')}>

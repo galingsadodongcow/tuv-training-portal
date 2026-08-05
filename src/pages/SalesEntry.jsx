@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -12,9 +13,10 @@ export default function SalesEntry() {
   const schedules = useOpenSchedules(2026)
   const qc = useQueryClient()
 
+  const [sp] = useSearchParams()
   const [form, setForm] = useState({
     channel: 'Inside Sales',
-    schedule_id: '',
+    schedule_id: sp.get('schedule') || '',
     company: '',
     contact_name: '',
     email: '',

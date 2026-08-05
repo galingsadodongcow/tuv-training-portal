@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react'
-import { useClients, useAttribution } from '../hooks/data'
+import { useClients, useAttribution, useClientHistory } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
-import { shortDate, num } from '../lib/format'
+import { shortDate, num, php } from '../lib/format'
+import { formatSegments } from '../lib/labels'
+import { StatusPill } from '../components/ui'
 
 export default function Clients() {
   const clients = useClients()
   const attribution = useAttribution()
   const [tab, setTab] = useState('clients')
   const [q, setQ] = useState('')
+  const [openClient, setOpenClient] = useState(null)
 
   const filtered = useMemo(() => {
     if (!clients.data) return []
@@ -59,7 +62,7 @@ export default function Clients() {
             </thead>
             <tbody>
               {filtered.slice(0, 300).map((c) => (
-                <tr key={c.client_id}>
+                <tr key={c.client_id} className="clickable" onClick={() => setOpenClient(c)}>
                   <td style={{ fontWeight: 600 }}>{c.company || '—'}</td>
                   <td>{c.name || '—'}</td>
                   <td>{c.email || '—'}</td>
@@ -105,6 +108,56 @@ export default function Clients() {
           </div>
         </>
       )}
+      {openClient && <ClientHistory client={openClient} onClose={() => setOpenClient(null)} />}
     </>
+  )
+}
+
+function ClientHistory({ client, onClose }) {
+  const hist = useClientHistory(client.client_id)
+  const live = (hist.data || []).filter((o) => o.order_status !== 'Cancelled')
+  const spend = live.reduce((n, o) => n + Number(o.amount_php || 0), 0)
+  const seats = live.reduce((n, o) => n + o.seats, 0)
+
+  return (
+    <div className="drawer-scrim" onClick={onClose}>
+      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="drawer-head">
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 17 }}>{client.company || client.name}</div>
+            <div className="muted" style={{ fontSize: 13 }}>{client.email || '—'} · owner {client.salesperson?.name || 'unassigned'}</div>
+          </div>
+          <button className="linkbtn" onClick={onClose}>Close</button>
+        </div>
+        <div className="drawer-body">
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 18 }}>
+            <div><div className="k-label">Bookings</div><div className="k-value" style={{ fontSize: 22 }}>{live.length}</div></div>
+            <div><div className="k-label">Seats</div><div className="k-value" style={{ fontSize: 22 }}>{seats}</div></div>
+            <div><div className="k-label">Lifetime value</div><div className="k-value" style={{ fontSize: 22 }}>{php(spend)}</div></div>
+          </div>
+          {hist.isLoading ? <div className="empty">Loading…</div> : hist.data?.length === 0 ? (
+            <div className="empty">No orders on record.</div>
+          ) : (
+            <table>
+              <thead><tr><th>Course</th><th>Session</th><th className="right">Amount</th></tr></thead>
+              <tbody>
+                {hist.data.map((o) => (
+                  <tr key={o.order_id}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{o.course?.course_name || '—'}</div>
+                      <div className="fill-label">{o.order_id} · {shortDate(o.order_date)} · {o.payment_status}</div>
+                    </td>
+                    <td className="fill-label">
+                      {o.schedule ? formatSegments(o.schedule.date_segments, o.schedule.start_date, o.schedule.end_date) : 'E-learning'}
+                    </td>
+                    <td className="right">{php(o.amount_php)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

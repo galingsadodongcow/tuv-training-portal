@@ -34,7 +34,7 @@ function CopyLink({ url }) {
   )
 }
 
-function SessionRows({ rows, pax, onOpen, canEdit }) {
+function SessionRows({ rows, pax, onOpen, canEdit, canSell }) {
   return rows.map((r) => {
     const ch = pax?.[r.schedule_id] || {}
     const d = daysUntil(r.start_date)
@@ -76,6 +76,9 @@ function SessionRows({ rows, pax, onOpen, canEdit }) {
                 <CopyLink url={r.course.url} />
               </>
             ) : (<span className="muted">—</span>)}
+            {canSell && ['Tentative', 'Confirmed'].includes(r.status) && (
+              <Link to={`/sales-entry?schedule=${r.schedule_id}`}>Book</Link>
+            )}
             {canEdit && <Link to={`/session/${r.schedule_id}/edit`}>Edit</Link>}
             {canEdit && <Link to={`/course/${r.course_id}/edit`} className="muted">Course</Link>}
           </div>
@@ -110,6 +113,7 @@ export default function Calendar() {
   const { profile } = useAuth()
   const [open, setOpen] = useState(null)
   const canEdit = ['operations', 'super_admin'].includes(profile?.role)
+  const canSell = ['sales', 'super_admin'].includes(profile?.role)
 
   const categories = useMemo(
     () => [...new Set((sched.data || []).map((r) => r.course?.category).filter(Boolean))].sort(),
@@ -226,7 +230,7 @@ export default function Calendar() {
         <>
           <h3 style={{ margin: '4px 0 8px' }}>PersCert ({perscert.length})</h3>
           <div className="card cal-card" style={{ marginBottom: 20 }}>
-            <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setOpen} canEdit={canEdit} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setOpen} canEdit={canEdit} canSell={canSell} /></tbody></table>
           </div>
         </>
       )}
@@ -235,7 +239,7 @@ export default function Calendar() {
         <>
           <h3 style={{ margin: '4px 0 8px' }}>Professional Training ({professional.length})</h3>
           <div className="card cal-card">
-            <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setOpen} canEdit={canEdit} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setOpen} canEdit={canEdit} canSell={canSell} /></tbody></table>
           </div>
         </>
       )}

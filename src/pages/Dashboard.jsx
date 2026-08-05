@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useSchedules, useOrders } from '../hooks/data'
+import { Link } from 'react-router-dom'
 import { Spinner, ErrorNote } from '../components/ui'
 import { php, num } from '../lib/format'
 
@@ -67,7 +68,9 @@ export default function Dashboard() {
       <div className="grid kpis">
         <Kpi label="Booked revenue" value={php(model.revenue)} sub={`${attain}% of forecast`} />
         <Kpi label="Forecast" value={php(model.forecast)} sub="Set by the business owner" />
-        <Kpi label="Sessions at risk" value={num(model.atRisk)} sub="Below minimum, still upcoming" />
+        <Link to="/calendar?month=all&sort=fill&dir=asc" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Kpi label="Sessions at risk" value={num(model.atRisk)} sub="Below minimum, still upcoming · view" />
+        </Link>
         <Kpi label="Pending payments" value={num(model.pending)} sub="Unpaid or partial, not cancelled" />
         <Kpi label="Cancellation rate" value={`${model.cancelRate}%`} sub="Orders cancelled" />
       </div>

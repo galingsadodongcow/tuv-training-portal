@@ -67,7 +67,7 @@ export function useOrders() {
         supabase
           .from('orders')
           .select(
-            'order_id, order_date, channel, modality, seats, amount_php, payment_status, order_status, went_live, access_status, schedule_id, course_id, client:client_id(name, company, email), course:course_id(course_name), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
+            'order_id, order_date, channel, modality, seats, amount_php, payment_status, order_status, went_live, access_status, schedule_id, course_id, client:client_id(name, company, email), course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
           )
           .order('order_date', { ascending: false })
           .limit(1000)
@@ -183,4 +183,63 @@ export function useAttribution() {
 export function useInvalidate() {
   const qc = useQueryClient()
   return (keys) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }))
+}
+
+// ---- Phase 1: roster, capacity, transfer ----
+export function useRoster(scheduleId) {
+  return useQuery({
+    queryKey: ['roster', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_session_roster', { p_schedule: scheduleId })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useSessionOrders(scheduleId) {
+  return useQuery({
+    queryKey: ['session_orders', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('orders')
+          .select('order_id, order_date, channel, seats, amount_php, payment_status, order_status, client:client_id(name, company, email), assignment:order_assignment(salesperson:sales_id(name, code))')
+          .eq('schedule_id', scheduleId)
+          .order('order_date', { ascending: false })
+      ),
+  })
+}
+
+export function useTransferTargets(courseId, excludeScheduleId) {
+  return useQuery({
+    queryKey: ['transfer_targets', courseId],
+    enabled: !!courseId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('schedule')
+          .select('schedule_id, start_date, end_date, date_segments, modality, status, min_participants, booked_participants, max_participants, course:course_id(course_name)')
+          .eq('course_id', courseId)
+          .in('status', ['Tentative', 'Confirmed'])
+          .order('start_date')
+      ).then((rows) => rows.filter((r) => r.schedule_id !== excludeScheduleId)),
+  })
+}
+
+export function useClientHistory(clientId) {
+  return useQuery({
+    queryKey: ['client_history', clientId],
+    enabled: !!clientId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('orders')
+          .select('order_id, order_date, channel, seats, amount_php, payment_status, order_status, course:course_id(course_name), schedule:schedule_id(schedule_id, start_date, end_date, date_segments, status)')
+          .eq('client_id', clientId)
+          .order('order_date', { ascending: false })
+      ),
+  })
 }

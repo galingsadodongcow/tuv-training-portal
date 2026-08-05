@@ -184,3 +184,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--tr-blue); o
   .cal-table td[data-label=""] { display: block; }
   .cal-table td.right { justify-content: space-between; text-align: left; }
 }
+
+/* Drawer tabs */
+.tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--tr-line); margin-bottom: 16px; overflow-x: auto; }
+.tab { background: none; border: none; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--tr-slate); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab:hover { color: var(--tr-blue); }
+.tab-on { color: var(--tr-blue); border-bottom-color: var(--tr-blue); }

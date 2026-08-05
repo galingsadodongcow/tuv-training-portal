@@ -4,6 +4,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useOrders, useSalespeople, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote, StatusPill, ChannelPill } from '../components/ui'
 import { php, shortDate } from '../lib/format'
+import { formatSegments } from '../lib/labels'
+import TransferOrder from '../components/TransferOrder'
 
 export default function Worklist() {
   const { profile } = useAuth()
@@ -12,6 +14,7 @@ export default function Worklist() {
   const invalidate = useInvalidate()
   const [tab, setTab] = useState('mine')
   const [busy, setBusy] = useState('')
+  const [transferring, setTransferring] = useState(null)
 
   const role = profile?.role
   const myCode = profile?.salesperson?.code
@@ -73,7 +76,7 @@ export default function Worklist() {
         <table>
           <thead>
             <tr>
-              <th>Order</th><th>Company</th><th>Course</th><th>Channel</th>
+              <th>Order</th><th>Company</th><th>Course</th><th>Session</th><th>Channel</th>
               <th>Owner</th><th>Engagement</th><th>Collection</th><th className="right">Amount</th>
             </tr>
           </thead>
@@ -83,6 +86,12 @@ export default function Worklist() {
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order_id}<div className="fill-label">{shortDate(o.order_date)}</div></td>
                 <td>{o.client?.company || o.client?.name || '—'}</td>
                 <td>{o.course?.course_name || '—'}</td>
+                <td className="fill-label">
+                  {o.schedule ? formatSegments(o.schedule.date_segments, o.schedule.start_date, o.schedule.end_date) : '—'}
+                  {o.schedule && o.order_status !== 'Cancelled' && (
+                    <div><button className="linkbtn" style={{ padding: 0 }} onClick={() => setTransferring(o)}>Transfer</button></div>
+                  )}
+                </td>
                 <td><ChannelPill value={o.channel} /></td>
                 <td>
                   {canAssignAny ? (
@@ -121,6 +130,15 @@ export default function Worklist() {
         </table>
         {rows.length === 0 && <div className="empty">No orders in this view.</div>}
       </div>
+
+      {transferring && (
+        <TransferOrder
+          order={transferring}
+          courseId={transferring.course_id}
+          fromScheduleId={transferring.schedule_id}
+          onClose={() => setTransferring(null)}
+        />
+      )}
     </>
   )
 }

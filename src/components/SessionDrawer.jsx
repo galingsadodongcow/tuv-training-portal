@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useSessionNotes, useInvalidate } from '../hooks/data'
+import { useSessionNotes, useInvalidate, useSessionOrders } from '../hooks/data'
+import RosterPanel from './RosterPanel'
+import TransferOrder from './TransferOrder'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner } from './ui'
 import { dateRange, php, num } from '../lib/format'
 import { lt, formatSegments } from '../lib/labels'
+import { shortDate } from '../lib/format'
 
 // Roles allowed to take each action
 const canForecast = (r) => ['business_owner', 'super_admin'].includes(r)
@@ -22,6 +25,9 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
   const [msg, setMsg] = useState(null)
   const [fRev, setFRev] = useState(schedule?.forecast_revenue ?? '')
   const [fPax, setFPax] = useState(schedule?.forecast_participants ?? '')
+  const [tab, setTab] = useState('overview')
+  const [transferring, setTransferring] = useState(null)
+  const sessionOrders = useSessionOrders(schedule?.schedule_id)
 
   if (!schedule) return null
   const ch = channelPax?.[schedule.schedule_id] || {}
@@ -107,6 +113,15 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
             {schedule.private_run && <span className="pill pill-inhouse">Private run</span>}
           </div>
 
+          <div className="tabbar">
+            {['overview', 'orders', 'participants', 'notes'].map((t) => (
+              <button key={t} className={`tab ${tab === t ? 'tab-on' : ''}`} onClick={() => setTab(t)}>
+                {t === 'orders' ? `Orders (${sessionOrders.data?.length ?? 0})` : t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'overview' && (<>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
             <div>
               <div className="k-label">Fill</div>
@@ -128,8 +143,39 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
             ))}
           </div>
 
-          {/* Forecast — business owner */}
-          {canForecast(role) && (
+          </>)}
+
+          {tab === 'orders' && (
+            <div>
+              {sessionOrders.isLoading ? <Spinner /> : sessionOrders.data?.length === 0 ? (
+                <div className="empty">No bookings on this session yet.</div>
+              ) : (
+                <table>
+                  <thead><tr><th>Client</th><th>Channel</th><th>Seats</th><th>Payment</th><th></th></tr></thead>
+                  <tbody>
+                    {sessionOrders.data?.map((o) => (
+                      <tr key={o.order_id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{o.client?.company || o.client?.name || '—'}</div>
+                          <div className="fill-label">{o.order_id} · {shortDate(o.order_date)}</div>
+                        </td>
+                        <td><ChannelPill value={o.channel} /></td>
+                        <td>{o.seats}</td>
+                        <td className="fill-label">{o.payment_status}</td>
+                        <td className="right">
+                          <button className="linkbtn" onClick={() => setTransferring(o)}>Transfer</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {tab === 'participants' && <RosterPanel schedule={schedule} />}
+
+          {tab === 'overview' && canForecast(role) && (
             <div className="drawer-section">
               <div className="k-label" style={{ marginBottom: 8 }}>Forecast (business owner)</div>
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -144,8 +190,7 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
             </div>
           )}
 
-          {/* Operations controls */}
-          {canOps(role) && (
+          {tab === 'overview' && canOps(role) && (
             <div className="drawer-section">
               <div className="k-label" style={{ marginBottom: 8 }}>Session status (operations)</div>
               <div className="toolbar">
@@ -170,8 +215,8 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
             <div className={`notice ${msg.ok ? 'notice-info' : 'notice-error'}`} style={{ margin: '12px 0' }}>{msg.t}</div>
           )}
 
-          {/* Notes — everyone */}
-          <div className="drawer-section">
+          {tab === 'notes' && (
+          <div className="drawer-section" style={{ borderTop: 'none', marginTop: 0, paddingTop: 0 }}>
             <div className="k-label" style={{ marginBottom: 8 }}>Conversation</div>
             <div className="toolbar" style={{ marginBottom: 10 }}>
               <input placeholder="Add a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)}
@@ -196,8 +241,17 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
+      {transferring && (
+        <TransferOrder
+          order={transferring}
+          courseId={schedule.course_id}
+          fromScheduleId={schedule.schedule_id}
+          onClose={(done) => { setTransferring(null); if (done) onClose() }}
+        />
+      )}
     </div>
   )
 }
