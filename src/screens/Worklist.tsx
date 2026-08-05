@@ -1,5 +1,6 @@
 'use client'
 import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -25,6 +26,7 @@ export default function Worklist() {
   const orders = useOrders()
   const people = useSalespeople()
   const invalidate = useInvalidate()
+  const qc = useQueryClient()
   const toast = useToast()
   const params = useSearchParams()
   const router = useRouter()
@@ -69,9 +71,19 @@ export default function Worklist() {
 
   const advance = async (orderId: string, to: string) => {
     setBusy(orderId); setMsg(null)
+    // Optimistic: reflect the new stage in the cached queue immediately, then
+    // roll back if the write fails.
+    const prev = qc.getQueryData<any[]>(['fulfillment_queue'])
+    qc.setQueryData<any[]>(['fulfillment_queue'], (old) =>
+      old?.map((o) => (o.order_id === orderId ? { ...o, fulfillment_stage: to, days_in_stage: 0 } : o))
+    )
     const { error } = await supabase.from('orders').update({ fulfillment_stage: to }).eq('order_id', orderId)
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Order advanced.') }
+    if (error) {
+      qc.setQueryData(['fulfillment_queue'], prev)
+      setMsg(error.message); toast.error(error.message)
+    } else {
+      invalidate(['fulfillment_queue', 'orders']); toast.success('Order advanced.')
+    }
     setBusy('')
   }
 

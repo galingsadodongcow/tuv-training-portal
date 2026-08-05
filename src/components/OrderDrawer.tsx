@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useInvalidate, useTransferTargets } from '../hooks/data'
 import { ChannelPill } from './ui'
 import { useToast } from './Toast'
+import { useEscape } from '../hooks/useEscape'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
 
@@ -54,6 +55,7 @@ export default function OrderDrawer({ order, onClose }: { order: any; onClose: (
   const { profile } = useAuth()
   const invalidate = useInvalidate()
   const toast = useToast()
+  useEscape(onClose)
   const [stage, setStage] = useState(order.fulfillment_stage)
   const [sap, setSap] = useState(order.sap_order_no || '')
   const [pay, setPay] = useState(order.payment_status)

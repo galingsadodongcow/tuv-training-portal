@@ -10,6 +10,7 @@ import CloseSession from './CloseSession'
 import CancelSession from './CancelSession'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner } from './ui'
 import { useToast } from './Toast'
+import { useEscape } from '../hooks/useEscape'
 import { php } from '../lib/format'
 import { lt, formatSegments } from '../lib/labels'
 import { shortDate } from '../lib/format'
@@ -21,6 +22,7 @@ const canOps = (r: any) => ['operations', 'super_admin'].includes(r)
 export default function SessionDrawer({ schedule, channelPax, onClose }: { schedule: any; channelPax: any; onClose: () => void }) {
   const router = useRouter()
   const toast = useToast()
+  useEscape(onClose)
   const { profile } = useAuth()
   const role = profile?.role
   const notes = useSessionNotes(schedule?.schedule_id)
