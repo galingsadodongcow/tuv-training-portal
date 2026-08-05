@@ -378,8 +378,11 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
       if (stage !== 'all') sel = sel.eq('fulfillment_stage', stage)
       if (pay !== 'all') sel = sel.eq('payment_status', pay)
       if (q.trim()) {
-        const t = q.trim()
-        sel = sel.or(`order_id.ilike.%${t}%,sap_order_no.ilike.%${t}%`)
+        // Strip PostgREST-significant characters before interpolating user input
+        // into an or() filter string, so a search term can't break out of the
+        // pattern or inject extra filter clauses.
+        const t = q.trim().replace(/[,()*%\\]/g, ' ').trim()
+        if (t) sel = sel.or(`order_id.ilike.%${t}%,sap_order_no.ilike.%${t}%`)
       }
       const { data, error, count } = await sel
       if (error) throw error

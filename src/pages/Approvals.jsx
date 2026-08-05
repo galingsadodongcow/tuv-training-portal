@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -9,13 +10,16 @@ export default function Approvals() {
   const { profile } = useAuth()
   const approvals = useApprovals()
   const qc = useQueryClient()
+  const [msg, setMsg] = useState(null)
   const canDecide = ['business_owner', 'super_admin'].includes(profile?.role)
 
   const decide = async (id, decision) => {
-    await supabase
+    setMsg(null)
+    const { error } = await supabase
       .from('approval')
       .update({ decision, decided_by: profile.user_id, decision_date: new Date().toISOString().slice(0, 10) })
       .eq('approval_id', id)
+    if (error) { setMsg(error.message); return }
     qc.invalidateQueries({ queryKey: ['approvals'] })
   }
 
@@ -62,6 +66,8 @@ export default function Approvals() {
           <p>Forecast sign-off each quarter and every session cancellation. The business owner decides.</p>
         </div>
       </div>
+
+      {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
 
       <h3 style={{ marginBottom: 8 }}>Pending</h3>
       {pending.length === 0 ? (

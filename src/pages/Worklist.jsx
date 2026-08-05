@@ -26,6 +26,7 @@ export default function Worklist() {
   const [busy, setBusy] = useState('')
   const [open, setOpen] = useState(null)
   const [sapDraft, setSapDraft] = useState({})
+  const [msg, setMsg] = useState(null)
 
   const stage = params.get('stage') || 'all'
   const who = params.get('who') || 'mine'
@@ -60,35 +61,42 @@ export default function Worklist() {
   }, [queue.data, who, myCode])
 
   const advance = async (orderId, to) => {
-    setBusy(orderId)
-    await supabase.from('orders').update({ fulfillment_stage: to }).eq('order_id', orderId)
-    invalidate(['fulfillment_queue', 'orders'])
+    setBusy(orderId); setMsg(null)
+    const { error } = await supabase.from('orders').update({ fulfillment_stage: to }).eq('order_id', orderId)
+    if (error) setMsg(error.message)
+    else invalidate(['fulfillment_queue', 'orders'])
     setBusy('')
   }
 
   const saveSap = async (orderId) => {
     const v = (sapDraft[orderId] || '').trim()
     if (!v) return
-    setBusy(orderId)
-    await supabase.from('orders').update({ sap_order_no: v }).eq('order_id', orderId)
-    setSapDraft({ ...sapDraft, [orderId]: '' })
-    invalidate(['fulfillment_queue', 'orders'])
+    setBusy(orderId); setMsg(null)
+    const { error } = await supabase.from('orders').update({ sap_order_no: v }).eq('order_id', orderId)
+    if (error) setMsg(error.message)
+    else { setSapDraft({ ...sapDraft, [orderId]: '' }); invalidate(['fulfillment_queue', 'orders']) }
     setBusy('')
   }
 
   const selfAssign = async (orderId) => {
-    setBusy(orderId)
-    await supabase.from('order_assignment').insert({ order_id: orderId, sales_id: profile.sales_id })
-    invalidate(['fulfillment_queue', 'orders'])
+    setBusy(orderId); setMsg(null)
+    // upsert keyed on order_id: one assignment per order, no check-then-act race.
+    const { error } = await supabase.from('order_assignment')
+      .upsert({ order_id: orderId, sales_id: profile.sales_id }, { onConflict: 'order_id' })
+    if (error) setMsg(error.message)
+    else invalidate(['fulfillment_queue', 'orders'])
     setBusy('')
   }
 
   const reassign = async (orderId, salesId) => {
-    setBusy(orderId)
-    const { data: ex } = await supabase.from('order_assignment').select('order_id').eq('order_id', orderId).maybeSingle()
-    if (ex) await supabase.from('order_assignment').update({ sales_id: salesId }).eq('order_id', orderId)
-    else await supabase.from('order_assignment').insert({ order_id: orderId, sales_id: salesId })
-    invalidate(['fulfillment_queue', 'orders'])
+    setBusy(orderId); setMsg(null)
+    // Empty selection means unassign: delete the row rather than writing an empty FK.
+    const { error } = salesId
+      ? await supabase.from('order_assignment')
+          .upsert({ order_id: orderId, sales_id: salesId }, { onConflict: 'order_id' })
+      : await supabase.from('order_assignment').delete().eq('order_id', orderId)
+    if (error) setMsg(error.message)
+    else invalidate(['fulfillment_queue', 'orders'])
     setBusy('')
   }
 
@@ -113,6 +121,8 @@ export default function Worklist() {
           {stalled} order{stalled === 1 ? '' : 's'} sat in the same stage for more than 14 days.
         </div>
       )}
+
+      {msg && <div className="notice notice-error" style={{ marginBottom: 14 }}>{msg}</div>}
 
       <div className="filters">
         {['mine', 'unassigned', 'all'].map((w) => (

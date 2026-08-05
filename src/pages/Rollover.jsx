@@ -14,20 +14,36 @@ export default function Rollover() {
   const [result, setResult] = useState(null)
 
   const run = async () => {
-    setBusy(true)
     setResult(null)
+    const y = Number(toYear)
+    // Validate before touching anything: a real year, not one that already
+    // exists, and (for a copy) different from the source.
+    if (!Number.isInteger(y) || y < 2000 || y > 2100) {
+      setResult({ ok: false, msg: 'Enter a valid new year between 2000 and 2100.' }); return
+    }
+    if ((years.data || []).some((yr) => yr.year === y)) {
+      setResult({ ok: false, msg: `${y} already exists. Pick a year that has not been opened yet.` }); return
+    }
+    if (mode === 'Copy' && y === Number(fromYear)) {
+      setResult({ ok: false, msg: 'The new year must differ from the year you copy from.' }); return
+    }
+    if (mode === 'Copy' &&
+        !window.confirm(`This clones every non-cancelled ${fromYear} session into ${y} and archives ${fromYear}. Continue?`)) {
+      return
+    }
+    setBusy(true)
     try {
       if (mode === 'Copy') {
         const { data, error } = await supabase.rpc('fn_rollover_copy', {
           p_from_year: Number(fromYear),
-          p_to_year: Number(toYear),
+          p_to_year: y,
         })
         if (error) throw error
-        setResult({ ok: true, msg: `Copied ${data} sessions into ${toYear}. ${fromYear} archived.` })
+        setResult({ ok: true, msg: `Copied ${data} sessions into ${y}. ${fromYear} archived.` })
       } else {
-        const { error } = await supabase.from('calendar_year').insert({ year: Number(toYear), mode: 'Rebuild' })
+        const { error } = await supabase.from('calendar_year').insert({ year: y, mode: 'Rebuild' })
         if (error) throw error
-        setResult({ ok: true, msg: `Created a blank ${toYear} calendar against the existing course catalog.` })
+        setResult({ ok: true, msg: `Created a blank ${y} calendar against the existing course catalog.` })
       }
       qc.invalidateQueries({ queryKey: ['years'] })
     } catch (err) {

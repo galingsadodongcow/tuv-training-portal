@@ -18,13 +18,21 @@ function Kpi({ label, value, sub }) {
   )
 }
 
+const YEAR = 2026
+
 export default function Dashboard() {
-  const sched = useSchedules(2026)
+  const sched = useSchedules(YEAR)
   const orders = useOrders()
 
   const model = useMemo(() => {
     if (!sched.data || !orders.data) return null
-    const live = orders.data.filter((o) => ['New', 'Confirmed', 'Completed'].includes(o.order_status))
+    // Scope booked revenue / monthly / channel mix to the dashboard's year so a
+    // prior- or next-year order can't leak into the "for 2026" figures.
+    const live = orders.data.filter(
+      (o) =>
+        ['New', 'Confirmed', 'Completed'].includes(o.order_status) &&
+        o.order_date && new Date(o.order_date).getFullYear() === YEAR
+    )
     const revenue = live.reduce((s, o) => s + (o.total_amount || 0), 0)
     const forecast = sched.data.reduce((s, r) => s + (r.forecast_revenue || 0), 0)
     const delivered = sched.data
@@ -47,7 +55,10 @@ export default function Dashboard() {
       if (byMonth[mi]) byMonth[mi].revenue += o.total_amount || 0
     }
     const byChannel = {}
-    for (const o of live) byChannel[o.channel] = (byChannel[o.channel] || 0) + (o.total_amount || 0)
+    for (const o of live) {
+      const chan = o.channel || 'Other'
+      byChannel[chan] = (byChannel[chan] || 0) + (o.total_amount || 0)
+    }
     const channelData = Object.entries(byChannel).map(([name, value]) => ({ name, value }))
 
     const cancelled = orders.data.filter((o) => o.order_status === 'Cancelled').length

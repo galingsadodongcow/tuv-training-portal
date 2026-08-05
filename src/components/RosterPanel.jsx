@@ -2,7 +2,15 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useRoster, useSessionOrders, useInvalidate } from '../hooks/data'
-import { Spinner } from './ui'
+import { Spinner, ErrorNote } from './ui'
+
+// Neutralize spreadsheet formula injection: a cell starting with = + - @ (or
+// tab/CR) is prefixed with a single quote so Excel/Sheets treat it as text.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v)
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
+  return `"${safe.replace(/"/g, '""')}"`
+}
 
 const ATT = ['Registered', 'Attended', 'No Show']
 
@@ -17,7 +25,7 @@ export default function RosterPanel({ schedule }) {
 
   const canEdit = ['operations', 'super_admin', 'sales'].includes(profile?.role)
   const live = (orders.data || []).filter((l) => l.line_status !== 'Cancelled')
-  const seatsSold = live.reduce((n, l) => n + l.seats, 0)
+  const seatsSold = live.reduce((n, l) => n + (Number(l.seats) || 0), 0)
   const names = roster.data?.length || 0
 
   const add = async () => {
@@ -42,20 +50,24 @@ export default function RosterPanel({ schedule }) {
   }
 
   const mark = async (pid, status) => {
-    await supabase.from('participant').update({ attendance_status: status }).eq('participant_id', pid)
-    invalidate(['roster'])
+    setMsg(null)
+    const { error } = await supabase.from('participant').update({ attendance_status: status }).eq('participant_id', pid)
+    if (error) setMsg(error.message)
+    else invalidate(['roster'])
   }
 
   const remove = async (pid) => {
-    await supabase.from('participant').delete().eq('participant_id', pid)
-    invalidate(['roster'])
+    setMsg(null)
+    const { error } = await supabase.from('participant').delete().eq('participant_id', pid)
+    if (error) setMsg(error.message)
+    else invalidate(['roster'])
   }
 
   const exportCsv = () => {
     const head = ['Name', 'Email', 'Position', 'Company', 'Order', 'Payment', 'Attendance']
     const lines = (roster.data || []).map((r) =>
-      [r.full_name, r.email || '', r.position_title || '', r.company || '', r.order_id, r.payment_status, r.attendance_status]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')
+      [r.full_name, r.email, r.position_title, r.company, r.order_id, r.payment_status, r.attendance_status]
+        .map(csvCell).join(',')
     )
     const blob = new Blob([[head.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
@@ -65,9 +77,11 @@ export default function RosterPanel({ schedule }) {
   }
 
   if (roster.isLoading) return <Spinner label="Loading roster" />
+  if (roster.error) return <ErrorNote error={roster.error} />
 
   return (
     <div>
+      {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
       <div className="toolbar" style={{ marginBottom: 12, justifyContent: 'space-between' }}>
         <div className="fill-label">
           {names} of {seatsSold} name{seatsSold === 1 ? '' : 's'} captured
@@ -119,7 +133,6 @@ export default function RosterPanel({ schedule }) {
             <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <input placeholder="Position" value={form.position_title} onChange={(e) => setForm({ ...form, position_title: e.target.value })} />
           </div>
-          {msg && <div className="notice notice-error" style={{ margin: '10px 0' }}>{msg}</div>}
           <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={add} disabled={busy}>
             {busy ? 'Adding…' : 'Add to roster'}
           </button>

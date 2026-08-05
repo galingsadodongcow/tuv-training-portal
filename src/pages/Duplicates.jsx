@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useDuplicates } from '../hooks/data'
@@ -6,12 +7,23 @@ import { Spinner, ErrorNote, Empty } from '../components/ui'
 export default function Duplicates() {
   const dups = useDuplicates()
   const qc = useQueryClient()
+  const [msg, setMsg] = useState(null)
 
+  // NOTE: this only records the reviewer's decision on the candidate. It does
+  // NOT reconcile the two orders — cancelling/merging the duplicate order and
+  // moving its lines must happen server-side (an RPC) so seats and revenue stop
+  // being double-counted. Until that exists, "Merge" is a triage flag only.
   const resolve = async (id, status) => {
-    await supabase
+    setMsg(null)
+    if (status === 'Merged' &&
+        !window.confirm('Mark this pair as merged? This flags the candidate as resolved but does not yet cancel or combine the underlying orders.')) {
+      return
+    }
+    const { error } = await supabase
       .from('duplicate_candidate')
       .update({ status, resolved_date: new Date().toISOString().slice(0, 10) })
       .eq('candidate_id', id)
+    if (error) { setMsg(error.message); return }
     qc.invalidateQueries({ queryKey: ['duplicates'] })
   }
 
@@ -26,6 +38,8 @@ export default function Duplicates() {
           <p>Candidates where a sales order and a webshop order look like the same booking.</p>
         </div>
       </div>
+
+      {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
 
       {dups.data.length === 0 ? (
         <Empty title="No open duplicates">
