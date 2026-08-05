@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useSessionNotes, useInvalidate, useSessionOrders } from '../hooks/data'
 import RosterPanel from './RosterPanel'
 import TransferOrder from './TransferOrder'
+import CloseSession from './CloseSession'
+import CancelSession from './CancelSession'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner } from './ui'
 import { dateRange, php, num } from '../lib/format'
 import { lt, formatSegments } from '../lib/labels'
@@ -27,6 +29,8 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
   const [fPax, setFPax] = useState(schedule?.forecast_participants ?? '')
   const [tab, setTab] = useState('overview')
   const [transferring, setTransferring] = useState(null)
+  const [closing, setClosing] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const sessionOrders = useSessionOrders(schedule?.schedule_id)
 
   if (!schedule) return null
@@ -111,6 +115,7 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
             <StatusPill value={schedule.status} />
             <GoPill value={schedule.go_status} />
             {schedule.private_run && <span className="pill pill-inhouse">Private run</span>}
+            {schedule.roster_locked && <span className="pill pill-inside">Roster locked</span>}
           </div>
 
           <div className="tabbar">
@@ -198,8 +203,14 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
                   <button key={s} className="btn btn-ghost btn-sm" disabled={busy === 'status' || schedule.status === s}
                     onClick={() => setStatus(s)}>{s}</button>
                 ))}
+                {schedule.status !== 'Completed' && (
+                  <button className="btn btn-sm" onClick={() => setClosing(true)}>Close session</button>
+                )}
                 <button className="btn btn-danger btn-sm" disabled={busy === 'cancel'} onClick={proposeCancel}>
                   Propose cancellation
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setCancelling(true)}>
+                  Cancel with dispositions
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => nav(`/session/new?clone=${schedule.schedule_id}`)}>
                   Clone
@@ -244,6 +255,12 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
           )}
         </div>
       </div>
+      {closing && (
+        <CloseSession schedule={schedule} onDone={onClose} onClose={() => setClosing(false)} />
+      )}
+      {cancelling && (
+        <CancelSession schedule={schedule} onDone={onClose} onClose={() => setCancelling(false)} />
+      )}
       {transferring && (
         <TransferOrder
           order={transferring}

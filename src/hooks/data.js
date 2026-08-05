@@ -15,7 +15,7 @@ export function useSchedules(year = 2026) {
         supabase
           .from('schedule')
           .select(
-            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, sales_owner, course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
           )
           .order('start_date', { ascending: true })
       ).then((rows) => rows.filter((r) => r.calendar_year?.year === year)),
@@ -240,6 +240,39 @@ export function useClientHistory(clientId) {
           .select('order_id, order_date, channel, seats, amount_php, payment_status, order_status, course:course_id(course_name), schedule:schedule_id(schedule_id, start_date, end_date, date_segments, status)')
           .eq('client_id', clientId)
           .order('order_date', { ascending: false })
+      ),
+  })
+}
+
+// ---- Phase 2: close and cancel ----
+export function useCloseCheck(scheduleId) {
+  return useQuery({
+    queryKey: ['close_check', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () => sel(supabase.from('v_session_close_check').select('*').eq('schedule_id', scheduleId).single()),
+  })
+}
+
+export function useCancelReadiness(scheduleId) {
+  return useQuery({
+    queryKey: ['cancel_readiness', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () => sel(supabase.from('v_cancel_readiness').select('*').eq('schedule_id', scheduleId)),
+  })
+}
+
+export function useApprovedCancellation(scheduleId) {
+  return useQuery({
+    queryKey: ['approved_cancel', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('approval')
+          .select('approval_id, decision')
+          .eq('schedule_id', scheduleId)
+          .eq('object_type', 'Schedule cancellation')
+          .eq('decision', 'Approved')
       ),
   })
 }

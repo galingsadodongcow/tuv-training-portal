@@ -27,6 +27,12 @@ export default function Dashboard() {
     const live = orders.data.filter((o) => ['New', 'Confirmed', 'Completed'].includes(o.order_status))
     const revenue = live.reduce((s, o) => s + (o.amount_php || 0), 0)
     const forecast = sched.data.reduce((s, r) => s + (r.forecast_revenue || 0), 0)
+    const delivered = sched.data
+      .filter((r) => r.status === 'Completed')
+      .reduce((s, r) => s + Number(r.actual_revenue || 0), 0)
+    const deliveredPax = sched.data
+      .filter((r) => r.status === 'Completed')
+      .reduce((s, r) => s + (r.actual_participants || 0), 0)
     const atRisk = sched.data.filter(
       (r) =>
         ['Tentative', 'Confirmed'].includes(r.status) &&
@@ -47,7 +53,7 @@ export default function Dashboard() {
     const cancelled = orders.data.filter((o) => o.order_status === 'Cancelled').length
     const cancelRate = orders.data.length ? Math.round((cancelled / orders.data.length) * 100) : 0
 
-    return { revenue, forecast, atRisk, pending, byMonth, channelData, cancelRate }
+    return { revenue, forecast, delivered, deliveredPax, atRisk, pending, byMonth, channelData, cancelRate }
   }, [sched.data, orders.data])
 
   if (sched.isLoading || orders.isLoading) return <Spinner label="Loading dashboard" />
@@ -68,6 +74,7 @@ export default function Dashboard() {
       <div className="grid kpis">
         <Kpi label="Booked revenue" value={php(model.revenue)} sub={`${attain}% of forecast`} />
         <Kpi label="Forecast" value={php(model.forecast)} sub="Set by the business owner" />
+        <Kpi label="Delivered revenue" value={php(model.delivered)} sub={`${num(model.deliveredPax)} participants trained`} />
         <Link to="/calendar?month=all&sort=fill&dir=asc" style={{ textDecoration: 'none', color: 'inherit' }}>
           <Kpi label="Sessions at risk" value={num(model.atRisk)} sub="Below minimum, still upcoming · view" />
         </Link>
