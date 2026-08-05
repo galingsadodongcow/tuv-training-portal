@@ -25,7 +25,7 @@ export default function Dashboard() {
   const model = useMemo(() => {
     if (!sched.data || !orders.data) return null
     const live = orders.data.filter((o) => ['New', 'Confirmed', 'Completed'].includes(o.order_status))
-    const revenue = live.reduce((s, o) => s + (o.amount_php || 0), 0)
+    const revenue = live.reduce((s, o) => s + (o.total_amount || 0), 0)
     const forecast = sched.data.reduce((s, r) => s + (r.forecast_revenue || 0), 0)
     const delivered = sched.data
       .filter((r) => r.status === 'Completed')
@@ -44,10 +44,10 @@ export default function Dashboard() {
     const byMonth = MONTHS.map((m, i) => ({ month: m, revenue: 0 }))
     for (const o of live) {
       const mi = new Date(o.order_date).getMonth()
-      if (byMonth[mi]) byMonth[mi].revenue += o.amount_php || 0
+      if (byMonth[mi]) byMonth[mi].revenue += o.total_amount || 0
     }
     const byChannel = {}
-    for (const o of live) byChannel[o.channel] = (byChannel[o.channel] || 0) + (o.amount_php || 0)
+    for (const o of live) byChannel[o.channel] = (byChannel[o.channel] || 0) + (o.total_amount || 0)
     const channelData = Object.entries(byChannel).map(([name, value]) => ({ name, value }))
 
     const cancelled = orders.data.filter((o) => o.order_status === 'Cancelled').length

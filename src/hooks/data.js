@@ -67,7 +67,7 @@ export function useOrders() {
         supabase
           .from('orders')
           .select(
-            'order_id, order_date, channel, modality, seats, amount_php, payment_status, order_status, went_live, access_status, schedule_id, course_id, client:client_id(name, company, email), course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
+            'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
           )
           .order('order_date', { ascending: false })
           .limit(1000)
@@ -123,10 +123,10 @@ export function useElearningPending() {
     queryFn: () =>
       sel(
         supabase
-          .from('orders')
-          .select('order_id, order_date, payment_status, access_status, client:client_id(name, company, email), course:course_id(course_name)')
+          .from('order_line')
+          .select('line_id, access_status, access_granted_date, course:course_id(course_name), order:order_id(order_id, order_date, payment_status, client:client_id(name, company, email))')
           .eq('modality', 'E-learning')
-          .order('order_date', { ascending: false })
+          .order('created_at', { ascending: false })
       ),
   })
 }
@@ -205,8 +205,8 @@ export function useSessionOrders(scheduleId) {
     queryFn: () =>
       sel(
         supabase
-          .from('orders')
-          .select('order_id, order_date, channel, seats, amount_php, payment_status, order_status, client:client_id(name, company, email), assignment:order_assignment(salesperson:sales_id(name, code))')
+          .from('order_line')
+          .select('line_id, seats, amount_php, line_status, order:order_id(order_id, order_date, channel, payment_status, order_status, client:client_id(name, company, email))')
           .eq('schedule_id', scheduleId)
           .order('order_date', { ascending: false })
       ),
@@ -237,7 +237,7 @@ export function useClientHistory(clientId) {
       sel(
         supabase
           .from('orders')
-          .select('order_id, order_date, channel, seats, amount_php, payment_status, order_status, course:course_id(course_name), schedule:schedule_id(schedule_id, start_date, end_date, date_segments, status)')
+          .select('order_id, order_date, channel, payment_status, order_status, total_seats, total_amount, fulfillment_stage, lines:order_line(line_id, seats, amount_php, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments))')
           .eq('client_id', clientId)
           .order('order_date', { ascending: false })
       ),
@@ -333,4 +333,28 @@ export async function checkConflicts({ scheduleId, trainerId, venueId, start, en
   })
   if (error) throw error
   return data
+}
+
+// ---- Phase 4: fulfillment queue ----
+export function useFulfillmentQueue() {
+  return useQuery({
+    queryKey: ['fulfillment_queue'],
+    queryFn: () => sel(supabase.from('v_fulfillment_queue').select('*').order('age_days', { ascending: false })),
+  })
+}
+
+export function useSessionsForCourse(courseId) {
+  return useQuery({
+    queryKey: ['sessions_for_course', courseId],
+    enabled: !!courseId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('schedule')
+          .select('schedule_id, start_date, end_date, date_segments, modality, price, min_participants, booked_participants, max_participants, status')
+          .eq('course_id', courseId)
+          .in('status', ['Tentative', 'Confirmed'])
+          .order('start_date')
+      ),
+  })
 }

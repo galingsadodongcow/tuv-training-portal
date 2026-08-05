@@ -5,6 +5,7 @@ import { Spinner } from './ui'
 import { formatSegments, lt } from '../lib/labels'
 
 export default function TransferOrder({ order, courseId, fromScheduleId, onClose }) {
+  // `order` is an order_line row
   const targets = useTransferTargets(courseId, fromScheduleId)
   const invalidate = useInvalidate()
   const [target, setTarget] = useState('')
@@ -15,8 +16,8 @@ export default function TransferOrder({ order, courseId, fromScheduleId, onClose
   const go = async () => {
     if (!target) return
     setBusy(true); setMsg(null)
-    const { error } = await supabase.rpc('fn_transfer_order', {
-      p_order: order.order_id,
+    const { error } = await supabase.rpc('fn_transfer_line', {
+      p_line: order.line_id,
       p_new_schedule: target,
       p_reason: reason || null,
     })
@@ -32,7 +33,7 @@ export default function TransferOrder({ order, courseId, fromScheduleId, onClose
       <div className="card card-pad" style={{ width: 520, maxWidth: '94vw' }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginTop: 0 }}>Transfer booking</h3>
         <p className="muted" style={{ fontSize: 14 }}>
-          Order {order.order_id} · {order.seats} seat{order.seats > 1 ? 's' : ''} · {order.client?.company || order.client?.name}
+          Order {order.order?.order_id || order.order_id} · {order.seats} seat{order.seats > 1 ? 's' : ''} · {order.order?.client?.company || order.company || ''}
         </p>
 
         {targets.isLoading ? <Spinner /> : (

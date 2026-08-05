@@ -1,172 +1,305 @@
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useOpenSchedules } from '../hooks/data'
+import { useCourses, useCourseFees, useClients, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
-import { dateRange, php } from '../lib/format'
-import { lt } from '../lib/labels'
+import { php } from '../lib/format'
+import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
+
+const SALES_CHANNELS = ['Inside Sales', 'Field Sales']
+const ADMIN_CHANNELS = ['Inside Sales', 'Field Sales', 'In-house Request', 'Webshop']
+const blankLine = () => ({ course_id: '', schedule_id: '', modality: 'Live Online Training', seats: 1, amount: '', sessions: [] })
 
 export default function SalesEntry() {
-  const { session } = useAuth()
-  const schedules = useOpenSchedules(2026)
-  const qc = useQueryClient()
-
+  const { profile } = useAuth()
   const [sp] = useSearchParams()
-  const [form, setForm] = useState({
-    channel: 'Inside Sales',
-    schedule_id: sp.get('schedule') || '',
-    company: '',
-    contact_name: '',
-    email: '',
-    phone: '',
-    seats: 1,
-    amount_php: '',
-  })
+  const nav = useNavigate()
+  const courses = useCourses()
+  const fees = useCourseFees()
+  const clients = useClients()
+  const invalidate = useInvalidate()
+
+  const channels = profile?.role === 'super_admin' ? ADMIN_CHANNELS : SALES_CHANNELS
+  const [client, setClient] = useState({ mode: 'new', client_id: '', name: '', company: '', email: '', phone: '' })
+  const [head, setHead] = useState({ channel: 'Inside Sales', order_date: new Date().toISOString().slice(0, 10), order_id: '' })
+  const [lines, setLines] = useState([blankLine()])
   const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
   const [result, setResult] = useState(null)
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  // preselected session from the calendar Book link
+  useEffect(() => {
+    const sid = sp.get('schedule')
+    if (!sid) return
+    supabase.from('schedule').select('schedule_id, course_id, modality, price').eq('schedule_id', sid).single()
+      .then(({ data }) => {
+        if (!data) return
+        setLines([{ course_id: data.course_id, schedule_id: data.schedule_id, modality: data.modality, seats: 1, amount: data.price ?? '', sessions: [] }])
+      })
+  }, [sp])
+
+  // load sessions whenever a line's course changes
+  const loadSessions = async (idx, courseId, modality) => {
+    if (!courseId) return
+    const { data } = await supabase
+      .from('schedule')
+      .select('schedule_id, start_date, end_date, date_segments, modality, price, min_participants, booked_participants, max_participants')
+      .eq('course_id', courseId)
+      .in('status', ['Tentative', 'Confirmed'])
+      .order('start_date')
+    setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, sessions: (data || []).filter((s) => s.modality === modality) } : l)))
+  }
+
+  const feeFor = (courseId, modality) =>
+    fees.data?.find((f) => f.course_id === courseId && f.modality === modality)?.fee_php ?? null
+
+  const setLine = (idx, patch) => {
+    setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)))
+  }
+
+  const onCourse = (idx, courseId) => {
+    const l = lines[idx]
+    const fee = feeFor(courseId, l.modality)
+    setLine(idx, { course_id: courseId, schedule_id: '', amount: fee ?? '' })
+    loadSessions(idx, courseId, l.modality)
+  }
+
+  const onModality = (idx, modality) => {
+    const l = lines[idx]
+    const fee = feeFor(l.course_id, modality)
+    setLine(idx, { modality, schedule_id: '', amount: fee ?? '' })
+    loadSessions(idx, l.course_id, modality)
+  }
+
+  const total = lines.reduce((n, l) => n + (Number(l.amount) || 0) * (Number(l.seats) || 0), 0)
+  const totalSeats = lines.reduce((n, l) => n + (Number(l.seats) || 0), 0)
 
   const submit = async (e) => {
     e.preventDefault()
-    setBusy(true)
-    setResult(null)
+    setBusy(true); setMsg(null)
     try {
-      const sched = schedules.data.find((s) => s.schedule_id === form.schedule_id)
-      if (!sched) throw new Error('Pick a session first.')
+      if (!head.order_id.trim()) throw new Error('Enter the webshop or reference order number.')
+      const good = lines.filter((l) => l.course_id)
+      if (good.length === 0) throw new Error('Add at least one training line.')
+      for (const l of good) {
+        if (l.modality !== 'E-learning' && !l.schedule_id) throw new Error('Pick a session for every scheduled line.')
+        if (!l.amount && l.amount !== 0) throw new Error('Set a fee on every line.')
+      }
 
-      // 1. client (owned by this salesperson)
-      const { data: sp } = await supabase
-        .from('profiles')
-        .select('sales_id')
-        .eq('user_id', session.user.id)
-        .single()
+      // client
+      let clientId = client.client_id
+      if (client.mode === 'new') {
+        if (!client.email.trim()) throw new Error('Client email is required.')
+        const { data: existing } = await supabase.from('client').select('client_id').eq('email', client.email.trim().toLowerCase()).maybeSingle()
+        if (existing) clientId = existing.client_id
+        else {
+          const { data, error } = await supabase.from('client')
+            .insert({
+              name: client.name.trim() || client.email.trim(),
+              company: client.company.trim() || null,
+              email: client.email.trim().toLowerCase(),
+              phone: client.phone.trim() || null,
+              owner_sales_id: profile.sales_id || null,
+            }).select('client_id').single()
+          if (error) throw error
+          clientId = data.client_id
+        }
+      }
+      if (!clientId) throw new Error('Select or create a client.')
 
-      const { data: client, error: cErr } = await supabase
-        .from('client')
-        .insert({
-          name: form.contact_name,
-          company: form.company,
-          contact: form.email || form.phone,
-          email: form.email || null,
-          phone: form.phone || null,
-          owner_sales_id: sp.sales_id,
-        })
-        .select('client_id')
-        .single()
-      if (cErr) throw cErr
-
-      // 2. order (portal-generated id, channel Inside/Field Sales)
-      const orderId = `PS-${Date.now()}`
+      // header
       const { error: oErr } = await supabase.from('orders').insert({
-        order_id: orderId,
-        order_date: new Date().toISOString().slice(0, 10),
-        channel: form.channel,
-        created_by: session.user.id,
-        schedule_id: sched.schedule_id,
-        client_id: client.client_id,
-        modality: sched.modality,
-        seats: Number(form.seats),
-        amount_php: Number(form.amount_php || sched.price || 0),
-        payment_status: 'Unpaid',
-        order_status: 'New',
+        order_id: head.order_id.trim(),
+        order_date: head.order_date,
+        channel: head.channel,
+        modality: good[0].modality,
+        seats: 1,
+        amount_php: 0,
+        client_id: clientId,
+        created_by: profile.user_id,
+        fulfillment_stage: 'New',
       })
       if (oErr) throw oErr
 
-      // 3. self-assign
-      await supabase.from('order_assignment').insert({ order_id: orderId, sales_id: sp.sales_id })
+      // lines
+      const payload = good.map((l, i) => ({
+        order_id: head.order_id.trim(),
+        line_no: i + 1,
+        course_id: l.course_id,
+        schedule_id: l.modality === 'E-learning' ? null : l.schedule_id,
+        modality: l.modality,
+        seats: Number(l.seats),
+        amount_php: Number(l.amount) * Number(l.seats),
+        access_status: l.modality === 'E-learning' ? 'Pending' : null,
+      }))
+      const { error: lErr } = await supabase.from('order_line').insert(payload)
+      if (lErr) {
+        await supabase.from('orders').delete().eq('order_id', head.order_id.trim())
+        throw lErr
+      }
 
-      // 4. run duplicate detection
-      await supabase.rpc('fn_detect_duplicates')
+      // self-assign
+      if (profile.sales_id) {
+        await supabase.from('order_assignment').insert({ order_id: head.order_id.trim(), sales_id: profile.sales_id })
+      }
 
-      setResult({ ok: true, id: orderId })
-      setForm((f) => ({ ...f, company: '', contact_name: '', email: '', phone: '', seats: 1, amount_php: '' }))
-      qc.invalidateQueries({ queryKey: ['orders'] })
-      qc.invalidateQueries({ queryKey: ['channel_pax'] })
-      qc.invalidateQueries({ queryKey: ['duplicates'] })
+      invalidate(['orders', 'schedules', 'channel_pax', 'fulfillment_queue', 'clients'])
+      setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: totalSeats, total })
     } catch (err) {
-      setResult({ ok: false, message: err.message })
+      setMsg(err.message)
     }
     setBusy(false)
   }
 
-  if (schedules.isLoading) return <Spinner label="Loading sessions" />
-  if (schedules.error) return <ErrorNote error={schedules.error} />
+  if (courses.isLoading) return <Spinner label="Loading" />
+  if (courses.error) return <ErrorNote error={courses.error} />
+
+  if (result) {
+    return (
+      <>
+        <div className="page-head"><div><h1>Order created</h1></div></div>
+        <div className="card card-pad" style={{ maxWidth: 560 }}>
+          <div className="notice notice-info">
+            Order {result.order_id} saved with {result.lines} line{result.lines > 1 ? 's' : ''},
+            {' '}{result.seats} seat{result.seats > 1 ? 's' : ''}, {php(result.total)}. It is assigned to you and sits at stage New.
+          </div>
+          <div className="toolbar">
+            <button className="btn" onClick={() => { setResult(null); setLines([blankLine()]); setHead({ ...head, order_id: '' }); setClient({ mode: 'new', client_id: '', name: '', company: '', email: '', phone: '' }) }}>
+              New order
+            </button>
+            <button className="btn btn-ghost" onClick={() => nav('/worklist')}>Open fulfillment</button>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>New sales order</h1>
-          <p>Records an inside or field sale against a calendar session. Creates the order and the client under your name.</p>
+          <p>One customer, one order, as many trainings as they bought. Each line books its own session.</p>
         </div>
       </div>
 
-      <div className="card card-pad" style={{ maxWidth: 620 }}>
-        <form onSubmit={submit}>
-          <label className="field">
-            <span>Channel</span>
-            <select value={form.channel} onChange={set('channel')}>
-              <option>Inside Sales</option>
-              <option>Field Sales</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Session</span>
-            <select value={form.schedule_id} onChange={set('schedule_id')} required>
-              <option value="">Select a session…</option>
-              {schedules.data.map((s) => (
-                <option key={s.schedule_id} value={s.schedule_id}>
-                  {s.course?.course_name} · {dateRange(s.start_date, s.end_date)} · {lt(s.modality)} · {php(s.price)}
-                </option>
+      <form onSubmit={submit}>
+        <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <div className="k-label" style={{ marginBottom: 10 }}>Customer</div>
+          <div className="toolbar" style={{ marginBottom: 10 }}>
+            {['new', 'existing'].map((m) => (
+              <button key={m} type="button" className={`btn btn-sm ${client.mode === m ? '' : 'btn-ghost'}`}
+                onClick={() => setClient({ ...client, mode: m })}>
+                {m === 'new' ? 'New customer' : 'Existing customer'}
+              </button>
+            ))}
+          </div>
+          {client.mode === 'existing' ? (
+            <select value={client.client_id} onChange={(e) => setClient({ ...client, client_id: e.target.value })}>
+              <option value="">Select a client…</option>
+              {clients.data?.map((c) => (
+                <option key={c.client_id} value={c.client_id}>{c.company || c.name} — {c.email}</option>
               ))}
             </select>
-          </label>
-
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <label className="field">
-              <span>Company</span>
-              <input value={form.company} onChange={set('company')} required />
-            </label>
-            <label className="field">
-              <span>Contact name</span>
-              <input value={form.contact_name} onChange={set('contact_name')} required />
-            </label>
-            <label className="field">
-              <span>Email</span>
-              <input type="email" value={form.email} onChange={set('email')} />
-            </label>
-            <label className="field">
-              <span>Phone</span>
-              <input value={form.phone} onChange={set('phone')} />
-            </label>
-            <label className="field">
-              <span>Seats</span>
-              <input type="number" min="1" value={form.seats} onChange={set('seats')} required />
-            </label>
-            <label className="field">
-              <span>Amount (PHP, blank uses session fee)</span>
-              <input type="number" min="0" value={form.amount_php} onChange={set('amount_php')} />
-            </label>
-          </div>
-
-          {result?.ok && (
-            <div className="notice notice-info" style={{ marginBottom: 12 }}>
-              Order {result.id} created and assigned to you. It now shows on the calendar under {form.channel}.
+          ) : (
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <input placeholder="Contact name" value={client.name} onChange={(e) => setClient({ ...client, name: e.target.value })} />
+              <input placeholder="Company (blank for individuals)" value={client.company} onChange={(e) => setClient({ ...client, company: e.target.value })} />
+              <input placeholder="Email" type="email" value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} />
+              <input placeholder="Phone" value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} />
             </div>
           )}
-          {result && !result.ok && (
-            <div className="notice notice-error" style={{ marginBottom: 12 }}>{result.message}</div>
-          )}
+        </div>
 
-          <button className="btn" disabled={busy}>
-            {busy ? 'Saving…' : 'Create order'}
+        <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <div className="k-label" style={{ marginBottom: 10 }}>Order</div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <label className="field"><span>Order number</span>
+              <input value={head.order_id} onChange={(e) => setHead({ ...head, order_id: e.target.value })} placeholder="60806000000xxx" required />
+            </label>
+            <label className="field"><span>Order date</span>
+              <input type="date" value={head.order_date} onChange={(e) => setHead({ ...head, order_date: e.target.value })} required />
+            </label>
+            <label className="field"><span>Channel</span>
+              <select value={head.channel} onChange={(e) => setHead({ ...head, channel: e.target.value })}>
+                {channels.map((c) => (<option key={c}>{c}</option>))}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="k-label">Training lines</div>
+            <div className="fill-label">{totalSeats} seat{totalSeats === 1 ? '' : 's'} · {php(total)}</div>
+          </div>
+
+          {lines.map((l, i) => {
+            const cat = feeFor(l.course_id, l.modality)
+            return (
+              <div key={i} className="drawer-section" style={{ marginTop: i === 0 ? 0 : 14, paddingTop: i === 0 ? 0 : 14, borderTop: i === 0 ? 'none' : undefined }}>
+                <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div className="fill-label">Line {i + 1}</div>
+                  {lines.length > 1 && (
+                    <button type="button" className="linkbtn" onClick={() => setLines(lines.filter((_, x) => x !== i))}>Remove</button>
+                  )}
+                </div>
+                <select value={l.course_id} onChange={(e) => onCourse(i, e.target.value)} style={{ marginBottom: 8 }}>
+                  <option value="">Select a course…</option>
+                  {courses.data.map((c) => (
+                    <option key={c.course_id} value={c.course_id}>{c.course_name} ({c.training_type})</option>
+                  ))}
+                </select>
+                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  <label className="field"><span>Learning type</span>
+                    <select value={l.modality} onChange={(e) => onModality(i, e.target.value)}>
+                      {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
+                    </select>
+                  </label>
+                  <label className="field"><span>Session</span>
+                    {l.modality === 'E-learning' ? (
+                      <input value="No session — access granted after payment" disabled />
+                    ) : (
+                      <select value={l.schedule_id} onChange={(e) => setLine(i, { schedule_id: e.target.value })}>
+                        <option value="">Select a date…</option>
+                        {l.sessions.map((s) => {
+                          const left = s.max_participants == null ? null : s.max_participants - s.booked_participants
+                          const full = left != null && left < Number(l.seats || 1)
+                          return (
+                            <option key={s.schedule_id} value={s.schedule_id} disabled={full}>
+                              {formatSegments(s.date_segments, s.start_date, s.end_date)} · {s.booked_participants}/{s.min_participants} booked
+                              {left != null ? ` · ${left} left` : ''}{full ? ' — full' : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    )}
+                  </label>
+                  <label className="field"><span>Seats</span>
+                    <input type="number" min="1" value={l.seats} onChange={(e) => setLine(i, { seats: e.target.value })} />
+                  </label>
+                  <label className="field"><span>Fee per seat {cat != null && `(catalog ${php(cat)})`}</span>
+                    <input type="number" min="0" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} />
+                  </label>
+                </div>
+                {l.course_id && l.modality !== 'E-learning' && l.sessions.length === 0 && (
+                  <div className="notice notice-info">No open session for this course as {lt(l.modality)}. Ask operations to schedule one.</div>
+                )}
+              </div>
+            )
+          })}
+
+          <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 14 }} onClick={() => setLines([...lines, blankLine()])}>
+            + Add another training
           </button>
-        </form>
-      </div>
+        </div>
+
+        {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
+        <div className="toolbar">
+          <button className="btn" disabled={busy}>{busy ? 'Saving…' : `Create order · ${php(total)}`}</button>
+        </div>
+      </form>
     </>
   )
 }

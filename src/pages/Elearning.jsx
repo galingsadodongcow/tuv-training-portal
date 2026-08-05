@@ -8,15 +8,17 @@ export default function Elearning() {
   const orders = useElearningPending()
   const qc = useQueryClient()
 
-  const grant = async (orderId) => {
-    await supabase.rpc('fn_grant_elearning_access', { p_order: orderId })
+  const grant = async (lineId) => {
+    await supabase.from('order_line')
+      .update({ access_status: 'Granted', access_granted_date: new Date().toISOString().slice(0, 10) })
+      .eq('line_id', lineId)
     qc.invalidateQueries({ queryKey: ['elearning_pending'] })
   }
 
   if (orders.isLoading) return <Spinner label="Loading e-learning orders" />
   if (orders.error) return <ErrorNote error={orders.error} />
 
-  const pending = orders.data.filter((o) => (o.access_status || 'Not Granted') === 'Not Granted')
+  const pending = orders.data.filter((o) => (o.access_status || 'Pending') !== 'Granted')
   const granted = orders.data.filter((o) => o.access_status === 'Granted')
 
   return (
@@ -39,16 +41,16 @@ export default function Elearning() {
             </thead>
             <tbody>
               {pending.map((o) => (
-                <tr key={o.order_id}>
-                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order_id}</td>
-                  <td>{shortDate(o.order_date)}</td>
-                  <td>{o.client?.company || o.client?.name || '—'}</td>
+                <tr key={o.line_id}>
+                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order?.order_id}</td>
+                  <td>{shortDate(o.order?.order_date)}</td>
+                  <td>{o.order?.client?.company || o.order?.client?.name || '—'}</td>
                   <td>{o.course?.course_name || '—'}</td>
                   <td>
-                    <span className={`pill ${o.payment_status === 'Paid' ? 'pill-go' : 'pill-tentative'}`}>{o.payment_status}</span>
+                    <span className={`pill ${o.payment_status === 'Paid' ? 'pill-go' : 'pill-tentative'}`}>{o.order?.payment_status}</span>
                   </td>
                   <td className="right">
-                    <button className="btn btn-sm" onClick={() => grant(o.order_id)}>Mark access granted</button>
+                    <button className="btn btn-sm" onClick={() => grant(o.line_id)}>Mark access granted</button>
                   </td>
                 </tr>
               ))}
@@ -67,10 +69,10 @@ export default function Elearning() {
               </thead>
               <tbody>
                 {granted.map((o) => (
-                  <tr key={o.order_id}>
-                    <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order_id}</td>
-                    <td>{shortDate(o.order_date)}</td>
-                    <td>{o.client?.company || o.client?.name || '—'}</td>
+                  <tr key={o.line_id}>
+                    <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order?.order_id}</td>
+                    <td>{shortDate(o.order?.order_date)}</td>
+                    <td>{o.order?.client?.company || o.order?.client?.name || '—'}</td>
                     <td>{o.course?.course_name || '—'}</td>
                   </tr>
                 ))}

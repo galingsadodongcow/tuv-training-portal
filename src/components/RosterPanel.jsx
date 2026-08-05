@@ -11,20 +11,22 @@ export default function RosterPanel({ schedule }) {
   const roster = useRoster(schedule.schedule_id)
   const orders = useSessionOrders(schedule.schedule_id)
   const invalidate = useInvalidate()
-  const [form, setForm] = useState({ order_id: '', full_name: '', email: '', position_title: '' })
+  const [form, setForm] = useState({ line_id: '', full_name: '', email: '', position_title: '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
 
   const canEdit = ['operations', 'super_admin', 'sales'].includes(profile?.role)
-  const live = (orders.data || []).filter((o) => o.order_status !== 'Cancelled')
-  const seatsSold = live.reduce((n, o) => n + o.seats, 0)
+  const live = (orders.data || []).filter((l) => l.line_status !== 'Cancelled')
+  const seatsSold = live.reduce((n, l) => n + l.seats, 0)
   const names = roster.data?.length || 0
 
   const add = async () => {
-    if (!form.order_id || !form.full_name.trim()) { setMsg('Pick the order and enter a name.'); return }
+    if (!form.line_id || !form.full_name.trim()) { setMsg('Pick the booking and enter a name.'); return }
     setBusy(true); setMsg(null)
+    const line = live.find((l) => l.line_id === form.line_id)
     const { error } = await supabase.from('participant').insert({
-      order_id: form.order_id,
+      order_id: line?.order?.order_id,
+      line_id: form.line_id,
       schedule_id: schedule.schedule_id,
       full_name: form.full_name.trim(),
       email: form.email.trim() || null,
@@ -33,7 +35,7 @@ export default function RosterPanel({ schedule }) {
     })
     if (error) setMsg(error.message)
     else {
-      setForm({ order_id: form.order_id, full_name: '', email: '', position_title: '' })
+      setForm({ line_id: form.line_id, full_name: '', email: '', position_title: '' })
       invalidate(['roster'])
     }
     setBusy(false)
@@ -104,11 +106,11 @@ export default function RosterPanel({ schedule }) {
       {canEdit && live.length > 0 && (
         <div className="drawer-section" style={{ marginTop: 4 }}>
           <div className="k-label" style={{ marginBottom: 8 }}>Add participant</div>
-          <select value={form.order_id} onChange={(e) => setForm({ ...form, order_id: e.target.value })} style={{ marginBottom: 8 }}>
-            <option value="">Against which order…</option>
-            {live.map((o) => (
-              <option key={o.order_id} value={o.order_id}>
-                {o.client?.company || o.client?.name || o.order_id} · {o.seats} seat{o.seats > 1 ? 's' : ''}
+          <select value={form.line_id} onChange={(e) => setForm({ ...form, line_id: e.target.value })} style={{ marginBottom: 8 }}>
+            <option value="">Against which booking…</option>
+            {live.map((l) => (
+              <option key={l.line_id} value={l.line_id}>
+                {l.order?.client?.company || l.order?.client?.name || l.order?.order_id} · {l.seats} seat{l.seats > 1 ? 's' : ''}
               </option>
             ))}
           </select>

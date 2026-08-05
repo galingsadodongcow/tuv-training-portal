@@ -116,8 +116,8 @@ export default function Clients() {
 function ClientHistory({ client, onClose }) {
   const hist = useClientHistory(client.client_id)
   const live = (hist.data || []).filter((o) => o.order_status !== 'Cancelled')
-  const spend = live.reduce((n, o) => n + Number(o.amount_php || 0), 0)
-  const seats = live.reduce((n, o) => n + o.seats, 0)
+  const spend = live.reduce((n, o) => n + Number(o.total_amount || 0), 0)
+  const seats = live.reduce((n, o) => n + (o.total_seats || 0), 0)
 
   return (
     <div className="drawer-scrim" onClick={onClose}>
@@ -144,13 +144,17 @@ function ClientHistory({ client, onClose }) {
                 {hist.data.map((o) => (
                   <tr key={o.order_id}>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{o.course?.course_name || '—'}</div>
+                      <div style={{ fontWeight: 600 }}>
+                        {o.lines?.map((l) => l.course?.course_name).filter(Boolean).join(', ') || '—'}
+                      </div>
                       <div className="fill-label">{o.order_id} · {shortDate(o.order_date)} · {o.payment_status}</div>
                     </td>
                     <td className="fill-label">
-                      {o.schedule ? formatSegments(o.schedule.date_segments, o.schedule.start_date, o.schedule.end_date) : 'E-learning'}
+                      {o.lines?.[0]?.schedule
+                        ? formatSegments(o.lines[0].schedule.date_segments, o.lines[0].schedule.start_date, o.lines[0].schedule.end_date)
+                        : 'E-learning'}
                     </td>
-                    <td className="right">{php(o.amount_php)}</td>
+                    <td className="right">{php(o.total_amount)}</td>
                   </tr>
                 ))}
               </tbody>

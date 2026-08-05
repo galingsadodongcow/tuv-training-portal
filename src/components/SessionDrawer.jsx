@@ -173,17 +173,17 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
                 <table>
                   <thead><tr><th>Client</th><th>Channel</th><th>Seats</th><th>Payment</th><th></th></tr></thead>
                   <tbody>
-                    {sessionOrders.data?.map((o) => (
-                      <tr key={o.order_id}>
+                    {sessionOrders.data?.map((l) => (
+                      <tr key={l.line_id}>
                         <td>
-                          <div style={{ fontWeight: 600 }}>{o.client?.company || o.client?.name || '—'}</div>
-                          <div className="fill-label">{o.order_id} · {shortDate(o.order_date)}</div>
+                          <div style={{ fontWeight: 600 }}>{l.order?.client?.company || l.order?.client?.name || '—'}</div>
+                          <div className="fill-label">{l.order?.order_id} · {shortDate(l.order?.order_date)}</div>
                         </td>
-                        <td><ChannelPill value={o.channel} /></td>
-                        <td>{o.seats}</td>
-                        <td className="fill-label">{o.payment_status}</td>
+                        <td><ChannelPill value={l.order?.channel} /></td>
+                        <td>{l.seats}</td>
+                        <td className="fill-label">{l.order?.payment_status}</td>
                         <td className="right">
-                          <button className="linkbtn" onClick={() => setTransferring(o)}>Transfer</button>
+                          <button className="linkbtn" onClick={() => setTransferring(l)}>Transfer</button>
                         </td>
                       </tr>
                     ))}
