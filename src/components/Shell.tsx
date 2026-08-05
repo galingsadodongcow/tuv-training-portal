@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV, ROLE_LABEL, Role } from '@/lib/roles'
 import { Spinner } from './ui'
+import ThemeToggle from './ThemeToggle'
 
 export default function Shell({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
@@ -43,7 +44,8 @@ export default function Shell({ children }: { children: ReactNode }) {
           )
         })}
         <div className="sidebar-foot">
-          <div style={{ fontWeight: 600 }}>{profile?.full_name}</div>
+          <ThemeToggle />
+          <div style={{ fontWeight: 600, marginTop: 12 }}>{profile?.full_name}</div>
           <div className="role-pill">
             {role ? ROLE_LABEL[role] : ''}
             {profile?.salesperson?.is_supervisor ? ' · Supervisor' : ''}

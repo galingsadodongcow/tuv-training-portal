@@ -40,9 +40,9 @@
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
   --ring: 0 0 0 3px rgba(0, 112, 243, 0.25);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Legacy aliases (used by inline component styles) */
   --tr-ink: var(--text);
@@ -64,8 +64,9 @@
   color-scheme: light;
 }
 
+/* Dark tokens applied when the OS prefers dark AND the user hasn't forced light */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0a0a0a;
     --bg-subtle: #111111;
     --card: #0f0f0f;
@@ -345,4 +346,92 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
   .cal-table td[data-label=""]::before { display: none; }
   .cal-table td[data-label=""] { display: block; }
   .cal-table td.right { justify-content: space-between; text-align: left; }
+}
+
+/* ================================================= Forced theme (toggle) */
+:root[data-theme='dark'] {
+  --bg: #0a0a0a;
+  --bg-subtle: #111111;
+  --card: #0f0f0f;
+  --text: #ededed;
+  --text-muted: #a1a1a1;
+  --text-faint: #7d7d7d;
+  --border: #242424;
+  --border-soft: #1c1c1c;
+  --border-strong: #2e2e2e;
+  --accent: #3291ff;
+  --accent-hover: #52a8ff;
+  --accent-tint: #10233b;
+  --accent-tint-2: #0d1a2b;
+  --btn-bg: #ededed;
+  --btn-bg-hover: #ffffff;
+  --btn-fg: #0a0a0a;
+  --success: #3fb950;
+  --danger: #f0616d;
+  --danger-hover: #ff7b86;
+  --warning: #d9a441;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+  --ring: 0 0 0 3px rgba(50, 145, 255, 0.35);
+  color-scheme: dark;
+}
+
+/* ===================================================== Density (compact) */
+:root[data-density='compact'] body { font-size: 13px; }
+:root[data-density='compact'] td,
+:root[data-density='compact'] th { padding-top: 7px; padding-bottom: 7px; }
+:root[data-density='compact'] .card-pad { padding: 14px; }
+:root[data-density='compact'] .btn { padding: 6px 12px; }
+:root[data-density='compact'] .nav-link { padding: 6px 11px; }
+:root[data-density='compact'] .kpi .k-value { font-size: 24px; }
+
+/* ===================================================== Theme toggle (foot) */
+.theme-toggle { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-btn { background: var(--card); border: none; padding: 5px 9px; font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: inherit; transition: background 0.12s var(--ease), color 0.12s var(--ease); }
+.seg .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn:hover { background: var(--bg-subtle); color: var(--text); }
+.seg-btn.on { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.seg-btn.density { border: 1px solid var(--border); border-radius: var(--radius-sm); }
+
+/* =========================================================== Toaster */
+.toaster { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 100; max-width: min(92vw, 380px); }
+.toast { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: var(--radius-sm); background: var(--card); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow-lg); font-size: 13.5px; cursor: pointer; animation: toastin 0.2s var(--ease); }
+@keyframes toastin { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.toast-success .toast-dot { background: var(--success); }
+.toast-error .toast-dot { background: var(--danger); }
+.toast-info .toast-dot { background: var(--accent); }
+
+/* =========================================================== Skeleton */
+.skeleton {
+  display: inline-block; border-radius: 6px; vertical-align: middle;
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, color-mix(in srgb, var(--text) 8%, transparent) 37%, var(--bg-subtle) 63%);
+  background-size: 400% 100%; animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ===================================================== Command palette */
+.cmdk-scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 90; animation: fade 0.12s var(--ease); }
+.cmdk { width: min(92vw, 560px); background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.cmdk-input { border: none; border-bottom: 1px solid var(--border); border-radius: 0; padding: 15px 16px; font-size: 15px; }
+.cmdk-input:focus { box-shadow: none; border-color: var(--border); }
+.cmdk-list { max-height: 320px; overflow-y: auto; padding: 6px; }
+.cmdk-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: none; border: none; padding: 9px 11px; border-radius: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; font-family: inherit; }
+.cmdk-item.on { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.cmdk-path { font-size: 11.5px; color: var(--text-faint); font-family: var(--font-mono); }
+.cmdk-item.on .cmdk-path { color: var(--accent); }
+.cmdk-empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.cmdk-foot { display: flex; align-items: center; gap: 4px; padding: 9px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-faint); }
+.cmdk-foot kbd { font-family: var(--font-mono); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 10.5px; }
+
+/* ===================================================== Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
