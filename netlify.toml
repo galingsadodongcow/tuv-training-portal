@@ -1,5 +1,9 @@
 [build]
   command = "next build"
+  publish = ".next"
 
-# The official Next.js runtime is auto-installed by Netlify when it detects a
-# Next.js app; it wires up routing, so the old SPA catch-all redirect is gone.
+# Explicitly enable the Next.js runtime. Without this the build published no
+# server functions, so the App Router app never ran and the live URL served
+# stale content. The plugin wires up SSR/routing as Netlify Functions.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
