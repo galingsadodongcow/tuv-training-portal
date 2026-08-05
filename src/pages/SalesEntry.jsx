@@ -40,7 +40,7 @@ export default function SalesEntry() {
   }, [sp])
 
   // load sessions whenever a line's course changes
-  const loadSessions = async (idx, courseId, modality) => {
+  const loadSessions = async (idx, courseId) => {
     if (!courseId) return
     const { data } = await supabase
       .from('schedule')
@@ -48,7 +48,7 @@ export default function SalesEntry() {
       .eq('course_id', courseId)
       .in('status', ['Tentative', 'Confirmed'])
       .order('start_date')
-    setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, sessions: (data || []).filter((s) => s.modality === modality) } : l)))
+    setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, sessions: data || [] } : l)))
   }
 
   const feeFor = (courseId, modality) =>
@@ -62,14 +62,14 @@ export default function SalesEntry() {
     const l = lines[idx]
     const fee = feeFor(courseId, l.modality)
     setLine(idx, { course_id: courseId, schedule_id: '', amount: fee ?? '' })
-    loadSessions(idx, courseId, l.modality)
+    loadSessions(idx, courseId)
   }
 
   const onModality = (idx, modality) => {
     const l = lines[idx]
     const fee = feeFor(l.course_id, modality)
     setLine(idx, { modality, schedule_id: '', amount: fee ?? '' })
-    loadSessions(idx, l.course_id, modality)
+    loadSessions(idx, l.course_id)
   }
 
   const total = lines.reduce((n, l) => n + (Number(l.amount) || 0) * (Number(l.seats) || 0), 0)
@@ -261,14 +261,21 @@ export default function SalesEntry() {
                     {l.modality === 'E-learning' ? (
                       <input value="No session — access granted after payment" disabled />
                     ) : (
-                      <select value={l.schedule_id} onChange={(e) => setLine(i, { schedule_id: e.target.value })}>
+                      <select value={l.schedule_id} onChange={(e) => {
+                        const s = l.sessions.find((x) => x.schedule_id === e.target.value)
+                        setLine(i, {
+                          schedule_id: e.target.value,
+                          modality: s ? s.modality : l.modality,
+                          amount: s && (l.amount === '' || Number(l.amount) === 0) ? (s.price ?? l.amount) : l.amount,
+                        })
+                      }}>
                         <option value="">Select a date…</option>
                         {l.sessions.map((s) => {
                           const left = s.max_participants == null ? null : s.max_participants - s.booked_participants
                           const full = left != null && left < Number(l.seats || 1)
                           return (
                             <option key={s.schedule_id} value={s.schedule_id} disabled={full}>
-                              {formatSegments(s.date_segments, s.start_date, s.end_date)} · {s.booked_participants}/{s.min_participants} booked
+                              {formatSegments(s.date_segments, s.start_date, s.end_date)} · {lt(s.modality)} · {s.booked_participants}/{s.min_participants} booked
                               {left != null ? ` · ${left} left` : ''}{full ? ' — full' : ''}
                             </option>
                           )
@@ -284,7 +291,9 @@ export default function SalesEntry() {
                   </label>
                 </div>
                 {l.course_id && l.modality !== 'E-learning' && l.sessions.length === 0 && (
-                  <div className="notice notice-info">No open session for this course as {lt(l.modality)}. Ask operations to schedule one.</div>
+                  <div className="notice notice-info">
+                    This course has no open session yet. Ask operations to schedule one, or sell it as E-learning if it is self-paced.
+                  </div>
                 )}
               </div>
             )

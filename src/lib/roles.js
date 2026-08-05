@@ -15,6 +15,7 @@ export const NAV = [
   { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'sales'] },
   { path: '/approvals', label: 'Approvals', roles: ['super_admin', 'operations', 'business_owner'] },
   { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations'] },
+  { path: '/sap-import', label: 'SAP import', roles: ['super_admin', 'operations'] },
   { path: '/resources', label: 'Trainers & venues', roles: ['super_admin', 'operations', 'business_owner'] },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'] },
 ]

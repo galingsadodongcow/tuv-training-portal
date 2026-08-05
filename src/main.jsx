@@ -1,23 +1,24 @@
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import Shell from './components/Shell'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
 import Calendar from './pages/Calendar'
 import Orders from './pages/Orders'
 import SalesEntry from './pages/SalesEntry'
 import Duplicates from './pages/Duplicates'
 import Approvals from './pages/Approvals'
 import Elearning from './pages/Elearning'
-import Rollover from './pages/Rollover'
+const Rollover = lazy(() => import('./pages/Rollover'))
 import SessionForm from './pages/SessionForm'
 import CourseForm from './pages/CourseForm'
-import Resources from './pages/Resources'
+const Resources = lazy(() => import('./pages/Resources'))
+const SapImport = lazy(() => import('./pages/SapImport'))
 import Worklist from './pages/Worklist'
-import Clients from './pages/Clients'
+const Clients = lazy(() => import('./pages/Clients'))
 import { Spinner } from './components/ui'
 import './styles.css'
 
@@ -55,6 +56,7 @@ function Routed() {
         <Route path="/worklist" element={<Guard roles={['super_admin', 'business_owner', 'sales']}><Worklist /></Guard>} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/resources" element={<Guard roles={['super_admin', 'operations', 'business_owner']}><Resources /></Guard>} />
+        <Route path="/sap-import" element={<Guard roles={['super_admin', 'operations']}><SapImport /></Guard>} />
         <Route path="/sales-entry" element={<Guard roles={['super_admin', 'sales']}><SalesEntry /></Guard>} />
         <Route path="/duplicates" element={<Guard roles={['super_admin', 'sales']}><Duplicates /></Guard>} />
         <Route path="/approvals" element={<Guard roles={['super_admin', 'operations', 'business_owner']}><Approvals /></Guard>} />

@@ -10,6 +10,14 @@ import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
 
+function UrgencyPill({ days }) {
+  if (days == null || days < 0) return null
+  if (days === 0) return <span className="pill pill-today">Today</span>
+  if (days <= 7) return <span className="pill pill-thisweek">In {days}d</span>
+  if (days <= 30) return <span className="pill pill-soon">In {days}d</span>
+  return null
+}
+
 function riskClass(r) {
   if (!['Tentative', 'Confirmed'].includes(r.status)) return ''
   if (r.min_participants <= 0 || r.booked_participants >= r.min_participants) return ''
@@ -39,7 +47,9 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell }) {
     const ch = pax?.[r.schedule_id] || {}
     const d = daysUntil(r.start_date)
     return (
-      <tr key={r.schedule_id} className={`clickable ${riskClass(r)}`} onClick={() => onOpen(r)}>
+      <tr key={r.schedule_id}
+          className={`clickable ${riskClass(r)} ${d != null && d >= 0 && d <= 7 ? 'upcoming' : ''}`}
+          onClick={() => onOpen(r)}>
         <td data-label="">
           <div style={{ fontWeight: 600 }}>{r.course?.course_name}</div>
           <div className="fill-label">{r.course?.category || '—'}</div>
@@ -50,8 +60,12 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell }) {
           </span>
         </td>
         <td data-label="Dates">
-          {formatSegments(r.date_segments, r.start_date, r.end_date)}
-          {d != null && d >= 0 && <span className="fill-label"> · in {d}d</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{formatSegments(r.date_segments, r.start_date, r.end_date)}</span>
+            <UrgencyPill days={d} />
+          </div>
+          {d != null && d > 30 && <div className="fill-label">in {d}d</div>}
+          {d != null && d < 0 && <div className="fill-label">past</div>}
         </td>
         <td data-label="Learning type" className="hide-m">
           {lt(r.modality)}

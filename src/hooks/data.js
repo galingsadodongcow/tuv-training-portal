@@ -358,3 +358,32 @@ export function useSessionsForCourse(courseId) {
       ),
   })
 }
+
+// Server-side paged orders: filters and paging run in the database,
+// so the screen stays fast as the table grows.
+export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all' }) {
+  return useQuery({
+    queryKey: ['orders_paged', page, pageSize, q, stage, pay],
+    keepPreviousData: true,
+    queryFn: async () => {
+      let sel = supabase
+        .from('orders')
+        .select(
+          'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))',
+          { count: 'exact' }
+        )
+        .order('order_date', { ascending: false })
+        .range(page * pageSize, page * pageSize + pageSize - 1)
+
+      if (stage !== 'all') sel = sel.eq('fulfillment_stage', stage)
+      if (pay !== 'all') sel = sel.eq('payment_status', pay)
+      if (q.trim()) {
+        const t = q.trim()
+        sel = sel.or(`order_id.ilike.%${t}%,sap_order_no.ilike.%${t}%`)
+      }
+      const { data, error, count } = await sel
+      if (error) throw error
+      return { rows: data, count: count ?? 0 }
+    },
+  })
+}
