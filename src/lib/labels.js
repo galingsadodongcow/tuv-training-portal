@@ -1,7 +1,7 @@
 // Learning Type: friendly labels over the stored enum values.
 // The database keeps its canonical enum; the interface speaks the team's language.
 export const LEARNING_TYPE_LABEL = {
-  'Live Online Training': 'Virtual Learning',
+  'Live Online Training': 'Virtual Classroom',
   'Face-to-face': 'Classroom Training',
   'E-learning': 'E-learning',
 }

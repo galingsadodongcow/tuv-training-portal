@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
 import SessionDrawer from '../components/SessionDrawer'
 import { php, daysUntil } from '../lib/format'
-import { lt, formatSegments } from '../lib/labels'
+import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
@@ -225,9 +225,7 @@ export default function Calendar() {
         </select>
         <select value={ltype} onChange={(e) => setParam('lt', e.target.value)}>
           <option value="all">All learning types</option>
-          <option value="Live Online Training">Virtual Learning</option>
-          <option value="Face-to-face">Classroom Training</option>
-          <option value="E-learning">E-learning</option>
+          {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
         </select>
       </div>
 
