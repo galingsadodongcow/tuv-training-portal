@@ -7,6 +7,8 @@ import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num, php } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { StatusPill } from '../components/ui'
+import { useSort } from '../hooks/useSort'
+import { exportCsv } from '../lib/csv'
 
 export default function Clients() {
   const clients = useClients()
@@ -34,6 +36,14 @@ export default function Clients() {
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [attribution.data])
 
+  const clientSort = useSort(filtered, (c: any, k: string) => (k === 'owner' ? c.salesperson?.name : c[k]))
+  const exportClients = () =>
+    exportCsv(
+      'clients-' + new Date().toISOString().slice(0, 10),
+      ['Company', 'Contact', 'Email', 'Phone', 'Owner'],
+      clientSort.sorted.map((c: any) => [c.company, c.name, c.email, c.phone, c.salesperson?.name || ''])
+    )
+
   if (clients.isLoading) return <TableSkeleton rows={8} cols={5} />
   if (clients.error) return <ErrorNote error={clients.error} />
 
@@ -53,7 +63,10 @@ export default function Clients() {
           </button>
         ))}
         {tab === 'clients' && (
-          <input placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 240 }} />
+          <>
+            <input placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 240 }} />
+            <button className="btn btn-ghost btn-sm" onClick={exportClients} disabled={filtered.length === 0}>Export CSV</button>
+          </>
         )}
       </div>
 
@@ -61,10 +74,16 @@ export default function Clients() {
         <div className="card">
           <table>
             <thead>
-              <tr><th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>Owner</th></tr>
+              <tr>
+                <th className="clickable" onClick={() => clientSort.toggle('company')}>Company{clientSort.indicator('company')}</th>
+                <th className="clickable" onClick={() => clientSort.toggle('name')}>Contact{clientSort.indicator('name')}</th>
+                <th className="clickable" onClick={() => clientSort.toggle('email')}>Email{clientSort.indicator('email')}</th>
+                <th className="clickable" onClick={() => clientSort.toggle('phone')}>Phone{clientSort.indicator('phone')}</th>
+                <th className="clickable" onClick={() => clientSort.toggle('owner')}>Owner{clientSort.indicator('owner')}</th>
+              </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 300).map((c) => (
+              {clientSort.sorted.slice(0, 300).map((c: any) => (
                 <tr key={c.client_id} className="clickable" onClick={() => setOpenClient(c)}>
                   <td style={{ fontWeight: 600 }}>{c.company || '—'}</td>
                   <td>{c.name || '—'}</td>

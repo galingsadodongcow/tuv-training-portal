@@ -38,7 +38,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         {items.map((n) => {
           const active = pathname === n.path || pathname.startsWith(n.path + '/')
           return (
-            <Link key={n.path} href={n.path} className={`nav-link ${active ? 'active' : ''}`}>
+            <Link key={n.path} href={n.path} className={`nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
               {n.label}
             </Link>
           )
