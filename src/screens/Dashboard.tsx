@@ -7,7 +7,7 @@ import { Spinner, ErrorNote } from '../components/ui'
 import { php, num } from '../lib/format'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const CH_COLORS: Record<string, string> = { Webshop: '#0071b9', 'Inside Sales': '#7c4dcf', 'Field Sales': '#d20033', 'In-house Request': '#e8a400' }
+const CH_COLORS: Record<string, string> = { Webshop: '#0070f3', 'Inside Sales': '#8b5cf6', 'Field Sales': '#ec4899', 'In-house Request': '#f5a623' }
 
 function Kpi({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
@@ -102,8 +102,8 @@ export default function Dashboard() {
             <BarChart data={model.byMonth} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
               <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={(v: any) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v: any) => php(v)} cursor={{ fill: '#f0f4f7' }} />
-              <Bar dataKey="revenue" fill="#0071b9" radius={[4, 4, 0, 0]} />
+              <Tooltip formatter={(v: any) => php(v)} cursor={{ fill: 'rgba(128,128,128,0.12)' }} />
+              <Bar dataKey="revenue" fill="#0070f3" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -114,7 +114,7 @@ export default function Dashboard() {
             <PieChart>
               <Pie data={model.channelData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={92} paddingAngle={2}>
                 {model.channelData.map((e) => (
-                  <Cell key={e.name} fill={CH_COLORS[e.name] || '#9aa7b1'} />
+                  <Cell key={e.name} fill={CH_COLORS[e.name] || '#a1a1a1'} />
                 ))}
               </Pie>
               <Tooltip formatter={(v: any) => php(v)} />
@@ -123,7 +123,7 @@ export default function Dashboard() {
           <div className="chip-row" style={{ justifyContent: 'center', marginTop: 8 }}>
             {model.channelData.map((e) => (
               <span key={e.name} className="fill-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: CH_COLORS[e.name] || '#9aa7b1', display: 'inline-block' }} />
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: CH_COLORS[e.name] || '#a1a1a1', display: 'inline-block' }} />
                 {e.name}
               </span>
             ))}

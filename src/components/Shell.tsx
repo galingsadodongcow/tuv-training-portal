@@ -1,5 +1,5 @@
 'use client'
-import { ReactNode, Suspense } from 'react'
+import { ReactNode, Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
@@ -11,13 +11,28 @@ export default function Shell({ children }: { children: ReactNode }) {
   const role = profile?.role as Role | undefined
   const pathname = usePathname()
   const items = NAV.filter((n) => role && n.roles.includes(role))
+  const [navOpen, setNavOpen] = useState(false)
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setNavOpen(false)
+  }, [pathname])
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <header className="topbar">
+        <button className="topbar-toggle" aria-label="Toggle navigation" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
+          ☰
+        </button>
+        <span className="brand-mark">Academy Portal</span>
+      </header>
+
+      {navOpen && <div className="sidebar-scrim" onClick={() => setNavOpen(false)} />}
+
+      <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
         <div className="brand">
-          <span className="brand-mark">TÜV</span>
-          <span className="brand-sub">Academy Portal</span>
+          <span className="brand-mark">Academy</span>
+          <span className="brand-sub">Portal</span>
         </div>
         {items.map((n) => {
           const active = pathname === n.path || pathname.startsWith(n.path + '/')
@@ -40,6 +55,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
+
       <main className="main">
         <Suspense fallback={<Spinner label="Loading" />}>{children}</Suspense>
       </main>

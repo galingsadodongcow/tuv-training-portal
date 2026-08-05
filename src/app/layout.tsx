@@ -4,8 +4,8 @@ import { Providers } from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'TÜV Rheinland Academy Portal',
-  description: 'Training operations portal for TÜV Rheinland Academy Philippines.',
+  title: 'Academy Portal',
+  description: 'Training operations admin portal.',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

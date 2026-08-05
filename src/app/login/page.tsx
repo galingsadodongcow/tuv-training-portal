@@ -29,7 +29,7 @@ export default function LoginPage() {
     <div className="login-wrap">
       <div className="card card-pad login-card">
         <div className="brand">
-          <span className="brand-mark">TÜV Rheinland</span>
+          <span className="brand-mark">Academy Portal</span>
         </div>
         <p className="muted" style={{ textAlign: 'center', marginTop: 0 }}>
           Academy Training Portal
