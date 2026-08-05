@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useOpenSchedules } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { dateRange, php } from '../lib/format'
+import { lt } from '../lib/labels'
 
 export default function SalesEntry() {
   const { session } = useAuth()
@@ -117,7 +118,7 @@ export default function SalesEntry() {
               <option value="">Select a session…</option>
               {schedules.data.map((s) => (
                 <option key={s.schedule_id} value={s.schedule_id}>
-                  {s.course?.course_name} · {dateRange(s.start_date, s.end_date)} · {s.modality} · {php(s.price)}
+                  {s.course?.course_name} · {dateRange(s.start_date, s.end_date)} · {lt(s.modality)} · {php(s.price)}
                 </option>
               ))}
             </select>

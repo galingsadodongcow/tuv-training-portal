@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useSessionNotes, useInvalidate } from '../hooks/data'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner } from './ui'
 import { dateRange, php, num } from '../lib/format'
+import { lt, formatSegments } from '../lib/labels'
 
 // Roles allowed to take each action
 const canForecast = (r) => ['business_owner', 'super_admin'].includes(r)
@@ -91,7 +92,7 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
           <div>
             <div style={{ fontWeight: 700, fontSize: 17 }}>{schedule.course?.course_name}</div>
             <div className="muted" style={{ fontSize: 13 }}>
-              {dateRange(schedule.start_date, schedule.end_date)} · {schedule.modality} · {schedule.course?.training_type}
+              {formatSegments(schedule.date_segments, schedule.start_date, schedule.end_date)} · {lt(schedule.modality)} · {schedule.course?.training_type}
             </div>
           </div>
           <button className="linkbtn" onClick={onClose}>Close</button>

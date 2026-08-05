@@ -47,7 +47,9 @@ function Routed() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/session/new" element={<Guard roles={['super_admin', 'operations']}><SessionForm /></Guard>} />
+        <Route path="/session/:id/edit" element={<Guard roles={['super_admin', 'operations']}><SessionForm /></Guard>} />
         <Route path="/course/new" element={<Guard roles={['super_admin', 'operations']}><CourseForm /></Guard>} />
+        <Route path="/course/:id/edit" element={<Guard roles={['super_admin', 'operations']}><CourseForm /></Guard>} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/worklist" element={<Guard roles={['super_admin', 'business_owner', 'sales']}><Worklist /></Guard>} />
         <Route path="/clients" element={<Clients />} />

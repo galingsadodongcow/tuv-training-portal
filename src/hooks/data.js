@@ -15,7 +15,7 @@ export function useSchedules(year = 2026) {
         supabase
           .from('schedule')
           .select(
-            'schedule_id, course_id, month, start_date, end_date, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, sales_owner, course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, sales_owner, course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
           )
           .order('start_date', { ascending: true })
       ).then((rows) => rows.filter((r) => r.calendar_year?.year === year)),

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useOrders } from '../hooks/data'
 import { Spinner, ErrorNote, StatusPill, ChannelPill } from '../components/ui'
 import { php, shortDate } from '../lib/format'
+import { lt } from '../lib/labels'
 
 export default function Orders() {
   const orders = useOrders()

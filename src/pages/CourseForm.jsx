@@ -1,12 +1,15 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCourses, useInvalidate } from '../hooks/data'
 import { Spinner } from '../components/ui'
+import { lt } from '../lib/labels'
 
 const MODS = ['Live Online Training', 'Face-to-face', 'E-learning']
 
 export default function CourseForm() {
+  const { id } = useParams()
+  const editing = !!id
   const courses = useCourses()
   const invalidate = useInvalidate()
   const nav = useNavigate()
@@ -14,6 +17,22 @@ export default function CourseForm() {
   const [mods, setMods] = useState({ 'Live Online Training': { on: true, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [loaded, setLoaded] = useState(!editing)
+
+  useEffect(() => {
+    if (!editing) return
+    Promise.all([
+      supabase.from('course').select('*').eq('course_id', id).single(),
+      supabase.from('course_fee').select('modality, fee_php').eq('course_id', id),
+    ]).then(([c, fe]) => {
+      if (c.error || !c.data) { setMsg(c.error?.message || 'Course not found'); return }
+      setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '' })
+      const next = { 'Live Online Training': { on: false, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } }
+      for (const row of fe.data || []) next[row.modality] = { on: true, price: String(row.fee_php) }
+      setMods(next)
+      setLoaded(true)
+    })
+  }, [editing, id])
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }))
 
   const cats = [...new Set((courses.data || []).map((c) => c.category).filter(Boolean))].sort()
@@ -25,13 +44,18 @@ export default function CourseForm() {
       const picked = MODS.filter((m) => mods[m].on)
       if (picked.length === 0) throw new Error('Pick at least one learning type.')
       for (const m of picked) if (mods[m].price === '' || Number(mods[m].price) < 0) throw new Error(`Set a price for ${m}.`)
-      const { data: course, error } = await supabase
-        .from('course')
-        .insert({ course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null })
-        .select('course_id')
-        .single()
-      if (error) throw error
-      const feeRows = picked.map((m) => ({ course_id: course.course_id, modality: m, fee_php: Number(mods[m].price) }))
+      const body = { course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null }
+      let courseId = id
+      if (editing) {
+        const { error } = await supabase.from('course').update(body).eq('course_id', id)
+        if (error) throw error
+        await supabase.from('course_fee').delete().eq('course_id', id)
+      } else {
+        const { data: course, error } = await supabase.from('course').insert(body).select('course_id').single()
+        if (error) throw error
+        courseId = course.course_id
+      }
+      const feeRows = picked.map((m) => ({ course_id: courseId, modality: m, fee_php: Number(mods[m].price) }))
       const { error: fErr } = await supabase.from('course_fee').insert(feeRows)
       if (fErr) throw fErr
       invalidate(['courses', 'course_fees'])
@@ -42,13 +66,13 @@ export default function CourseForm() {
     }
   }
 
-  if (courses.isLoading) return <Spinner label="Loading" />
+  if (courses.isLoading || !loaded) return <Spinner label="Loading" />
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>New course</h1>
+          <h1>{editing ? 'Edit course' : 'New course'}</h1>
           <p>A course holds many sessions and sells in one or more learning types, each with its own fee.</p>
         </div>
       </div>
@@ -63,7 +87,7 @@ export default function CourseForm() {
               <input list="cats" value={f.category} onChange={set('category')} placeholder="e.g. Occupational Health and Safety" />
               <datalist id="cats">{cats.map((c) => (<option key={c} value={c} />))}</datalist>
             </label>
-            <label className="field"><span>Training category</span>
+            <label className="field"><span>Training type</span>
               <select value={f.training_type} onChange={set('training_type')}>
                 <option>Professional</option>
                 <option>PersCert</option>
@@ -80,7 +104,7 @@ export default function CourseForm() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 200 }}>
                 <input type="checkbox" checked={mods[m].on} style={{ width: 'auto' }}
                   onChange={(e) => setMods((s) => ({ ...s, [m]: { ...s[m], on: e.target.checked } }))} />
-                {m}
+                {lt(m)}
               </label>
               <input type="number" min="0" placeholder="Fee" value={mods[m].price} disabled={!mods[m].on}
                 onChange={(e) => setMods((s) => ({ ...s, [m]: { ...s[m], price: e.target.value } }))} style={{ maxWidth: 140 }} />
@@ -89,7 +113,7 @@ export default function CourseForm() {
 
           {msg && <div className="notice notice-error" style={{ margin: '12px 0' }}>{msg}</div>}
           <div className="toolbar" style={{ marginTop: 10 }}>
-            <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Create course'}</button>
+            <button className="btn" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create course'}</button>
             <button type="button" className="btn btn-ghost" onClick={() => nav('/calendar')}>Cancel</button>
           </div>
         </form>
