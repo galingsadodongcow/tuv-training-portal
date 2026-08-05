@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCourses, useInvalidate } from '../hooks/data'
-import { Spinner } from '../components/ui'
+import { Spinner, ErrorNote } from '../components/ui'
 import { lt } from '../lib/labels'
 
 const MODS = ['Live Online Training', 'Face-to-face', 'E-learning']
@@ -18,6 +18,7 @@ export default function CourseForm() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [loaded, setLoaded] = useState(!editing)
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
     if (!editing) return
@@ -25,7 +26,8 @@ export default function CourseForm() {
       supabase.from('course').select('*').eq('course_id', id).single(),
       supabase.from('course_fee').select('modality, fee_php').eq('course_id', id),
     ]).then(([c, fe]) => {
-      if (c.error || !c.data) { setMsg(c.error?.message || 'Course not found'); return }
+      if (c.error || !c.data) { setLoadError(c.error?.message || 'Course not found'); setLoaded(true); return }
+      if (fe.error) { setLoadError(fe.error.message); setLoaded(true); return }
       setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '' })
       const next = { 'Live Online Training': { on: false, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } }
       for (const row of fe.data || []) next[row.modality] = { on: true, price: String(row.fee_php) }
@@ -43,21 +45,32 @@ export default function CourseForm() {
     try {
       const picked = MODS.filter((m) => mods[m].on)
       if (picked.length === 0) throw new Error('Pick at least one learning type.')
-      for (const m of picked) if (mods[m].price === '' || Number(mods[m].price) < 0) throw new Error(`Set a price for ${m}.`)
+      for (const m of picked) {
+        const p = Number(mods[m].price)
+        if (mods[m].price === '' || !Number.isFinite(p) || p < 0) throw new Error(`Set a valid price for ${m}.`)
+      }
       const body = { course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null }
       let courseId = id
       if (editing) {
         const { error } = await supabase.from('course').update(body).eq('course_id', id)
         if (error) throw error
-        await supabase.from('course_fee').delete().eq('course_id', id)
       } else {
         const { data: course, error } = await supabase.from('course').insert(body).select('course_id').single()
         if (error) throw error
         courseId = course.course_id
       }
+      // Upsert the selected fees first, then remove only the de-selected modalities.
+      // This avoids the previous delete-then-insert window that could leave a
+      // course with zero fees if the insert failed. (Needs a unique constraint
+      // on course_fee(course_id, modality).)
       const feeRows = picked.map((m) => ({ course_id: courseId, modality: m, fee_php: Number(mods[m].price) }))
-      const { error: fErr } = await supabase.from('course_fee').insert(feeRows)
-      if (fErr) throw fErr
+      const { error: upErr } = await supabase.from('course_fee').upsert(feeRows, { onConflict: 'course_id,modality' })
+      if (upErr) throw upErr
+      const removed = MODS.filter((m) => !mods[m].on)
+      if (removed.length) {
+        const { error: delErr } = await supabase.from('course_fee').delete().eq('course_id', courseId).in('modality', removed)
+        if (delErr) throw delErr
+      }
       invalidate(['courses', 'course_fees'])
       nav('/calendar')
     } catch (err) {
@@ -67,6 +80,7 @@ export default function CourseForm() {
   }
 
   if (courses.isLoading || !loaded) return <Spinner label="Loading" />
+  if (loadError) return <ErrorNote error={loadError} />
 
   return (
     <>

@@ -26,6 +26,7 @@ export default function Resources() {
 
   const addTrainer = async () => {
     if (!tForm.name.trim()) return
+    if (tForm.daily_rate !== '' && Number(tForm.daily_rate) < 0) { setMsg('Daily rate cannot be negative.'); return }
     setBusy(true); setMsg(null)
     const { error } = await supabase.from('trainer').insert({
       name: tForm.name.trim(),
@@ -41,6 +42,8 @@ export default function Resources() {
 
   const addVenue = async () => {
     if (!vForm.name.trim()) return
+    if (vForm.capacity !== '' && Number(vForm.capacity) < 0) { setMsg('Capacity cannot be negative.'); return }
+    if (vForm.day_rate !== '' && Number(vForm.day_rate) < 0) { setMsg('Day rate cannot be negative.'); return }
     setBusy(true); setMsg(null)
     const { error } = await supabase.from('venue').insert({
       name: vForm.name.trim(),
@@ -55,12 +58,16 @@ export default function Resources() {
   }
 
   const toggle = async (table, idField, id, active) => {
-    await supabase.from(table).update({ active: !active }).eq(idField, id)
-    invalidate([table === 'trainer' ? 'trainers' : 'venues', 'trainer_load'])
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.from(table).update({ active: !active }).eq(idField, id)
+    if (error) setMsg(error.message)
+    else invalidate([table === 'trainer' ? 'trainers' : 'venues', 'trainer_load'])
+    setBusy(false)
   }
 
   if (trainers.isLoading) return <Spinner label="Loading resources" />
   if (trainers.error) return <ErrorNote error={trainers.error} />
+  if (venues.error) return <ErrorNote error={venues.error} />
 
   const loadFor = (id) => load.data?.find((l) => l.trainer_id === id)
 
@@ -136,7 +143,7 @@ export default function Resources() {
                 <select value={tForm.trainer_type} onChange={(e) => setTForm({ ...tForm, trainer_type: e.target.value })}>
                   {T_TYPES.map((x) => (<option key={x}>{x}</option>))}
                 </select>
-                <input type="number" placeholder="Daily rate PHP" value={tForm.daily_rate} onChange={(e) => setTForm({ ...tForm, daily_rate: e.target.value })} />
+                <input type="number" min="0" placeholder="Daily rate PHP" value={tForm.daily_rate} onChange={(e) => setTForm({ ...tForm, daily_rate: e.target.value })} />
               </div>
               <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={addTrainer} disabled={busy}>Add trainer</button>
             </div>
@@ -179,8 +186,8 @@ export default function Resources() {
                   {V_TYPES.map((x) => (<option key={x}>{x}</option>))}
                 </select>
                 <input placeholder="City" value={vForm.city} onChange={(e) => setVForm({ ...vForm, city: e.target.value })} />
-                <input type="number" placeholder="Capacity" value={vForm.capacity} onChange={(e) => setVForm({ ...vForm, capacity: e.target.value })} />
-                <input type="number" placeholder="Day rate PHP" value={vForm.day_rate} onChange={(e) => setVForm({ ...vForm, day_rate: e.target.value })} />
+                <input type="number" min="0" placeholder="Capacity" value={vForm.capacity} onChange={(e) => setVForm({ ...vForm, capacity: e.target.value })} />
+                <input type="number" min="0" placeholder="Day rate PHP" value={vForm.day_rate} onChange={(e) => setVForm({ ...vForm, day_rate: e.target.value })} />
               </div>
               <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={addVenue} disabled={busy}>Add venue</button>
             </div>

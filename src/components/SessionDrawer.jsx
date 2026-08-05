@@ -41,7 +41,7 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
     setBusy('note')
     const { error } = await supabase.from('session_note').insert({
       schedule_id: schedule.schedule_id,
-      author: profile.user_id,
+      author: profile?.user_id,
       note: noteText.trim(),
     })
     if (error) setMsg({ ok: false, t: error.message })
@@ -74,7 +74,7 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
     const { error } = await supabase.from('approval').insert({
       object_type: 'Schedule cancellation',
       schedule_id: schedule.schedule_id,
-      requested_by: profile.user_id,
+      requested_by: profile?.user_id,
       note: `Proposed from calendar. Booked ${schedule.booked_participants} of ${schedule.min_participants} min.`,
     })
     if (error) setMsg({ ok: false, t: error.message })
@@ -259,7 +259,7 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
                   <div key={n.note_id} className="note">
                     <div className="note-meta">
                       <strong>{n.profile?.full_name || 'User'}</strong>
-                      <span className="muted"> · {n.profile?.role} · {new Date(n.date).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="muted"> · {n.profile?.role}{n.date ? ` · ${new Date(n.date).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}</span>
                     </div>
                     <div>{n.note}</div>
                   </div>

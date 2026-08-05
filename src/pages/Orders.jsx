@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useOrders } from '../hooks/data'
 import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
@@ -31,7 +31,7 @@ export default function Orders() {
         (stage === 'all' || o.fulfillment_stage === stage) &&
         (pay === 'all' || o.payment_status === pay) &&
         (!t ||
-          o.order_id.toLowerCase().includes(t) ||
+          o.order_id?.toLowerCase().includes(t) ||
           o.client?.company?.toLowerCase().includes(t) ||
           o.client?.name?.toLowerCase().includes(t) ||
           o.sap_order_no?.toLowerCase().includes(t) ||
@@ -75,8 +75,8 @@ export default function Orders() {
           </thead>
           <tbody>
             {rows.slice(0, 300).map((o) => (
-              <>
-                <tr key={o.order_id} className="clickable" onClick={() => setOpen(o)}>
+              <Fragment key={o.order_id}>
+                <tr className="clickable" onClick={() => setOpen(o)}>
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {o.order_id}
                     <div className="fill-label">{shortDate(o.order_date)}</div>
@@ -115,7 +115,7 @@ export default function Orders() {
                       <td></td>
                     </tr>
                   ))}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

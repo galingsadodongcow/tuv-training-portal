@@ -139,13 +139,18 @@ export default function SalesEntry() {
         throw lErr
       }
 
-      // self-assign
+      // self-assign (non-fatal: the order is already valid without it)
+      let assignWarning = null
       if (profile.sales_id) {
-        await supabase.from('order_assignment').insert({ order_id: head.order_id.trim(), sales_id: profile.sales_id })
+        const { error: aErr } = await supabase.from('order_assignment')
+          .upsert({ order_id: head.order_id.trim(), sales_id: profile.sales_id }, { onConflict: 'order_id' })
+        if (aErr) assignWarning = 'Order saved, but it could not be auto-assigned to you. Assign it from the fulfillment screen.'
       }
 
       invalidate(['orders', 'schedules', 'channel_pax', 'fulfillment_queue', 'clients'])
-      setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: totalSeats, total })
+      const goodSeats = good.reduce((n, l) => n + (Number(l.seats) || 0), 0)
+      const goodTotal = payload.reduce((n, p) => n + (Number(p.amount_php) || 0), 0)
+      setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: goodSeats, total: goodTotal, warning: assignWarning })
     } catch (err) {
       setMsg(err.message)
     }
@@ -164,6 +169,7 @@ export default function SalesEntry() {
             Order {result.order_id} saved with {result.lines} line{result.lines > 1 ? 's' : ''},
             {' '}{result.seats} seat{result.seats > 1 ? 's' : ''}, {php(result.total)}. It is assigned to you and sits at stage New.
           </div>
+          {result.warning && <div className="notice notice-error">{result.warning}</div>}
           <div className="toolbar">
             <button className="btn" onClick={() => { setResult(null); setLines([blankLine()]); setHead({ ...head, order_id: '' }); setClient({ mode: 'new', client_id: '', name: '', company: '', email: '', phone: '' }) }}>
               New order

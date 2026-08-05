@@ -73,7 +73,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={qc}>
       <AuthProvider>
         <BrowserRouter>
-          <Routed />
+          <Suspense fallback={<Spinner label="Loading" />}>
+            <Routed />
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

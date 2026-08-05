@@ -75,6 +75,8 @@ export default function Clients() {
           {filtered.length === 0 && <div className="empty">No clients match.</div>}
           {filtered.length > 300 && <div className="empty muted">Showing first 300 of {filtered.length}.</div>}
         </div>
+      ) : attribution.error ? (
+        <ErrorNote error={attribution.error} />
       ) : (
         <>
           <div className="grid kpis" style={{ marginBottom: 18 }}>
@@ -135,7 +137,9 @@ function ClientHistory({ client, onClose }) {
             <div><div className="k-label">Seats</div><div className="k-value" style={{ fontSize: 22 }}>{seats}</div></div>
             <div><div className="k-label">Lifetime value</div><div className="k-value" style={{ fontSize: 22 }}>{php(spend)}</div></div>
           </div>
-          {hist.isLoading ? <div className="empty">Loading…</div> : hist.data?.length === 0 ? (
+          {hist.isLoading ? <div className="empty">Loading…</div> : hist.error ? (
+            <ErrorNote error={hist.error} />
+          ) : hist.data?.length === 0 ? (
             <div className="empty">No orders on record.</div>
           ) : (
             <table>
