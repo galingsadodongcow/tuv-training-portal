@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
@@ -9,6 +9,8 @@ import { LEARNING_TYPES, lt, segmentsDays } from '../lib/labels'
 
 export default function SessionForm() {
   const { id } = useParams()
+  const [sp] = useSearchParams()
+  const cloneId = sp.get('clone')
   const editing = !!id
   const courses = useCourses()
   const fees = useCourseFees()
@@ -24,10 +26,23 @@ export default function SessionForm() {
   const [segments, setSegments] = useState([{ start: '', end: '' }])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [loaded, setLoaded] = useState(!editing)
+  const [loaded, setLoaded] = useState(!editing && !cloneId)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
   useEffect(() => {
+    if (cloneId && !editing) {
+      supabase.from('schedule').select('*').eq('schedule_id', cloneId).single().then(({ data }) => {
+        if (data) {
+          setF({
+            course_id: data.course_id, modality: data.modality,
+            min_participants: data.min_participants, sales_owner: data.sales_owner || '',
+            private_run: data.private_run, status: 'Tentative', price: data.price ?? '',
+          })
+        }
+        setLoaded(true)
+      })
+      return
+    }
     if (!editing) return
     supabase.from('schedule').select('*').eq('schedule_id', id).single().then(({ data, error }) => {
       if (error || !data) { setMsg(error?.message || 'Session not found'); return }
@@ -39,7 +54,7 @@ export default function SessionForm() {
       setSegments(data.date_segments?.length ? data.date_segments : [{ start: data.start_date, end: data.end_date }])
       setLoaded(true)
     })
-  }, [editing, id])
+  }, [editing, id, cloneId])
 
   const feeForPick = useMemo(() => {
     if (!fees.data || !f.course_id) return null
@@ -90,8 +105,8 @@ export default function SessionForm() {
     <>
       <div className="page-head">
         <div>
-          <h1>{editing ? 'Edit session' : 'New session'}</h1>
-          <p>{editing ? 'Change any detail, including staggered dates.' : 'Schedules a course run. Fee defaults from the course catalog for the chosen learning type.'}</p>
+          <h1>{editing ? 'Edit session' : cloneId ? 'Clone session' : 'New session'}</h1>
+          <p>{editing ? 'Change any detail, including staggered dates.' : cloneId ? 'Everything copied except the dates. Set the new dates and save.' : 'Schedules a course run. Fee defaults from the course catalog for the chosen learning type.'}</p>
         </div>
       </div>
 

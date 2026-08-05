@@ -163,3 +163,24 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--tr-blue); o
 .note-meta { font-size: 12px; margin-bottom: 3px; }
 .clickable { cursor: pointer; }
 .clickable:hover td:first-child { color: var(--tr-blue); }
+
+/* Calendar risk accents */
+.cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--tr-red); }
+.cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--tr-amber); }
+
+/* Calendar mobile cards */
+@media (max-width: 720px) {
+  .cal-card { overflow: visible; }
+  .cal-table thead { display: none; }
+  .cal-table, .cal-table tbody { display: block; }
+  .cal-table tr { display: block; padding: 10px 4px; border-bottom: 1px solid var(--tr-line); }
+  .cal-table tr.risk-red { box-shadow: inset 3px 0 0 var(--tr-red); }
+  .cal-table tr.risk-amber { box-shadow: inset 3px 0 0 var(--tr-amber); }
+  .cal-table tr.risk-red td:first-child, .cal-table tr.risk-amber td:first-child { box-shadow: none; }
+  .cal-table td { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: none; padding: 3px 10px; }
+  .cal-table td.hide-m { display: none; }
+  .cal-table td::before { content: attr(data-label); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tr-slate); flex-shrink: 0; }
+  .cal-table td[data-label=""]::before { display: none; }
+  .cal-table td[data-label=""] { display: block; }
+  .cal-table td.right { justify-content: space-between; text-align: left; }
+}

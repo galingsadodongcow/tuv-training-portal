@@ -57,6 +57,9 @@ export function FillBar({ booked, min }) {
       </div>
       <div className="fill-label">
         {booked} / {target || '—'} pax
+        {target > 0 && booked < target && (
+          <span style={{ color: 'var(--tr-amber)', fontWeight: 600 }}> · {target - booked} to Go</span>
+        )}
       </div>
     </div>
   )

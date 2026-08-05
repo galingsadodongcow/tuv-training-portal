@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useSessionNotes, useInvalidate } from '../hooks/data'
@@ -11,6 +12,7 @@ const canForecast = (r) => ['business_owner', 'super_admin'].includes(r)
 const canOps = (r) => ['operations', 'super_admin'].includes(r)
 
 export default function SessionDrawer({ schedule, channelPax, onClose }) {
+  const nav = useNavigate()
   const { profile } = useAuth()
   const role = profile?.role
   const notes = useSessionNotes(schedule?.schedule_id)
@@ -153,6 +155,9 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
                 ))}
                 <button className="btn btn-danger btn-sm" disabled={busy === 'cancel'} onClick={proposeCancel}>
                   Propose cancellation
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => nav(`/session/new?clone=${schedule.schedule_id}`)}>
+                  Clone
                 </button>
               </div>
               <div className="fill-label" style={{ marginTop: 6 }}>

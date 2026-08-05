@@ -1,36 +1,61 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import { useSchedules, useChannelPax, useYears } from '../hooks/data'
 import { useAuth } from '../hooks/useAuth'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
 import SessionDrawer from '../components/SessionDrawer'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments } from '../lib/labels'
-import { Link } from 'react-router-dom'
 
-const CURRENT_MONTH = new Date().toLocaleDateString('en-PH', { month: 'long' })
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const CURRENT_MONTH = MONTHS[new Date().getMonth()]
+
+function riskClass(r) {
+  if (!['Tentative', 'Confirmed'].includes(r.status)) return ''
+  if (r.min_participants <= 0 || r.booked_participants >= r.min_participants) return ''
+  const d = daysUntil(r.start_date)
+  if (d == null || d < 0) return ''
+  return d <= 14 ? 'risk-red' : 'risk-amber'
+}
+
+function CopyLink({ url }) {
+  const [ok, setOk] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setOk(true)
+      setTimeout(() => setOk(false), 1500)
+    } catch { /* clipboard unavailable */ }
+  }
+  return (
+    <button className="linkbtn" style={{ padding: 0 }} title="Copy webshop link" onClick={copy}>
+      {ok ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
 
 function SessionRows({ rows, pax, onOpen, canEdit }) {
   return rows.map((r) => {
     const ch = pax?.[r.schedule_id] || {}
     const d = daysUntil(r.start_date)
     return (
-      <tr key={r.schedule_id} className="clickable" onClick={() => onOpen(r)}>
-        <td>
+      <tr key={r.schedule_id} className={`clickable ${riskClass(r)}`} onClick={() => onOpen(r)}>
+        <td data-label="">
           <div style={{ fontWeight: 600 }}>{r.course?.course_name}</div>
           <div className="fill-label">{r.course?.category || '—'}</div>
         </td>
-        <td>
+        <td data-label="Training type">
           <span className={`pill ${r.course?.training_type === 'PersCert' ? 'pill-inside' : 'pill-webshop'}`}>
             {r.course?.training_type}
           </span>
         </td>
-        <td>
+        <td data-label="Dates">
           {formatSegments(r.date_segments, r.start_date, r.end_date)}
-          {d != null && d >= 0 && <div className="fill-label">in {d}d</div>}
+          {d != null && d >= 0 && <span className="fill-label"> · in {d}d</span>}
         </td>
-        <td>{lt(r.modality)}</td>
-        <td style={{ minWidth: 120 }}><FillBar booked={r.booked_participants} min={r.min_participants} /></td>
-        <td>
+        <td data-label="Learning type" className="hide-m">{lt(r.modality)}</td>
+        <td data-label="Fill" style={{ minWidth: 120 }}><FillBar booked={r.booked_participants} min={r.min_participants} /></td>
+        <td data-label="Channels" className="hide-m">
           <div className="chip-row">
             {Object.entries(ch).length === 0 && <span className="muted fill-label">—</span>}
             {Object.entries(ch).map(([c, n]) => (
@@ -40,13 +65,16 @@ function SessionRows({ rows, pax, onOpen, canEdit }) {
             ))}
           </div>
         </td>
-        <td><StatusPill value={r.status} /></td>
-        <td><GoPill value={r.go_status} /></td>
-        <td className="right">{php(r.price)}</td>
-        <td className="right" onClick={(e) => e.stopPropagation()}>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <td data-label="Status"><StatusPill value={r.status} /></td>
+        <td data-label="Go" className="hide-m"><GoPill value={r.go_status} /></td>
+        <td data-label="Fee" className="right hide-m">{php(r.price)}</td>
+        <td data-label="Links" className="right" onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {r.course?.url ? (
-              <a href={r.course.url} target="_blank" rel="noreferrer">View ↗</a>
+              <>
+                <a href={r.course.url} target="_blank" rel="noreferrer">View ↗</a>
+                <CopyLink url={r.course.url} />
+              </>
             ) : (<span className="muted">—</span>)}
             {canEdit && <Link to={`/session/${r.schedule_id}/edit`}>Edit</Link>}
             {canEdit && <Link to={`/course/${r.course_id}/edit`} className="muted">Course</Link>}
@@ -59,18 +87,30 @@ function SessionRows({ rows, pax, onOpen, canEdit }) {
 
 export default function Calendar() {
   const years = useYears()
-  const [year, setYear] = useState(2026)
+  const [params, setParams] = useSearchParams()
+  const get = (k, fb) => params.get(k) || fb
+  const year = Number(get('year', '2026'))
+  const month = get('month', CURRENT_MONTH)
+  const status = get('status', 'all')
+  const category = get('category', 'all')
+  const ltype = get('lt', 'all')
+  const q = get('q', '')
+  const sortKey = get('sort', 'date')
+  const sortDir = get('dir', 'asc')
+
+  const setParam = (k, v) => {
+    const next = new URLSearchParams(params)
+    if (v === 'all' || v === '' || v == null) next.delete(k)
+    else next.set(k, v)
+    setParams(next, { replace: true })
+  }
+
   const sched = useSchedules(year)
   const pax = useChannelPax()
   const { profile } = useAuth()
-  const [month, setMonth] = useState(CURRENT_MONTH)
-  const [status, setStatus] = useState('all')
-  const [category, setCategory] = useState('all')
-  const [ltype, setLtype] = useState('all')
   const [open, setOpen] = useState(null)
   const canEdit = ['operations', 'super_admin'].includes(profile?.role)
 
-  const months = useMemo(() => [...new Set((sched.data || []).map((r) => r.month))].filter(Boolean), [sched.data])
   const categories = useMemo(
     () => [...new Set((sched.data || []).map((r) => r.course?.category).filter(Boolean))].sort(),
     [sched.data]
@@ -78,14 +118,28 @@ export default function Calendar() {
 
   const rows = useMemo(() => {
     if (!sched.data) return []
-    return sched.data.filter(
+    const term = q.trim().toLowerCase()
+    let out = sched.data.filter(
       (r) =>
         (month === 'all' || r.month === month) &&
         (status === 'all' || r.status === status) &&
         (category === 'all' || r.course?.category === category) &&
-        (ltype === 'all' || r.modality === ltype)
+        (ltype === 'all' || r.modality === ltype) &&
+        (!term || r.course?.course_name?.toLowerCase().includes(term))
     )
-  }, [sched.data, month, status, category, ltype])
+    const val = (r) =>
+      sortKey === 'fill'
+        ? (r.min_participants > 0 ? r.booked_participants / r.min_participants : 99)
+        : sortKey === 'fee'
+        ? (r.price ?? 0)
+        : r.start_date
+    out.sort((a, b) => {
+      const x = val(a), y = val(b)
+      const c = x < y ? -1 : x > y ? 1 : 0
+      return sortDir === 'asc' ? c : -c
+    })
+    return out
+  }, [sched.data, month, status, category, ltype, q, sortKey, sortDir])
 
   const perscert = rows.filter((r) => r.course?.training_type === 'PersCert')
   const professional = rows.filter((r) => r.course?.training_type !== 'PersCert')
@@ -93,11 +147,32 @@ export default function Calendar() {
   if (sched.isLoading || years.isLoading) return <Spinner label="Loading calendar" />
   if (sched.error) return <ErrorNote error={sched.error} />
 
+  const stepMonth = (dir) => {
+    if (month === 'all') { setParam('month', CURRENT_MONTH); return }
+    const i = MONTHS.indexOf(month)
+    setParam('month', MONTHS[(i + dir + 12) % 12])
+  }
+
+  const sortBtn = (key, label, align) => (
+    <th className={align} style={{ cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => {
+        if (sortKey === key) setParam('dir', sortDir === 'asc' ? 'desc' : 'asc')
+        else { setParam('sort', key); setParam('dir', 'asc') }
+      }}>
+      {label}{sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
+
   const head = (
     <thead>
       <tr>
-        <th>Course</th><th>Training type</th><th>Dates</th><th>Learning type</th><th>Fill</th>
-        <th>Channels</th><th>Status</th><th>Go</th><th className="right">Fee</th><th className="right">Links</th>
+        <th>Course</th><th>Training type</th>
+        {sortBtn('date', 'Dates')}
+        <th className="hide-m">Learning type</th>
+        {sortBtn('fill', 'Fill')}
+        <th className="hide-m">Channels</th><th>Status</th><th className="hide-m">Go</th>
+        {sortBtn('fee', 'Fee', 'right hide-m')}
+        <th className="right">Links</th>
       </tr>
     </thead>
   )
@@ -107,7 +182,7 @@ export default function Calendar() {
       <div className="page-head">
         <div>
           <h1>Training calendar</h1>
-          <p>{month === 'all' ? `All ${year} sessions` : `${month} ${year}`}, PersCert first then Professional Training, in date order. Click a row to open it.</p>
+          <p>{month === 'all' ? `All ${year} sessions` : `${month} ${year}`}, PersCert first then Professional Training. Click a row to open it.</p>
         </div>
         {canEdit && (
           <div className="toolbar">
@@ -118,23 +193,28 @@ export default function Calendar() {
       </div>
 
       <div className="filters">
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+        <div className="toolbar" style={{ gap: 4 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(-1)} title="Previous month">‹</button>
+          <select value={month} onChange={(e) => setParam('month', e.target.value)}>
+            <option value="all">All months</option>
+            {MONTHS.map((m) => (<option key={m}>{m}</option>))}
+          </select>
+          <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(1)} title="Next month">›</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setParam('month', CURRENT_MONTH)}>Today</button>
+        </div>
+        <input placeholder="Search course…" value={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 180 }} />
+        <select value={year} onChange={(e) => setParam('year', e.target.value)}>
           {(years.data || []).map((y) => (<option key={y.year_id} value={y.year}>{y.year}</option>))}
         </select>
-        <select value={month} onChange={(e) => setMonth(e.target.value)}>
-          <option value="all">All months</option>
-          {months.map((m) => (<option key={m}>{m}</option>))}
-          {!months.includes(month) && month !== 'all' && <option>{month}</option>}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select value={status} onChange={(e) => setParam('status', e.target.value)}>
           <option value="all">All statuses</option>
           {['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => (<option key={s}>{s}</option>))}
         </select>
-        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+        <select value={category} onChange={(e) => setParam('category', e.target.value)}>
           <option value="all">All categories</option>
           {categories.map((c) => (<option key={c}>{c}</option>))}
         </select>
-        <select value={ltype} onChange={(e) => setLtype(e.target.value)}>
+        <select value={ltype} onChange={(e) => setParam('lt', e.target.value)}>
           <option value="all">All learning types</option>
           <option value="Live Online Training">Virtual Learning</option>
           <option value="Face-to-face">Classroom Training</option>
@@ -144,25 +224,25 @@ export default function Calendar() {
 
       {perscert.length > 0 && (
         <>
-          <h3 style={{ margin: '4px 0 8px' }}>PersCert</h3>
-          <div className="card" style={{ marginBottom: 20 }}>
-            <table>{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setOpen} canEdit={canEdit} /></tbody></table>
+          <h3 style={{ margin: '4px 0 8px' }}>PersCert ({perscert.length})</h3>
+          <div className="card cal-card" style={{ marginBottom: 20 }}>
+            <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setOpen} canEdit={canEdit} /></tbody></table>
           </div>
         </>
       )}
 
       {professional.length > 0 && (
         <>
-          <h3 style={{ margin: '4px 0 8px' }}>Professional Training</h3>
-          <div className="card">
-            <table>{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setOpen} canEdit={canEdit} /></tbody></table>
+          <h3 style={{ margin: '4px 0 8px' }}>Professional Training ({professional.length})</h3>
+          <div className="card cal-card">
+            <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setOpen} canEdit={canEdit} /></tbody></table>
           </div>
         </>
       )}
 
       {rows.length === 0 && (
         <div className="card"><div className="empty">
-          No sessions match. {month !== 'all' && 'Try All months or another month.'}
+          No sessions match. {month !== 'all' && 'Try All months, the arrows, or clear the search.'}
         </div></div>
       )}
 
