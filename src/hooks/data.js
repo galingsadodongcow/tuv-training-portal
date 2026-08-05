@@ -15,7 +15,7 @@ export function useSchedules(year = 2026) {
         supabase
           .from('schedule')
           .select(
-            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
           )
           .order('start_date', { ascending: true })
       ).then((rows) => rows.filter((r) => r.calendar_year?.year === year)),
@@ -275,4 +275,62 @@ export function useApprovedCancellation(scheduleId) {
           .eq('decision', 'Approved')
       ),
   })
+}
+
+// ---- Phase 3: trainers, venues, conflicts ----
+export function useTrainers(activeOnly = true) {
+  return useQuery({
+    queryKey: ['trainers', activeOnly],
+    queryFn: () => {
+      let q = supabase.from('trainer').select('*').order('name')
+      if (activeOnly) q = q.eq('active', true)
+      return sel(q)
+    },
+  })
+}
+
+export function useVenues(activeOnly = true) {
+  return useQuery({
+    queryKey: ['venues', activeOnly],
+    queryFn: () => {
+      let q = supabase.from('venue').select('*').order('name')
+      if (activeOnly) q = q.eq('active', true)
+      return sel(q)
+    },
+  })
+}
+
+export function useTrainerLoad() {
+  return useQuery({
+    queryKey: ['trainer_load'],
+    queryFn: () => sel(supabase.from('v_trainer_load').select('*').order('training_days', { ascending: false })),
+  })
+}
+
+export function useUnstaffed() {
+  return useQuery({
+    queryKey: ['unstaffed'],
+    queryFn: () => sel(supabase.from('v_unstaffed_sessions').select('*').order('days_out')),
+  })
+}
+
+export function useVenueCalendar() {
+  return useQuery({
+    queryKey: ['venue_calendar'],
+    queryFn: () => sel(supabase.from('v_venue_calendar').select('*').order('start_date')),
+  })
+}
+
+// live conflict preview before saving a session
+export async function checkConflicts({ scheduleId, trainerId, venueId, start, end, segments }) {
+  const { data, error } = await supabase.rpc('fn_find_conflicts', {
+    p_schedule: scheduleId || null,
+    p_trainer: trainerId || null,
+    p_venue: venueId || null,
+    p_start: start,
+    p_end: end,
+    p_segments: segments && segments.length ? segments : null,
+  })
+  if (error) throw error
+  return data
 }

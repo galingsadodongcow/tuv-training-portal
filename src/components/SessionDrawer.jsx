@@ -138,6 +138,21 @@ export default function SessionDrawer({ schedule, channelPax, onClose }) {
             </div>
           </div>
 
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
+            <div>
+              <div className="k-label">Trainer</div>
+              <div style={{ fontWeight: 600 }}>
+                {schedule.trainer?.name || <span className="muted" style={{ fontWeight: 400 }}>Not assigned</span>}
+              </div>
+            </div>
+            <div>
+              <div className="k-label">Venue</div>
+              <div style={{ fontWeight: 600 }}>
+                {schedule.venue?.name || <span className="muted" style={{ fontWeight: 400 }}>Not assigned</span>}
+              </div>
+            </div>
+          </div>
+
           <div className="k-label" style={{ marginBottom: 6 }}>Pax by channel</div>
           <div className="chip-row" style={{ marginBottom: 18 }}>
             {Object.entries(ch).length === 0 && <span className="muted fill-label">No orders yet</span>}

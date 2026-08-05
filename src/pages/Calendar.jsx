@@ -53,7 +53,12 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell }) {
           {formatSegments(r.date_segments, r.start_date, r.end_date)}
           {d != null && d >= 0 && <span className="fill-label"> · in {d}d</span>}
         </td>
-        <td data-label="Learning type" className="hide-m">{lt(r.modality)}</td>
+        <td data-label="Learning type" className="hide-m">
+          {lt(r.modality)}
+          {!r.trainer && ['Tentative', 'Confirmed'].includes(r.status) && d != null && d >= 0 && (
+            <div className="fill-label" style={{ color: d <= 21 ? 'var(--tr-amber)' : 'inherit' }}>No trainer</div>
+          )}
+        </td>
         <td data-label="Fill" style={{ minWidth: 120 }}><FillBar booked={r.booked_participants} min={r.min_participants} /></td>
         <td data-label="Channels" className="hide-m">
           <div className="chip-row">

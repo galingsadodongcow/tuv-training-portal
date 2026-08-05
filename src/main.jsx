@@ -15,6 +15,7 @@ import Elearning from './pages/Elearning'
 import Rollover from './pages/Rollover'
 import SessionForm from './pages/SessionForm'
 import CourseForm from './pages/CourseForm'
+import Resources from './pages/Resources'
 import Worklist from './pages/Worklist'
 import Clients from './pages/Clients'
 import { Spinner } from './components/ui'
@@ -53,6 +54,7 @@ function Routed() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/worklist" element={<Guard roles={['super_admin', 'business_owner', 'sales']}><Worklist /></Guard>} />
         <Route path="/clients" element={<Clients />} />
+        <Route path="/resources" element={<Guard roles={['super_admin', 'operations', 'business_owner']}><Resources /></Guard>} />
         <Route path="/sales-entry" element={<Guard roles={['super_admin', 'sales']}><SalesEntry /></Guard>} />
         <Route path="/duplicates" element={<Guard roles={['super_admin', 'sales']}><Duplicates /></Guard>} />
         <Route path="/approvals" element={<Guard roles={['super_admin', 'operations', 'business_owner']}><Approvals /></Guard>} />

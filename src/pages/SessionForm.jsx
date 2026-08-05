@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate } from '../hooks/data'
+import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate, useTrainers, useVenues, checkConflicts } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import DateSegments from '../components/DateSegments'
 import { php } from '../lib/format'
@@ -16,16 +16,20 @@ export default function SessionForm() {
   const fees = useCourseFees()
   const years = useActiveYear()
   const people = useSalespeople()
+  const trainers = useTrainers()
+  const venues = useVenues()
   const invalidate = useInvalidate()
   const nav = useNavigate()
 
   const [f, setF] = useState({
     course_id: '', modality: 'Live Online Training',
-    min_participants: 1, max_participants: '', sales_owner: '', private_run: false, status: 'Tentative', price: '',
+    min_participants: 1, max_participants: '', sales_owner: '', private_run: false, status: 'Tentative', price: '', trainer_id: '', venue_id: '',
   })
   const [segments, setSegments] = useState([{ start: '', end: '' }])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [conflicts, setConflicts] = useState([])
+  const [checking, setChecking] = useState(false)
   const [loaded, setLoaded] = useState(!editing && !cloneId)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
@@ -36,7 +40,7 @@ export default function SessionForm() {
           setF({
             course_id: data.course_id, modality: data.modality,
             min_participants: data.min_participants, max_participants: data.max_participants ?? '', sales_owner: data.sales_owner || '',
-            private_run: data.private_run, status: 'Tentative', price: data.price ?? '',
+            private_run: data.private_run, status: 'Tentative', price: data.price ?? '', trainer_id: data.trainer_id || '', venue_id: data.venue_id || '',
           })
         }
         setLoaded(true)
@@ -49,12 +53,32 @@ export default function SessionForm() {
       setF({
         course_id: data.course_id, modality: data.modality,
         min_participants: data.min_participants, max_participants: data.max_participants ?? '', sales_owner: data.sales_owner || '',
-        private_run: data.private_run, status: data.status, price: data.price ?? '',
+        private_run: data.private_run, status: data.status, price: data.price ?? '', trainer_id: data.trainer_id || '', venue_id: data.venue_id || '',
       })
       setSegments(data.date_segments?.length ? data.date_segments : [{ start: data.start_date, end: data.end_date }])
       setLoaded(true)
     })
   }, [editing, id, cloneId])
+
+  useEffect(() => {
+    const segs = segments.filter((s) => s.start).map((s) => ({ start: s.start, end: s.end || s.start }))
+    if (segs.length === 0 || (!f.trainer_id && !f.venue_id)) { setConflicts([]); return }
+    const sorted = [...segs].sort((a, b) => a.start.localeCompare(b.start))
+    let cancelled = false
+    setChecking(true)
+    checkConflicts({
+      scheduleId: id || null,
+      trainerId: f.trainer_id || null,
+      venueId: f.venue_id || null,
+      start: sorted[0].start,
+      end: sorted[sorted.length - 1].end,
+      segments: sorted,
+    })
+      .then((rows) => { if (!cancelled) setConflicts(rows || []) })
+      .catch(() => { if (!cancelled) setConflicts([]) })
+      .finally(() => { if (!cancelled) setChecking(false) })
+    return () => { cancelled = true }
+  }, [f.trainer_id, f.venue_id, segments, id])
 
   const feeForPick = useMemo(() => {
     if (!fees.data || !f.course_id) return null
@@ -79,6 +103,8 @@ export default function SessionForm() {
         private_run: f.private_run, min_participants: Number(f.min_participants),
         status: f.status, sales_owner: f.sales_owner || null,
         max_participants: f.max_participants === '' ? null : Number(f.max_participants),
+        trainer_id: f.trainer_id || null,
+        venue_id: f.venue_id || null,
         duration_days: segmentsDays(sorted),
         price: f.price === '' ? null : Number(f.price),
       }
@@ -151,6 +177,22 @@ export default function SessionForm() {
                 {people.data?.map((p) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
               </select>
             </label>
+            <label className="field"><span>Trainer</span>
+              <select value={f.trainer_id} onChange={set('trainer_id')}>
+                <option value="">Not assigned yet</option>
+                {trainers.data?.map((t) => (<option key={t.trainer_id} value={t.trainer_id}>{t.name} ({t.trainer_type})</option>))}
+              </select>
+            </label>
+            <label className="field"><span>Venue</span>
+              <select value={f.venue_id} onChange={set('venue_id')}>
+                <option value="">Not assigned yet</option>
+                {venues.data?.map((v) => (
+                  <option key={v.venue_id} value={v.venue_id}>
+                    {v.name}{v.capacity ? ` (holds ${v.capacity})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="field"><span>Status</span>
               <select value={f.status} onChange={set('status')}>
                 {['Tentative', 'Confirmed', 'Running', 'Completed'].map((s) => (<option key={s}>{s}</option>))}
@@ -162,9 +204,22 @@ export default function SessionForm() {
             </label>
           </div>
 
+          {checking && <div className="fill-label" style={{ marginBottom: 8 }}>Checking availability…</div>}
+          {conflicts.length > 0 && (
+            <div className="notice notice-error" style={{ marginBottom: 12 }}>
+              <strong>Double booking</strong>
+              <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                {[...new Map(conflicts.map((c) => [`${c.conflict_type}-${c.course_name}`, c])).values()].map((c, i) => (
+                  <li key={i}>
+                    {c.conflict_type} is already on "{c.course_name}" on {new Date(c.clash_day).toLocaleDateString('en-PH', { day: 'numeric', month: 'short' })}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
           <div className="toolbar">
-            <button className="btn" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create session'}</button>
+            <button className="btn" disabled={busy || conflicts.length > 0}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create session'}</button>
             <button type="button" className="btn btn-ghost" onClick={() => nav('/calendar')}>Cancel</button>
           </div>
         </form>
