@@ -208,7 +208,7 @@ export function useSessionOrders(scheduleId?: string) {
           .from('order_line')
           .select('line_id, seats, amount_php, line_status, order:order_id(order_id, order_date, channel, payment_status, order_status, client:client_id(name, company, email))')
           .eq('schedule_id', scheduleId)
-          .order('order_date', { ascending: false })
+          .order('created_at', { ascending: false })
       ),
   })
 }
