@@ -207,7 +207,7 @@ begin
         v_asg := (array[v_sa, v_sb, v_sc])[(j % 3) + 1];
         if v_asg is not null then
           insert into order_assignment(order_id, sales_id, collection_status)
-            values (oid, v_asg, (array['Collected','Partial','Pending'])[(j % 3) + 1]);
+            values (oid, v_asg, (array['Collected','Partial','Pending'])[(j % 3) + 1]::collection_t);
         end if;
       end if;
       if v_status = 'Completed' then
