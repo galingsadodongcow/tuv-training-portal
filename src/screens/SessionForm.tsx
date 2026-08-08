@@ -8,6 +8,7 @@ import DateSegments from '../components/DateSegments'
 import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
 import { LEARNING_TYPES, lt, segmentsDays } from '../lib/labels'
+import { MIN_PAX, maxPaxFor, isIrcaCourse } from '../lib/pax'
 
 export default function SessionForm() {
   const params = useParams()
@@ -89,6 +90,16 @@ export default function SessionForm() {
     return fees.data.find((x: any) => x.course_id === f.course_id && x.modality === f.modality)?.fee_php ?? null
   }, [fees.data, f.course_id, f.modality])
 
+  // Pax is set by policy, not by hand: minimum 8 for every course, maximum 20
+  // for professional and 10 for IRCA (by course name). The database enforces
+  // the same rule, so these fields are shown locked.
+  const selectedCourse = useMemo(
+    () => (courses.data || []).find((c: any) => c.course_id === f.course_id) || null,
+    [courses.data, f.course_id]
+  )
+  const maxPax = maxPaxFor(selectedCourse)
+  const irca = isIrcaCourse(selectedCourse?.course_name)
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true); setMsg(null)
@@ -104,9 +115,9 @@ export default function SessionForm() {
       const payload = {
         course_id: f.course_id, month, start_date, end_date,
         date_segments: sorted, modality: f.modality,
-        private_run: f.private_run, min_participants: Number(f.min_participants),
+        private_run: f.private_run, min_participants: MIN_PAX,
         status: f.status, sales_owner: f.sales_owner || null,
-        max_participants: f.max_participants === '' ? null : Number(f.max_participants),
+        max_participants: maxPax,
         trainer_id: f.trainer_id || null,
         venue_id: f.venue_id || null,
         duration_days: segmentsDays(sorted),
@@ -172,11 +183,16 @@ export default function SessionForm() {
 
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Minimum pax (Go threshold)</span>
-              <input type="number" min="1" value={f.min_participants} onChange={set('min_participants')} required />
+              <input type="number" value={MIN_PAX} readOnly disabled />
             </label>
-            <label className="field"><span>Maximum pax (blank = no limit)</span>
-              <input type="number" min="1" value={f.max_participants} onChange={set('max_participants')} placeholder="e.g. 20" />
+            <label className="field"><span>Maximum pax</span>
+              <input type="number" value={maxPax} readOnly disabled />
             </label>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <div className="fill-label">
+                Set by policy: minimum {MIN_PAX} for every course, maximum {maxPax} for {irca ? 'IRCA courses' : 'professional trainings'}.
+              </div>
+            </div>
             <label className="field"><span>Sales owner</span>
               <select value={f.sales_owner} onChange={set('sales_owner')}>
                 <option value="">Unassigned</option>
