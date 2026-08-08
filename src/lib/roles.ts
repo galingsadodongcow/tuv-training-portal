@@ -34,6 +34,7 @@ export const NAV: NavItem[] = [
   { path: '/courses', label: 'Courses and pricing', roles: ['super_admin', 'operations'], icon: 'courses' },
   { path: '/resources', label: 'Trainers and venues', roles: ['super_admin', 'operations', 'business_owner'], icon: 'resources' },
   { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations'], icon: 'elearning' },
+  { path: '/communications', label: 'Communications', roles: ['super_admin', 'operations'], icon: 'comms' },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'], icon: 'rollover' },
   { path: '/dashboard', label: 'Dashboard', roles: ALL, icon: 'dashboard' },
   { path: '/reports', label: 'Reports', roles: ['super_admin', 'operations', 'business_owner'], icon: 'reports' },

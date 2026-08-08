@@ -519,6 +519,21 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// ---- Communications ----
+export function useTemplates() {
+  return useQuery({
+    queryKey: ['templates'],
+    queryFn: () => okOr(supabase.from('message_template').select('*').order('name'), []),
+  })
+}
+
+export function useCommsLog() {
+  return useQuery({
+    queryKey: ['comms_log'],
+    queryFn: () => okOr(supabase.from('comms_log').select('*').order('created_at', { ascending: false }).limit(200), []),
+  })
+}
+
 // Files attached to a record.
 export function useAttachments(entityType?: string, entityId?: string) {
   return useQuery({
