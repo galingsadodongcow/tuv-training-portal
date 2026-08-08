@@ -7,6 +7,7 @@ import { useQuote, useQuoteLines, useQuoteTotal, useCourses, useCourseFees, useI
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { php, shortDate } from '../lib/format'
 import { lt, LEARNING_TYPES } from '../lib/labels'
 
@@ -17,6 +18,7 @@ export default function QuoteDetail() {
   const router = useRouter()
   const { profile } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const invalidate = useInvalidate()
   const quote = useQuote(id)
   const lines = useQuoteLines(id)
@@ -54,6 +56,8 @@ export default function QuoteDetail() {
   }
 
   const removeLine = async (lineId: string) => {
+    const res = await confirm({ title: 'Remove this line?', confirmLabel: 'Remove', tone: 'danger' })
+    if (!res.ok) return
     const { error } = await supabase.from('quote_line').delete().eq('line_id', lineId)
     if (error) toast.error(error.message)
     else invalidate(['quote_lines', 'quote_total'])

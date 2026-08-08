@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useAttachments, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
+import { useConfirm } from './Confirm'
 import { shortDate } from '../lib/format'
 
 const BUCKET = 'attachments'
@@ -20,6 +21,7 @@ const safeName = (s: string) => s.replace(/[^\w.\-]+/g, '_').slice(0, 120)
 export default function AttachmentsPanel({ entityType, entityId }: { entityType: string; entityId: string }) {
   const { profile } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const invalidate = useInvalidate()
   const files = useAttachments(entityType, entityId)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -51,6 +53,8 @@ export default function AttachmentsPanel({ entityType, entityId }: { entityType:
   }
 
   const remove = async (a: any) => {
+    const res = await confirm({ title: 'Delete this file?', body: a.file_name, confirmLabel: 'Delete', tone: 'danger' })
+    if (!res.ok) return
     const { error } = await supabase.from('attachment').delete().eq('attachment_id', a.attachment_id)
     if (error) { toast.error(error.message); return }
     await supabase.storage.from(BUCKET).remove([a.path])

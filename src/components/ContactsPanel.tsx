@@ -4,12 +4,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useContacts, useClientInteractions, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
+import { useConfirm } from './Confirm'
 import { shortDate } from '../lib/format'
 
 // Multiple contacts for a client, plus a simple interaction log.
 export default function ContactsPanel({ clientId }: { clientId: string }) {
   const { profile } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const invalidate = useInvalidate()
   const contacts = useContacts(clientId)
   const interactions = useClientInteractions(clientId)
@@ -33,6 +35,8 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
   }
 
   const removeContact = async (cid: string) => {
+    const res = await confirm({ title: 'Remove this contact?', confirmLabel: 'Remove', tone: 'danger' })
+    if (!res.ok) return
     const { error } = await supabase.from('contact').delete().eq('contact_id', cid)
     if (error) toast.error(error.message); else { toast.success('Contact removed.'); invalidate(['contacts']) }
   }

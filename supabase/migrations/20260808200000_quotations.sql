@@ -4,6 +4,10 @@
 -- Idempotent and safe to paste whole into the Supabase SQL editor.
 
 create sequence if not exists public.quote_seq;
+-- The anon key runs as authenticated; without USAGE on the sequence, inserting a
+-- quote (whose quote_number default calls nextval) fails with "permission denied
+-- for sequence quote_seq".
+grant usage, select on sequence public.quote_seq to authenticated;
 
 create table if not exists public.quote (
   quote_id uuid primary key default gen_random_uuid(),

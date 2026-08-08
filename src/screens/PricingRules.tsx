@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useDiscountRules, useCourses, useInvalidate } from '../hooks/data'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { Spinner, ErrorNote } from '../components/ui'
 
 const TYPES = ['', 'Professional', 'PersCert']
@@ -17,6 +18,7 @@ export default function PricingRules() {
   const courses = useCourses()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const confirm = useConfirm()
   const canManage = ['operations', 'business_owner', 'super_admin'].includes(profile?.role as string)
   const [form, setForm] = useState<any>(blank)
   const [busy, setBusy] = useState<string | null>(null)
@@ -49,6 +51,8 @@ export default function PricingRules() {
   }
 
   const remove = async (id: string) => {
+    const res = await confirm({ title: 'Delete this pricing rule?', confirmLabel: 'Delete', tone: 'danger' })
+    if (!res.ok) return
     setBusy(id)
     const { error } = await supabase.from('discount_rule').delete().eq('rule_id', id)
     setBusy(null)
