@@ -305,6 +305,19 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .gng-prior { display: flex; flex-direction: column; gap: 6px; }
 .gng-prior-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
 
+/* --------------------------------------------- Order blocker banner */
+.blockerbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-subtle); margin-bottom: 16px; font-size: 14px; }
+.blockerbar-lead { font-weight: 650; }
+.blockerbar-rest { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.blockerbar-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
+.blockerbar-ok { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); background: color-mix(in srgb, var(--success) 8%, var(--bg-subtle)); }
+.blockerbar-ok .blockerbar-dot { background: var(--success); }
+.blockerbar-warn { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, var(--bg-subtle)); }
+.blockerbar-warn .blockerbar-dot { background: var(--warning); }
+.blockerbar-danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 10%, var(--bg-subtle)); }
+.blockerbar-danger .blockerbar-dot { background: var(--danger); }
+.blockerbar-info .blockerbar-dot { background: var(--accent); }
+
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }

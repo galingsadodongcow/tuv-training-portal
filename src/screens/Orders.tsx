@@ -7,6 +7,7 @@ import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
+import { primaryFlag } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -102,7 +103,17 @@ export default function Orders() {
                           {o.assignment?.[0]?.salesperson?.name || 'unassigned'}
                         </div>
                       </td>
-                      <td><span className="pill pill-webshop">{o.fulfillment_stage}</span></td>
+                      <td>
+                        <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                        {(() => {
+                          const f = primaryFlag(o)
+                          return f ? (
+                            <div className="fill-label" style={{ marginTop: 4, color: f.tone === 'danger' ? 'var(--tr-red)' : f.tone === 'warn' ? 'var(--tr-amber)' : 'inherit' }}>
+                              {f.label}
+                            </div>
+                          ) : null
+                        })()}
+                      </td>
                       <td className="fill-label">{o.sap_order_no || '—'}</td>
                       <td><ChannelPill value={o.channel} /></td>
                       <td className="right">{o.total_seats}</td>

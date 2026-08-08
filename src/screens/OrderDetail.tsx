@@ -6,10 +6,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useOrder, useInvalidate, useTransferTargets } from '../hooks/data'
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
-import { RecordHeader, RecordSection, KeyVal, RecordNotice } from '../components/record'
+import { RecordHeader, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
+import BlockerBar from '../components/BlockerBar'
 import { useToast } from '../components/Toast'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
+import { collectionState, collectionTone } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAYMENTS = ['Unpaid', 'Partial', 'Paid']
@@ -91,6 +93,7 @@ export default function OrderDetail() {
   const canEdit = ['operations', 'super_admin', 'sales', 'business_owner'].includes(profile?.role as string)
   const lines = o.lines || []
   const assignee = o.assignment?.[0]?.salesperson?.name
+  const collection = collectionState(o)
 
   const save = async () => {
     setBusy(true); setMsg(null)
@@ -113,11 +116,14 @@ export default function OrderDetail() {
             <ChannelPill value={o.channel} />
             <span className="pill pill-webshop">{o.fulfillment_stage}</span>
             <span className="pill pill-cancelled">{o.payment_status}</span>
+            {collection !== 'None' && collection !== 'Not due' && <Badge tone={collectionTone(collection)}>{collection}</Badge>}
             {assignee && <span className="fill-label">{assignee}</span>}
             {o.client?.email && <span className="fill-label">{o.client.email}</span>}
           </>
         }
       />
+
+      <BlockerBar order={o} />
 
       {canEdit && (
         <div className="card card-pad" style={{ marginBottom: 16 }}>
