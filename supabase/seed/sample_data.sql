@@ -37,10 +37,12 @@ restart identity cascade;
 do $$
 declare
   v_year   uuid;
-  v_t1 uuid; v_t2 uuid; v_t3 uuid;
-  v_v1 uuid; v_v2 uuid; v_v3 uuid;
+  v_t1 uuid; v_t2 uuid; v_t3 uuid; v_t4 uuid; v_t5 uuid; v_t6 uuid;
+  v_v1 uuid; v_v2 uuid; v_v3 uuid; v_v4 uuid; v_v5 uuid;
   v_qms uuid; v_ems uuid; v_bosh uuid; v_iso27 uuid; v_dpo uuid; v_el uuid;
+  v_ohsms uuid; v_fsms uuid; v_enms uuid; v_ia uuid; v_firstaid uuid; v_isms uuid;
   v_s1 uuid; v_s2 uuid; v_s3 uuid; v_s4 uuid; v_s5 uuid; v_s6 uuid; v_s7 uuid; v_s8 uuid; v_s9 uuid;
+  v_s10 uuid; v_s11 uuid; v_s12 uuid; v_s13 uuid; v_s14 uuid; v_s15 uuid; v_s16 uuid; v_s17 uuid; v_s18 uuid; v_s19 uuid; v_s20 uuid;
   v_cl1 uuid; v_cl2 uuid; v_cl3 uuid; v_cl4 uuid; v_cl5 uuid; v_cl6 uuid; v_cl7 uuid; v_cl8 uuid;
   v_sales uuid[];
   v_sa uuid; v_sb uuid; v_sc uuid;
@@ -64,9 +66,14 @@ begin
   insert into trainer(name, code, trainer_type, email) values ('Maria Santos','TR-01','Internal','maria@example.com') returning trainer_id into v_t1;
   insert into trainer(name, code, trainer_type, email) values ('Jose Ramos','TR-02','Internal','jose@example.com') returning trainer_id into v_t2;
   insert into trainer(name, code, trainer_type, email) values ('Lea Gomez','TR-03','Associate','lea@example.com') returning trainer_id into v_t3;
+  insert into trainer(name, code, trainer_type, email) values ('Ramon Uy','TR-04','Internal','ramon@example.com') returning trainer_id into v_t4;
+  insert into trainer(name, code, trainer_type, email) values ('Nina Flores','TR-05','Internal','nina@example.com') returning trainer_id into v_t5;
+  insert into trainer(name, code, trainer_type, email) values ('Carlo Yap','TR-06','Associate','carlo@example.com') returning trainer_id into v_t6;
   insert into venue(name, city, capacity, venue_type) values ('Makati Training Center','Makati',25,'Training Room') returning venue_id into v_v1;
   insert into venue(name, city, capacity, venue_type) values ('Cebu Hub','Cebu',22,'Training Room') returning venue_id into v_v2;
   insert into venue(name, city, capacity, venue_type) values ('Virtual Classroom',null,100,'Online') returning venue_id into v_v3;
+  insert into venue(name, city, capacity, venue_type) values ('Davao Center','Davao',24,'Training Room') returning venue_id into v_v4;
+  insert into venue(name, city, capacity, venue_type) values ('Clark Hall','Clark',30,'Training Room') returning venue_id into v_v5;
 
   -- Courses. QMS and EMS are IRCA lead auditor courses (max 10). The rest are
   -- professional (max 20). One is e-learning only.
@@ -76,6 +83,12 @@ begin
   insert into course(course_name, standard, category, training_type) values ('ISO/IEC 27001 Foundation','ISO 27001','Information Security','Professional') returning course_id into v_iso27;
   insert into course(course_name, standard, category, training_type) values ('Data Privacy (DPO) Training','RA 10173','Data Privacy','Professional') returning course_id into v_dpo;
   insert into course(course_name, standard, category, training_type) values ('ISO 9001 Awareness (E-learning)','ISO 9001','Quality','Professional') returning course_id into v_el;
+  insert into course(course_name, standard, category, training_type) values ('ISO 45001:2018 Lead Auditor (IRCA)','ISO 45001','Occupational Health and Safety','PersCert') returning course_id into v_ohsms;
+  insert into course(course_name, standard, category, training_type) values ('ISO 22000:2018 Food Safety Lead Auditor (IRCA)','ISO 22000','Food Safety','PersCert') returning course_id into v_fsms;
+  insert into course(course_name, standard, category, training_type) values ('ISO 50001 Energy Management Foundation','ISO 50001','Energy','Professional') returning course_id into v_enms;
+  insert into course(course_name, standard, category, training_type) values ('ISO 9001 Internal Auditor','ISO 9001','Quality','Professional') returning course_id into v_ia;
+  insert into course(course_name, standard, category, training_type) values ('Standard First Aid and Basic Life Support','Red Cross','Occupational Health and Safety','Professional') returning course_id into v_firstaid;
+  insert into course(course_name, standard, category, training_type) values ('ISO/IEC 27001:2022 Lead Auditor (IRCA)','ISO 27001','Information Security','PersCert') returning course_id into v_isms;
 
   -- Fees per learning type.
   insert into course_fee(course_id, modality, fee_php) values
@@ -84,7 +97,13 @@ begin
     (v_bosh,'Face-to-face',12000),
     (v_iso27,'Live Online Training',15000),(v_iso27,'Face-to-face',18000),
     (v_dpo,'Live Online Training',9000),(v_dpo,'Face-to-face',11000),
-    (v_el,'E-learning',3500);
+    (v_el,'E-learning',3500),
+    (v_ohsms,'Live Online Training',38000),(v_ohsms,'Face-to-face',45000),
+    (v_fsms,'Live Online Training',40000),(v_fsms,'Face-to-face',48000),
+    (v_enms,'Live Online Training',14000),(v_enms,'Face-to-face',17000),
+    (v_ia,'Live Online Training',8000),(v_ia,'Face-to-face',10000),
+    (v_firstaid,'Face-to-face',6500),
+    (v_isms,'Live Online Training',36000),(v_isms,'Face-to-face',43000);
 
   -- Sessions. min 8 for all; max 10 for IRCA (QMS, EMS), 20 for the rest.
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
@@ -106,9 +125,37 @@ begin
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants)
     values (v_iso27, v_year, 'April', current_date + 50, current_date + 51, 'Live Online Training', 15000, 'Tentative', 'No-Go', 8, 20, 0) returning schedule_id into v_s9;
 
+  -- More sessions across courses, months and states. Trainer and venue windows
+  -- do not overlap for any shared resource, so the double-booking guard passes.
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_ohsms, v_year, to_char(current_date + 60,'FMMonth'), current_date + 60, current_date + 62, 'Face-to-face', 45000, 'Confirmed', 'Go', 8, 10, 9, v_t4, v_v4) returning schedule_id into v_s10;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_fsms, v_year, to_char(current_date + 67,'FMMonth'), current_date + 67, current_date + 69, 'Face-to-face', 48000, 'Tentative', 'No-Go', 8, 10, 5, v_t5, v_v5) returning schedule_id into v_s11;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_enms, v_year, to_char(current_date + 72,'FMMonth'), current_date + 72, current_date + 73, 'Live Online Training', 14000, 'Confirmed', 'Go', 8, 20, 14, v_t6, v_v3) returning schedule_id into v_s12;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, venue_id)
+    values (v_ia, v_year, to_char(current_date + 80,'FMMonth'), current_date + 80, current_date + 81, 'Face-to-face', 10000, 'Tentative', 'No-Go', 8, 20, 3, v_v1) returning schedule_id into v_s13;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_firstaid, v_year, to_char(current_date + 85,'FMMonth'), current_date + 85, current_date + 85, 'Face-to-face', 6500, 'Confirmed', 'Go', 8, 20, 18, v_t4, v_v4) returning schedule_id into v_s14;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_isms, v_year, to_char(current_date + 90,'FMMonth'), current_date + 90, current_date + 92, 'Live Online Training', 36000, 'Tentative', 'No-Go', 8, 10, 6, v_t5, v_v3) returning schedule_id into v_s15;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, actual_participants, actual_revenue, trainer_id, venue_id)
+    values (v_ohsms, v_year, to_char(current_date - 50,'FMMonth'), current_date - 50, current_date - 48, 'Face-to-face', 45000, 'Completed', 'Go', 8, 10, 10, 10, 450000, v_t6, v_v5) returning schedule_id into v_s16;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_enms, v_year, to_char(current_date - 2,'FMMonth'), current_date - 2, current_date + 2, 'Live Online Training', 14000, 'Running', 'Go', 8, 20, 12, v_t4, v_v4) returning schedule_id into v_s17;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_ia, v_year, to_char(current_date + 100,'FMMonth'), current_date + 100, current_date + 101, 'Face-to-face', 10000, 'Confirmed', 'Go', 8, 20, 20, v_t5, v_v2) returning schedule_id into v_s18;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants)
+    values (v_fsms, v_year, to_char(current_date + 45,'FMMonth'), current_date + 45, current_date + 47, 'Face-to-face', 48000, 'Tentative', 'No-Go', 8, 10, 4) returning schedule_id into v_s19;
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
+    values (v_isms, v_year, to_char(current_date + 110,'FMMonth'), current_date + 110, current_date + 112, 'Live Online Training', 36000, 'Confirmed', 'Go', 8, 10, 8, v_t6, v_v3) returning schedule_id into v_s20;
+
   -- Forecasts (business owner).
   update schedule set forecast_revenue = 405000, forecast_participants = 9, forecast_by = v_u_bo where schedule_id = v_s1;
   update schedule set forecast_revenue = 216000, forecast_participants = 18, forecast_by = v_u_bo where schedule_id = v_s3;
+  update schedule set forecast_revenue = 405000, forecast_participants = 9, forecast_by = v_u_bo where schedule_id = v_s10;
+  update schedule set forecast_revenue = 280000, forecast_participants = 20, forecast_by = v_u_bo where schedule_id = v_s12;
+  update schedule set forecast_revenue = 200000, forecast_participants = 20, forecast_by = v_u_bo where schedule_id = v_s18;
 
   -- Clients.
   insert into client(name, company, contact, email, phone, industry, owner_sales_id) values ('Globe Telecom','Globe Telecom Inc.','Rowena Dela Cruz','rowena@globe.example','+63 2 7730 1000','Telecommunications', v_sa) returning client_id into v_cl1;
