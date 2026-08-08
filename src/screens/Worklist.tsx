@@ -34,6 +34,8 @@ export default function Worklist() {
   const pathname = usePathname()
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkTo, setBulkTo] = useState('')
 
   const stage = params.get('stage') || 'all'
   // Salespeople land on their own queue; operations and other non-selling roles
@@ -130,6 +132,60 @@ export default function Worklist() {
     setBusy('')
   }
 
+  // ---- bulk selection over the visible rows ----
+  const shown = rows.slice(0, 250)
+  const visibleIds = shown.map((o: any) => o.order_id)
+  const selectedVisible = visibleIds.filter((id: string) => selected.has(id))
+  const allSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length
+  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll = () => setSelected((s) => {
+    const n = new Set(s)
+    if (allSelected) visibleIds.forEach((id: string) => n.delete(id))
+    else visibleIds.forEach((id: string) => n.add(id))
+    return n
+  })
+  const clearSel = () => setSelected(new Set())
+
+  const bulkAdvance = async () => {
+    const ids = selectedVisible
+    const targets = shown.filter((o: any) => ids.includes(o.order_id) && NEXT[o.fulfillment_stage])
+    if (targets.length === 0) { toast.error('None of the selected orders have a next stage.'); return }
+    setBusy('bulk'); setMsg(null)
+    const byTo: Record<string, string[]> = {}
+    for (const o of targets) { const to = NEXT[o.fulfillment_stage]; (byTo[to] ||= []).push(o.order_id) }
+    let ok = 0; let failed = 0
+    for (const [to, oids] of Object.entries(byTo)) {
+      const { error } = await supabase.from('orders').update({ fulfillment_stage: to }).in('order_id', oids)
+      if (error) { failed += oids.length; setMsg(error.message) } else ok += oids.length
+    }
+    invalidate(['fulfillment_queue', 'orders'])
+    const skipped = ids.length - targets.length
+    if (failed) toast.error(`${ok} advanced, ${failed} failed.`)
+    else toast.success(`${ok} order${ok === 1 ? '' : 's'} advanced${skipped ? `, ${skipped} had no next stage` : ''}.`)
+    clearSel(); setBusy('')
+  }
+
+  const bulkAssign = async (salesId: string) => {
+    const ids = selectedVisible
+    if (ids.length === 0) return
+    const name = salesId ? (people.data?.find((p: any) => p.sales_id === salesId)?.name || 'another owner') : 'no one'
+    const res = await confirm({
+      title: salesId ? `Assign ${ids.length} order${ids.length === 1 ? '' : 's'}?` : `Unassign ${ids.length} order${ids.length === 1 ? '' : 's'}?`,
+      body: `Ownership changes to ${name}.`,
+      confirmLabel: salesId ? 'Assign' : 'Unassign',
+      tone: salesId ? 'default' : 'danger',
+      reason: 'optional',
+    })
+    if (!res.ok) return
+    setBusy('bulk'); setMsg(null)
+    const { error } = salesId
+      ? await supabase.from('order_assignment').upsert(ids.map((order_id: string) => ({ order_id, sales_id: salesId })), { onConflict: 'order_id' })
+      : await supabase.from('order_assignment').delete().in('order_id', ids)
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
+    setBulkTo(''); clearSel(); setBusy('')
+  }
+
   if (queue.isLoading) return <TableSkeleton rows={8} cols={7} />
   if (queue.error) return <ErrorNote error={queue.error} />
 
@@ -177,17 +233,36 @@ export default function Worklist() {
         ))}
       </div>
 
+      {selectedVisible.length > 0 && (
+        <div className="notice notice-info" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <strong>{selectedVisible.length} selected</strong>
+          <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={bulkAdvance}>Advance to next stage</button>
+          {canAssignAny && (
+            <select value={bulkTo} disabled={busy === 'bulk'} onChange={(e) => bulkAssign(e.target.value)}>
+              <option value="">Assign to…</option>
+              {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
+            </select>
+          )}
+          {!canAssignAny && profile?.sales_id && (
+            <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={() => bulkAssign(profile.sales_id as string)}>Claim</button>
+          )}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={clearSel}>Clear</button>
+        </div>
+      )}
+
       <div className="card">
         <table>
           <thead>
             <tr>
+              <th style={{ width: 32 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" /></th>
               <th>Order</th><th>Customer</th><th>Stage</th><th className="right">Age</th>
               <th>Owner</th><th className="right">Value</th><th>Next step</th>
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 250).map((o: any) => (
+            {shown.map((o: any) => (
               <tr key={o.order_id} className={o.days_in_stage > 14 ? 'risk-amber' : ''}>
+                <td><input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggle(o.order_id)} aria-label={`Select ${o.order_id}`} /></td>
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                   <button className="linkbtn" style={{ padding: 0 }} onClick={() => router.push(`/orders/${o.order_id}`)}>
                     {o.order_id}
