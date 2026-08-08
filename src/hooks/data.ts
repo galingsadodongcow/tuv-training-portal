@@ -519,6 +519,41 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// ---- Quotations ----
+export function useQuotes() {
+  return useQuery({
+    queryKey: ['quotes'],
+    queryFn: () => okOr(
+      supabase.from('quote').select('*, client:client_id(company, name), salesperson:sales_id(name)').order('created_at', { ascending: false }).limit(1000),
+      []
+    ),
+  })
+}
+
+export function useQuote(quoteId?: string) {
+  return useQuery({
+    queryKey: ['quote', quoteId],
+    enabled: !!quoteId,
+    queryFn: () => okOr(supabase.from('quote').select('*, client:client_id(client_id, company, name, email), salesperson:sales_id(name)').eq('quote_id', quoteId).single(), null),
+  })
+}
+
+export function useQuoteLines(quoteId?: string) {
+  return useQuery({
+    queryKey: ['quote_lines', quoteId],
+    enabled: !!quoteId,
+    queryFn: () => okOr(supabase.from('quote_line').select('*, course:course_id(course_name)').eq('quote_id', quoteId).order('created_at'), []),
+  })
+}
+
+export function useQuoteTotal(quoteId?: string) {
+  return useQuery({
+    queryKey: ['quote_total', quoteId],
+    enabled: !!quoteId,
+    queryFn: () => okOr(supabase.from('v_quote_total').select('*').eq('quote_id', quoteId).single(), null),
+  })
+}
+
 // ---- Communications ----
 export function useTemplates() {
   return useQuery({
