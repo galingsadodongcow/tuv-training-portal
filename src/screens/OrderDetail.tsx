@@ -70,13 +70,15 @@ export default function OrderDetail() {
   const [sap, setSap] = useState('')
   const [pay, setPay] = useState('')
   const [init, setInit] = useState(false)
+  const [rev, setRev] = useState<string | undefined>(undefined)
+  const [conflict, setConflict] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [moving, setMoving] = useState<string | null>(null)
 
   if (order.isLoading) return <Spinner label="Loading order" />
   if (order.error) return <ErrorNote error={order.error} />
-  const o = order.data
+  const o: any = order.data
   if (!o) {
     return (
       <>
@@ -86,12 +88,18 @@ export default function OrderDetail() {
     )
   }
 
-  // Seed the editable fields once the record arrives.
+  // Seed the editable fields and the concurrency token once the record arrives.
   if (!init) {
     setStage(o.fulfillment_stage)
     setSap(o.sap_order_no || '')
     setPay(o.payment_status)
+    setRev(o.updated_at)
     setInit(true)
+  }
+
+  const reload = () => {
+    setConflict(false); setMsg(null); setInit(false)
+    invalidate(['order'])
   }
 
   const canEdit = ['operations', 'super_admin', 'sales', 'business_owner'].includes(profile?.role as string)
@@ -100,12 +108,24 @@ export default function OrderDetail() {
   const collection = collectionState(o)
 
   const save = async () => {
-    setBusy(true); setMsg(null)
-    const { error } = await supabase.from('orders')
+    setBusy(true); setMsg(null); setConflict(false)
+    let q = supabase.from('orders')
       .update({ fulfillment_stage: stage, sap_order_no: sap.trim() || null, payment_status: pay })
       .eq('order_id', o.order_id)
+    // Optimistic concurrency: only overwrite the row we actually read. If the
+    // updated_at token is absent (migration not applied), fall back to a plain
+    // update. maybeSingle returns null when nothing matched, i.e. a conflict.
+    if (rev) q = q.eq('updated_at', rev)
+    const { data, error } = await q.select('updated_at').maybeSingle()
     if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
-    else { setMsg({ ok: true, t: 'Saved.' }); invalidate(['order', 'orders', 'fulfillment_queue']); toast.success('Order updated.') }
+    else if (rev && !data) {
+      setConflict(true)
+      setMsg({ ok: false, t: 'This order changed since you opened it. Reload to get the latest, then reapply your change.' })
+      toast.error('Save blocked: the order changed.')
+    } else {
+      if (data?.updated_at) setRev(data.updated_at)
+      setMsg({ ok: true, t: 'Saved.' }); invalidate(['order', 'orders', 'fulfillment_queue']); toast.success('Order updated.')
+    }
     setBusy(false)
   }
 
@@ -150,7 +170,14 @@ export default function OrderDetail() {
           <div className="fill-label" style={{ marginBottom: 10 }}>
             Entering a SAP number moves the order to SAP Created automatically.
           </div>
-          {msg && <div style={{ marginBottom: 10 }}><RecordNotice ok={msg.ok}>{msg.t}</RecordNotice></div>}
+          {msg && (
+            <div style={{ marginBottom: 10 }}>
+              <RecordNotice ok={msg.ok}>
+                {msg.t}
+                {conflict && <> <button className="linkbtn" onClick={reload}>Reload</button></>}
+              </RecordNotice>
+            </div>
+          )}
           <button className="btn btn-sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       )}

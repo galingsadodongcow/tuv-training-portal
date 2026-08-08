@@ -17,11 +17,13 @@ export default function Clients() {
   const [q, setQ] = useState('')
 
   const filtered = useMemo(() => {
-    if (!clients.data) return []
+    // Hide soft-deleted customers. deleted_at is undefined before the migration,
+    // so this is a no-op until the column exists.
+    const live = (clients.data || []).filter((c: any) => !c.deleted_at)
     const t = q.trim().toLowerCase()
-    if (!t) return clients.data
-    return clients.data.filter(
-      (c) => c.company?.toLowerCase().includes(t) || c.name?.toLowerCase().includes(t) || c.email?.toLowerCase().includes(t)
+    if (!t) return live
+    return live.filter(
+      (c: any) => c.company?.toLowerCase().includes(t) || c.name?.toLowerCase().includes(t) || c.email?.toLowerCase().includes(t)
     )
   }, [clients.data, q])
 

@@ -7,6 +7,12 @@ const sel = async (q: any) => {
   return data
 }
 
+// True when a PostgREST error is "column does not exist", i.e. a migration
+// that adds a column has not been applied yet. Lets a query ask for optional
+// new columns and fall back cleanly when they are absent.
+const isMissingColumn = (error: any) =>
+  !!error && (error.code === '42703' || /column .* does not exist/i.test(error.message || ''))
+
 export function useSchedules(year = 2026) {
   return useQuery({
     queryKey: ['schedules', year],
@@ -94,22 +100,24 @@ export function useOrders() {
   })
 }
 
-// Single order for the record detail route. Same select as useOrders so the
-// detail screen reads the header dimensions, client, and training lines.
+const ORDER_DETAIL_SELECT =
+  'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email, phone), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
+
+// Single order for the record detail route. Reads updated_at and deleted_at for
+// optimistic concurrency and soft delete, falling back to the base columns when
+// that migration has not been applied yet.
 export function useOrder(orderId?: string) {
   return useQuery({
     queryKey: ['order', orderId],
     enabled: !!orderId,
-    queryFn: () =>
-      sel(
-        supabase
-          .from('orders')
-          .select(
-            'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email, phone), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
-          )
-          .eq('order_id', orderId)
-          .single()
-      ),
+    queryFn: async () => {
+      const full = await supabase.from('orders').select(ORDER_DETAIL_SELECT + ', updated_at, deleted_at').eq('order_id', orderId).single()
+      if (!full.error) return full.data
+      if (!isMissingColumn(full.error)) throw full.error
+      const base = await supabase.from('orders').select(ORDER_DETAIL_SELECT).eq('order_id', orderId).single()
+      if (base.error) throw base.error
+      return base.data
+    },
   })
 }
 
@@ -315,30 +323,35 @@ export function useSessionNotes(scheduleId?: string) {
 export function useClients() {
   return useQuery({
     queryKey: ['clients'],
-    queryFn: () =>
-      sel(
-        supabase
-          .from('client')
-          .select('client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)')
-          .order('company')
-          .limit(1000)
-      ),
+    queryFn: async () => {
+      const base = 'client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)'
+      const full = await supabase.from('client').select(base + ', deleted_at').order('company').limit(1000)
+      if (!full.error) return full.data
+      if (!isMissingColumn(full.error)) throw full.error
+      const b = await supabase.from('client').select(base).order('company').limit(1000)
+      if (b.error) throw b.error
+      return b.data
+    },
   })
 }
 
-// Single client for the Customer 360 route.
+const CLIENT_DETAIL_SELECT =
+  'client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)'
+
+// Single client for the Customer 360 route. Reads updated_at and deleted_at
+// when present, falling back to the base columns before the migration.
 export function useClient(clientId?: string) {
   return useQuery({
     queryKey: ['client', clientId],
     enabled: !!clientId,
-    queryFn: () =>
-      sel(
-        supabase
-          .from('client')
-          .select('client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)')
-          .eq('client_id', clientId)
-          .single()
-      ),
+    queryFn: async () => {
+      const full = await supabase.from('client').select(CLIENT_DETAIL_SELECT + ', updated_at, deleted_at').eq('client_id', clientId).single()
+      if (!full.error) return full.data
+      if (!isMissingColumn(full.error)) throw full.error
+      const base = await supabase.from('client').select(CLIENT_DETAIL_SELECT).eq('client_id', clientId).single()
+      if (base.error) throw base.error
+      return base.data
+    },
   })
 }
 
