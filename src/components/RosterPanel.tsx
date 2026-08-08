@@ -29,7 +29,7 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
 
   const canEdit = ['operations', 'super_admin', 'sales'].includes(profile?.role)
   const canCert = ['operations', 'super_admin'].includes(profile?.role)
-  const live = (orders.data || []).filter((l) => l.line_status !== 'Cancelled')
+  const live = (orders.data || []).filter((l) => !['Cancelled', 'Waitlist'].includes(l.line_status))
   const seatsSold = live.reduce((n, l) => n + (Number(l.seats) || 0), 0)
   const names = roster.data?.length || 0
   const pending = (roster.data || []).filter((r) => r.attendance_status === 'Attended' && !r.cert_number).length

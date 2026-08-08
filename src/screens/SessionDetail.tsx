@@ -105,6 +105,17 @@ export default function SessionDetail() {
     setBusy('')
   }
 
+  const setLineStatus = async (line: any, status: string) => {
+    setBusy('line'); setMsg(null)
+    const { error } = await supabase.from('order_line').update({ line_status: status }).eq('line_id', line.line_id)
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
+    else {
+      invalidate(['session_orders', 'schedule', 'schedules', 'channel_pax', 'roster'])
+      toast.success(status === 'Waitlist' ? 'Moved to the waitlist.' : 'Promoted to a seat.')
+    }
+    setBusy('')
+  }
+
   const setStatus = async (status: string) => {
     // Completing a session affects its bookings and roster: confirm first.
     if (status === 'Completed') {
@@ -131,9 +142,11 @@ export default function SessionDetail() {
     auditEvents(audit.data)
   )
 
+  const waitCount = (sessionOrders.data || []).filter((l: any) => l.line_status === 'Waitlist').length
+  const bookedCount = (sessionOrders.data || []).filter((l: any) => ['New', 'Confirmed', 'Completed'].includes(l.line_status)).length
   const tabs = [
     { key: 'overview', label: 'Overview' },
-    { key: 'orders', label: `Orders (${sessionOrders.data?.length ?? 0})` },
+    { key: 'orders', label: `Orders (${bookedCount})${waitCount ? ` · ${waitCount} waitlisted` : ''}` },
     { key: 'participants', label: 'Participants' },
     { key: 'notes', label: 'Notes' },
     { key: 'history', label: 'History' },
@@ -163,7 +176,14 @@ export default function SessionDetail() {
       {tab === 'overview' && (
         <div className="card card-pad">
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
-            <KeyVal label="Fill"><FillBar booked={schedule.booked_participants} min={schedule.min_participants} /></KeyVal>
+            <KeyVal label="Fill">
+              <FillBar booked={schedule.booked_participants} min={schedule.min_participants} />
+              {waitCount > 0 && (
+                <div className="fill-label" style={{ marginTop: 4, color: 'var(--warning)' }}>
+                  {waitCount} on the waitlist{schedule.max_participants != null && schedule.booked_participants < schedule.max_participants ? ' · seats open, promote from Orders' : ''}
+                </div>
+              )}
+            </KeyVal>
             <KeyVal label="Fee">{php(schedule.price)}</KeyVal>
           </div>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
@@ -217,33 +237,65 @@ export default function SessionDetail() {
         </div>
       )}
 
-      {tab === 'orders' && (
-        <div className="card">
-          {sessionOrders.isLoading ? <Spinner /> : sessionOrders.data?.length === 0 ? (
-            <div className="empty">No bookings on this session yet.</div>
-          ) : (
-            <table>
-              <thead><tr><th>Client</th><th>Channel</th><th>Seats</th><th>Payment</th><th></th></tr></thead>
-              <tbody>
-                {sessionOrders.data?.map((l: any) => (
-                  <tr key={l.line_id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{l.order?.client?.company || l.order?.client?.name || '—'}</div>
-                      <div className="fill-label">
-                        <Link href={`/orders/${l.order?.order_id}`}>{l.order?.order_id}</Link> · {shortDate(l.order?.order_date)}
-                      </div>
-                    </td>
-                    <td><ChannelPill value={l.order?.channel} /></td>
-                    <td>{l.seats}</td>
-                    <td className="fill-label">{l.order?.payment_status}</td>
-                    <td className="right"><button className="linkbtn" onClick={() => setTransferring(l)}>Transfer</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+      {tab === 'orders' && (() => {
+        const all = sessionOrders.data || []
+        const booked = all.filter((l: any) => ['New', 'Confirmed', 'Completed'].includes(l.line_status))
+        const waiting = all.filter((l: any) => l.line_status === 'Waitlist')
+        const seatsLeft = schedule.max_participants == null ? null : schedule.max_participants - schedule.booked_participants
+        const row = (l: any, kind: 'booked' | 'waiting') => (
+          <tr key={l.line_id}>
+            <td>
+              <div style={{ fontWeight: 600 }}>{l.order?.client?.company || l.order?.client?.name || '—'}</div>
+              <div className="fill-label">
+                <Link href={`/orders/${l.order?.order_id}`}>{l.order?.order_id}</Link> · {shortDate(l.order?.order_date)}
+              </div>
+            </td>
+            <td><ChannelPill value={l.order?.channel} /></td>
+            <td>{l.seats}</td>
+            <td className="fill-label">{l.order?.payment_status}</td>
+            <td className="right">
+              <div className="toolbar" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                {canOps(role) && kind === 'booked' && (
+                  <button className="linkbtn" disabled={busy === 'line'} onClick={() => setLineStatus(l, 'Waitlist')}>Waitlist</button>
+                )}
+                {canOps(role) && kind === 'waiting' && (
+                  <button className="btn btn-sm" disabled={busy === 'line'} onClick={() => setLineStatus(l, 'New')}>Promote</button>
+                )}
+                <button className="linkbtn" onClick={() => setTransferring(l)}>Transfer</button>
+              </div>
+            </td>
+          </tr>
+        )
+        return (
+          <div className="card">
+            {sessionOrders.isLoading ? <Spinner /> : all.length === 0 ? (
+              <div className="empty">No bookings on this session yet.</div>
+            ) : (
+              <>
+                {booked.length > 0 && (
+                  <table>
+                    <thead><tr><th>Client</th><th>Channel</th><th>Seats</th><th>Payment</th><th></th></tr></thead>
+                    <tbody>{booked.map((l: any) => row(l, 'booked'))}</tbody>
+                  </table>
+                )}
+                {waiting.length > 0 && (
+                  <div style={{ padding: '14px 16px 0' }}>
+                    <div className="k-label" style={{ marginBottom: 6 }}>
+                      Waitlist ({waiting.length})
+                      {seatsLeft != null && seatsLeft > 0 && <span className="fill-label" style={{ fontWeight: 400 }}> · {seatsLeft} seat{seatsLeft === 1 ? '' : 's'} open, promote to fill</span>}
+                    </div>
+                    <table>
+                      <thead><tr><th>Client</th><th>Channel</th><th>Seats</th><th>Payment</th><th></th></tr></thead>
+                      <tbody>{waiting.map((l: any) => row(l, 'waiting'))}</tbody>
+                    </table>
+                  </div>
+                )}
+                {booked.length === 0 && waiting.length === 0 && <div className="empty">No live bookings on this session.</div>}
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {tab === 'participants' && <div className="card card-pad"><RosterPanel schedule={schedule} /></div>}
 
