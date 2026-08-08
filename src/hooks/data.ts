@@ -519,6 +519,22 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// ---- Session profitability ----
+export function useSessionPnl(scheduleId?: string) {
+  return useQuery({
+    queryKey: ['session_pnl', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () => okOr(supabase.from('v_session_pnl').select('*').eq('schedule_id', scheduleId).single(), null),
+  })
+}
+
+export function useProfitability() {
+  return useQuery({
+    queryKey: ['profitability'],
+    queryFn: () => okOr(supabase.from('v_session_pnl').select('*').order('start_date', { ascending: false }).limit(2000), []),
+  })
+}
+
 // ---- Trainer management ----
 export function useTrainerCourseMap() {
   return useQuery({

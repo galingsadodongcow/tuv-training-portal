@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
-import { useDigest, useOrderFacts, useReceivables, useCertsExpiring } from '../hooks/data'
+import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { php, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
@@ -47,11 +47,18 @@ const AGING = [
 ]
 
 export default function Reports() {
-  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs'>('digest')
+  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin'>('digest')
   const digest = useDigest()
   const facts = useOrderFacts()
   const receivables = useReceivables()
   const certs = useCertsExpiring()
+  const pnl = useProfitability()
+
+  const margins = useMemo(() => {
+    const rows = (pnl.data || []).filter((r: any) => Number(r.revenue) > 0 || Number(r.total_cost) > 0)
+    const t = rows.reduce((a: any, r: any) => ({ revenue: a.revenue + Number(r.revenue || 0), cost: a.cost + Number(r.total_cost || 0), margin: a.margin + Number(r.margin || 0) }), { revenue: 0, cost: 0, margin: 0 })
+    return { rows, ...t }
+  }, [pnl.data])
   const [verifyNo, setVerifyNo] = useState('')
   const [verifyResult, setVerifyResult] = useState<any>(undefined)
   const verify = async () => {
@@ -118,6 +125,7 @@ export default function Reports() {
           <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
           <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
           <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
+          <button className={`seg-btn ${tab === 'margin' ? 'on' : ''}`} onClick={() => setTab('margin')}>Profitability</button>
         </div>
       </div>
 
@@ -276,6 +284,42 @@ export default function Reports() {
             )}
           </div>
         </>
+      )}
+
+      {tab === 'margin' && (
+        pnl.isLoading ? <Spinner label="Loading profitability" /> : (
+          <>
+            <div className="card card-pad" style={{ marginBottom: 16 }}>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                <div><div className="k-label">Revenue</div><div className="k-value">{php(margins.revenue)}</div></div>
+                <div><div className="k-label">Cost</div><div className="k-value">{php(margins.cost)}</div></div>
+                <div><div className="k-label">Margin</div><div className="k-value" style={{ color: margins.margin >= 0 ? 'inherit' : 'var(--danger)' }}>{php(margins.margin)}</div></div>
+                <div><div className="k-label">Margin %</div><div className="k-value">{margins.revenue > 0 ? Math.round(margins.margin / margins.revenue * 100) : 0}%</div></div>
+              </div>
+            </div>
+            <div className="card">
+              {margins.rows.length === 0 ? (
+                <div className="empty">No sessions with revenue or cost yet.</div>
+              ) : (
+                <table>
+                  <thead><tr><th>Course</th><th>Date</th><th className="right">Revenue</th><th className="right">Cost</th><th className="right">Margin</th><th className="right">%</th></tr></thead>
+                  <tbody>
+                    {margins.rows.map((r: any) => (
+                      <tr key={r.schedule_id}>
+                        <td><Link href={`/session/${r.schedule_id}`} style={{ fontWeight: 600 }}>{r.course_name}</Link></td>
+                        <td className="fill-label">{r.start_date}</td>
+                        <td className="right">{php(Number(r.revenue))}</td>
+                        <td className="right">{php(Number(r.total_cost))}</td>
+                        <td className="right" style={{ color: Number(r.margin) >= 0 ? 'inherit' : 'var(--danger)' }}>{php(Number(r.margin))}</td>
+                        <td className="right fill-label">{Number(r.revenue) > 0 ? Math.round(Number(r.margin) / Number(r.revenue) * 100) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )
       )}
     </>
   )

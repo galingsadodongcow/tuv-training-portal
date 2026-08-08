@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInvalidate, useScheduleApprovals, useEntityActivity, useAuditTrail } from '../hooks/data'
+import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInvalidate, useScheduleApprovals, useEntityActivity, useAuditTrail, useSessionPnl } from '../hooks/data'
 import ActivityTimeline from '../components/ActivityTimeline'
 import { noteEvents, approvalEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import RosterPanel from '../components/RosterPanel'
@@ -48,6 +48,7 @@ export default function SessionDetail() {
   const schedApprovals = useScheduleApprovals(id)
   const activity = useEntityActivity('schedule', id)
   const audit = useAuditTrail('schedule', id)
+  const pnl = useSessionPnl(id)
   const invalidate = useInvalidate()
 
   const [noteText, setNoteText] = useState('')
@@ -202,6 +203,29 @@ export default function SessionDetail() {
               </span>
             ))}
           </div>
+
+          {pnl.data && (
+            <RecordSection title="Profitability">
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+                <KeyVal label="Revenue">{php(Number(pnl.data.revenue))}</KeyVal>
+                <KeyVal label="Trainer cost">{php(Number(pnl.data.trainer_cost))}</KeyVal>
+                <KeyVal label="Venue cost">{php(Number(pnl.data.venue_cost))}</KeyVal>
+                <KeyVal label="Materials">
+                  {canOps(role) ? (
+                    <input type="number" min="0" defaultValue={pnl.data.material_cost}
+                      onBlur={(e) => { if (Number(e.target.value) !== Number(pnl.data.material_cost)) { supabase.from('schedule').update({ material_cost: Number(e.target.value) || 0 }).eq('schedule_id', id).then(() => invalidate(['session_pnl'])) } }}
+                      style={{ width: 100 }} />
+                  ) : php(Number(pnl.data.material_cost))}
+                </KeyVal>
+                <KeyVal label="Margin">
+                  <span style={{ color: Number(pnl.data.margin) >= 0 ? 'var(--success, var(--accent))' : 'var(--danger)', fontWeight: 700 }}>
+                    {php(Number(pnl.data.margin))}
+                  </span>
+                  {Number(pnl.data.revenue) > 0 && <span className="fill-label"> · {Math.round(Number(pnl.data.margin) / Number(pnl.data.revenue) * 100)}%</span>}
+                </KeyVal>
+              </div>
+            </RecordSection>
+          )}
 
           <GoNoGoPanel schedule={schedule} />
 
