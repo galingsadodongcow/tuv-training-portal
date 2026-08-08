@@ -65,8 +65,15 @@ export function useChannelPax() {
 export function useCourses() {
   return useQuery({
     queryKey: ['courses'],
-    queryFn: () =>
-      sel(supabase.from('course').select('course_id, course_name, training_type, category, url').eq('active', true).order('course_name')),
+    queryFn: async () => {
+      const base = 'course_id, course_name, training_type, category, url'
+      const full = await supabase.from('course').select(base + ', is_certification, max_pax').eq('active', true).order('course_name')
+      if (!full.error) return full.data as any
+      if (!isMissingColumn(full.error)) throw full.error
+      const b = await supabase.from('course').select(base).eq('active', true).order('course_name')
+      if (b.error) throw b.error
+      return b.data as any
+    },
   })
 }
 
