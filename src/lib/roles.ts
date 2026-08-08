@@ -36,7 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Sales and orders',
     items: [
       { path: '/orders', label: 'Orders', roles: ALL },
-      { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'business_owner', 'sales'] },
+      { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
       { path: '/sales-entry', label: 'New sales order', roles: ['super_admin', 'sales'] },
       { path: '/clients', label: 'Clients', roles: ALL },
       { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'sales'] },
