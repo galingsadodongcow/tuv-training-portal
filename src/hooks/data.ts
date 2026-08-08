@@ -658,7 +658,7 @@ export function useFunnel() {
 export function useForecastVsActual() {
   return useQuery({
     queryKey: ['forecast_actual'],
-    queryFn: () => okOr(supabase.from('v_forecast_vs_actual').select('*').order('start_date', { ascending: false }).limit(1000), []),
+    queryFn: () => okOr(supabase.from('v_session_forecast').select('*').order('start_date', { ascending: false }).limit(1000), []),
   })
 }
 

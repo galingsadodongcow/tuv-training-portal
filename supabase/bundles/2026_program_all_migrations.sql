@@ -876,7 +876,9 @@ grant execute on function public.fn_funnel() to authenticated;
 
 -- Forecast against actual, per session. Forecast is a full room at the session
 -- price; actual is what the roster has booked (or the recorded revenue).
-create or replace view public.v_forecast_vs_actual as
+-- Named distinctly from the base v_forecast_vs_actual (a different, pre-existing
+-- view) so create-or-replace never has to reshape that view's columns.
+create or replace view public.v_session_forecast as
   select s.schedule_id,
          co.course_name,
          s.start_date,
