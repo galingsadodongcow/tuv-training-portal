@@ -8,6 +8,7 @@ import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
 import ActivityTimeline from '../components/ActivityTimeline'
 import AttachmentsPanel from '../components/AttachmentsPanel'
+import ContactsPanel from '../components/ContactsPanel'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
@@ -206,6 +207,10 @@ export default function ClientDetail() {
             </table>
           </div>
         )}
+      </RecordSection>
+
+      <RecordSection title="Contacts and interactions">
+        <div className="card card-pad"><ContactsPanel clientId={id} /></div>
       </RecordSection>
 
       <RecordSection title="Files">
