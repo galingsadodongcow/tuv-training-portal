@@ -10,7 +10,6 @@ import {
   useSchedules,
   useDuplicates,
   useApprovals,
-  useOpenExceptions,
   useMyTasks,
   useMyNotifications,
   useInvalidate,
@@ -39,7 +38,6 @@ function entityHref(entityType?: string, entityId?: string): string | null {
   if (entityType === 'client') return entityId ? `/clients/${encodeURIComponent(entityId)}` : '/clients'
   if (entityType === 'organization') return '/clients'
   if (entityType === 'course') return '/calendar?month=all'
-  if (entityType === 'import_exception') return '/sap-import'
   if (entityType === 'approval') return '/approvals'
   return null
 }
@@ -84,14 +82,12 @@ export default function Home() {
   const userId = profile?.user_id
   const myCode = profile?.salesperson?.code
   const canDecide = role === 'business_owner' || role === 'super_admin'
-  const isAdmin = role === 'super_admin'
 
   const queue = useFulfillmentQueue()
   const unstaffed = useUnstaffed()
   const sched = useSchedules()
   const dups = useDuplicates()
   const approvals = useApprovals()
-  const exceptions = useOpenExceptions()
   const tasks = useMyTasks(userId)
   const notifs = useMyNotifications(userId)
 
@@ -108,7 +104,6 @@ export default function Home() {
   const pending = (approvals.data || []).filter((a: any) => a.decision === 'Pending')
   const pendingCancellations = pending.filter((a: any) => a.object_type === 'Schedule cancellation').length
   const dupCount = (dups.data || []).length
-  const exCount = (exceptions.data || []).length
 
   const cardsByRole: Record<string, CardDef[]> = {
     operations: [
@@ -130,7 +125,7 @@ export default function Home() {
       { label: 'Performance', value: 'View', sub: 'Revenue against forecast', href: '/dashboard' },
     ],
     super_admin: [
-      { label: 'Import exceptions', value: exCount, sub: 'Unresolved rows', href: '/sap-import', alert: true },
+      { label: 'Data quality', value: 'View', sub: 'Records needing attention', href: '/data-quality', alert: true },
       { label: 'Duplicate candidates', value: dupCount, sub: 'Review and merge', href: '/duplicates', alert: true },
       { label: 'Orders missing an owner', value: unassigned, sub: 'Assign a salesperson', href: '/worklist?who=unassigned', alert: true },
       { label: 'Pending approvals', value: pending.length, sub: 'Across the team', href: '/approvals' },
@@ -271,34 +266,6 @@ export default function Home() {
                       </td>
                       <td className="fill-label">{ageDays(a.created_at)}d waiting</td>
                       <td className="right"><Link href="/approvals">Decide ›</Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* Stream 4: Exceptions. The system found a problem. */}
-      {isAdmin && (
-        <Section title="Open import exceptions" count={exCount}>
-          {exceptions.isLoading ? (
-            <TableSkeleton rows={2} cols={2} />
-          ) : exCount === 0 ? (
-            <div className="card"><div className="empty">No open import exceptions.</div></div>
-          ) : (
-            <div className="card">
-              <table>
-                <tbody>
-                  {exceptions.data.map((e: any) => (
-                    <tr key={e.exception_id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{e.reason || 'Import problem'}</div>
-                        <div className="fill-label">{e.source || 'import'}</div>
-                      </td>
-                      <td className="fill-label">{ageDays(e.created_at)}d ago</td>
-                      <td className="right"><Link href="/sap-import">Resolve ›</Link></td>
                     </tr>
                   ))}
                 </tbody>
