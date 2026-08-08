@@ -18,7 +18,7 @@ export default function CourseForm() {
   const invalidate = useInvalidate()
   const router = useRouter()
   const toast = useToast()
-  const [f, setF] = useState({ course_name: '', category: '', training_type: 'Professional', url: '' })
+  const [f, setF] = useState({ course_name: '', category: '', training_type: 'Professional', url: '', is_certification: false, max_pax: '' })
   const [mods, setMods] = useState<ModState>({ 'Live Online Training': { on: true, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -33,7 +33,7 @@ export default function CourseForm() {
     ]).then(([c, fe]: [any, any]) => {
       if (c.error || !c.data) { setLoadError(c.error?.message || 'Course not found'); setLoaded(true); return }
       if (fe.error) { setLoadError(fe.error.message); setLoaded(true); return }
-      setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '' })
+      setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '', is_certification: !!c.data.is_certification, max_pax: c.data.max_pax != null ? String(c.data.max_pax) : '' })
       const next: ModState = { 'Live Online Training': { on: false, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } }
       for (const row of fe.data || []) next[row.modality] = { on: true, price: String(row.fee_php) }
       setMods(next)
@@ -54,15 +54,24 @@ export default function CourseForm() {
         const p = Number(mods[m].price)
         if (mods[m].price === '' || !Number.isFinite(p) || p < 0) throw new Error(`Set a valid price for ${m}.`)
       }
-      const body = { course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null }
+      const body: any = {
+        course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null,
+        is_certification: f.is_certification, max_pax: f.max_pax === '' ? null : Number(f.max_pax),
+      }
+      // Retry without the policy columns if the migration that adds them is not
+      // applied yet, so course editing never breaks.
+      const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
+      const stripped = (o: any) => { const { is_certification, max_pax, ...rest } = o; return rest }
       let courseId: any = id
       if (editing) {
-        const { error } = await supabase.from('course').update(body).eq('course_id', id)
+        let { error } = await supabase.from('course').update(body).eq('course_id', id)
+        if (error && missingColumn(error)) ({ error } = await supabase.from('course').update(stripped(body)).eq('course_id', id))
         if (error) throw error
       } else {
-        const { data: course, error } = await supabase.from('course').insert(body).select('course_id').single()
-        if (error) throw error
-        courseId = course.course_id
+        let res = await supabase.from('course').insert(body).select('course_id').single()
+        if (res.error && missingColumn(res.error)) res = await supabase.from('course').insert(stripped(body)).select('course_id').single()
+        if (res.error) throw res.error
+        courseId = res.data.course_id
       }
       // Upsert the selected fees first, then remove only the de-selected modalities.
       // This avoids the previous delete-then-insert window that could leave a
@@ -114,6 +123,20 @@ export default function CourseForm() {
                 <option>PersCert</option>
               </select>
             </label>
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', alignItems: 'end' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={f.is_certification} style={{ width: 'auto' }}
+                onChange={(e) => setF((s) => ({ ...s, is_certification: e.target.checked }))} />
+              Certification course (caps seats at 10)
+            </label>
+            <label className="field"><span>Max seats override (optional)</span>
+              <input type="number" min="8" value={f.max_pax} onChange={set('max_pax')}
+                placeholder={f.is_certification ? '10' : '20'} />
+            </label>
+          </div>
+          <div className="fill-label" style={{ marginTop: -4, marginBottom: 6 }}>
+            Minimum is 8 for every course. The cap is 10 for a certification course and 20 otherwise, unless you set an override.
           </div>
           <label className="field"><span>Webshop URL</span>
             <input type="url" value={f.url} onChange={set('url')} placeholder="https://academy-ph.tuv.com/product/…" />
