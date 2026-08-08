@@ -519,6 +519,14 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// Certificates expiring soon (or already expired).
+export function useCertsExpiring() {
+  return useQuery({
+    queryKey: ['certs_expiring'],
+    queryFn: () => okOr(supabase.from('v_cert_expiring').select('*').limit(500), []),
+  })
+}
+
 // Open receivables for the aging report: orders with a positive balance.
 export function useReceivables() {
   return useQuery({

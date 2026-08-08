@@ -1,7 +1,8 @@
 'use client'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useDigest, useOrderFacts, useReceivables } from '../hooks/data'
+import { supabase } from '../lib/supabase'
+import { useDigest, useOrderFacts, useReceivables, useCertsExpiring } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { php, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
@@ -46,10 +47,18 @@ const AGING = [
 ]
 
 export default function Reports() {
-  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables'>('digest')
+  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs'>('digest')
   const digest = useDigest()
   const facts = useOrderFacts()
   const receivables = useReceivables()
+  const certs = useCertsExpiring()
+  const [verifyNo, setVerifyNo] = useState('')
+  const [verifyResult, setVerifyResult] = useState<any>(undefined)
+  const verify = async () => {
+    if (!verifyNo.trim()) return
+    const { data } = await supabase.rpc('fn_verify_certificate', { p_cert: verifyNo.trim() })
+    setVerifyResult(data && data.length ? data[0] : null)
+  }
 
   const aging = useMemo(() => {
     const rows = (receivables.data || []).map((r: any) => ({ ...r, od: overdueDaysOf(r) }))
@@ -108,6 +117,7 @@ export default function Reports() {
           <button className={`seg-btn ${tab === 'digest' ? 'on' : ''}`} onClick={() => setTab('digest')}>Digest</button>
           <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
           <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
+          <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
         </div>
       </div>
 
@@ -224,6 +234,48 @@ export default function Reports() {
             </div>
           </>
         )
+      )}
+
+      {tab === 'certs' && (
+        <>
+          <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 640 }}>
+            <div className="k-label" style={{ marginBottom: 8 }}>Verify a certificate</div>
+            <div className="toolbar">
+              <input placeholder="TRA-2026-000001" value={verifyNo} onChange={(e) => { setVerifyNo(e.target.value); setVerifyResult(undefined) }}
+                onKeyDown={(e) => e.key === 'Enter' && verify()} style={{ minWidth: 220 }} />
+              <button className="btn btn-sm" onClick={verify}>Verify</button>
+            </div>
+            {verifyResult === null && <div className="notice notice-error" style={{ marginTop: 10 }}>No certificate found with that number.</div>}
+            {verifyResult && (
+              <div className={`notice ${verifyResult.valid ? 'notice-info' : 'notice-error'}`} style={{ marginTop: 10 }}>
+                <strong>{verifyResult.full_name}</strong> · {verifyResult.course_name}<br />
+                Issued {verifyResult.cert_issued_date || '—'}{verifyResult.cert_expiry_date ? ` · valid to ${verifyResult.cert_expiry_date}` : ''} · {verifyResult.valid ? 'Valid' : 'Expired'}
+              </div>
+            )}
+          </div>
+
+          <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Expiring within four months</h2></div></div>
+          <div className="card">
+            {certs.isLoading ? <Spinner /> : (certs.data?.length || 0) === 0 ? (
+              <div className="empty">No certificates are expiring soon.</div>
+            ) : (
+              <table>
+                <thead><tr><th>Certificate</th><th>Holder</th><th>Course</th><th>Expiry</th><th className="right">Days left</th></tr></thead>
+                <tbody>
+                  {certs.data.map((c: any) => (
+                    <tr key={c.participant_id}>
+                      <td style={{ fontFamily: 'var(--font-mono, monospace)' }}>{c.cert_number}</td>
+                      <td>{c.full_name}</td>
+                      <td className="fill-label">{c.course_name}</td>
+                      <td className="fill-label">{c.cert_expiry_date}</td>
+                      <td className="right" style={{ color: c.days_left < 0 ? 'var(--danger)' : c.days_left < 30 ? 'var(--warning)' : 'inherit' }}>{c.days_left}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
       )}
     </>
   )
