@@ -5,7 +5,6 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useSchedules, useChannelPax, useYears } from '../hooks/data'
 import { useAuth } from '../hooks/useAuth'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
-import SessionDrawer from '../components/SessionDrawer'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 
@@ -134,7 +133,7 @@ export default function Calendar() {
   const sched = useSchedules(year)
   const pax = useChannelPax()
   const { profile } = useAuth()
-  const [open, setOpen] = useState<any>(null)
+  const openSession = (r: any) => router.push(`/session/${r.schedule_id}`)
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
   const canSell = ['sales', 'super_admin'].includes(profile?.role as string)
 
@@ -251,7 +250,7 @@ export default function Calendar() {
         <>
           <h3 style={{ margin: '4px 0 8px' }}>PersCert ({perscert.length})</h3>
           <div className="card cal-card" style={{ marginBottom: 20 }}>
-            <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setOpen} canEdit={canEdit} canSell={canSell} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} /></tbody></table>
           </div>
         </>
       )}
@@ -260,7 +259,7 @@ export default function Calendar() {
         <>
           <h3 style={{ margin: '4px 0 8px' }}>Professional Training ({professional.length})</h3>
           <div className="card cal-card">
-            <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setOpen} canEdit={canEdit} canSell={canSell} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} /></tbody></table>
           </div>
         </>
       )}
@@ -271,7 +270,6 @@ export default function Calendar() {
         </div></div>
       )}
 
-      {open && <SessionDrawer schedule={open} channelPax={pax.data} onClose={() => setOpen(null)} />}
     </>
   )
 }

@@ -4,11 +4,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useFulfillmentQueue, useOrders, useSalespeople, useInvalidate } from '../hooks/data'
+import { useFulfillmentQueue, useSalespeople, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { TableSkeleton } from '../components/Skeleton'
-import OrderDrawer from '../components/OrderDrawer'
 import { php, shortDate } from '../lib/format'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback']
@@ -23,7 +22,6 @@ const NEXT: Record<string, string> = {
 export default function Worklist() {
   const { profile } = useAuth()
   const queue = useFulfillmentQueue()
-  const orders = useOrders()
   const people = useSalespeople()
   const invalidate = useInvalidate()
   const qc = useQueryClient()
@@ -32,7 +30,6 @@ export default function Worklist() {
   const router = useRouter()
   const pathname = usePathname()
   const [busy, setBusy] = useState('')
-  const [open, setOpen] = useState<any>(null)
   const [sapDraft, setSapDraft] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -124,7 +121,6 @@ export default function Worklist() {
 
   const stalled = rows.filter((r: any) => r.days_in_stage > 14).length
   const value = rows.reduce((n: number, r: any) => n + Number(r.total_amount || 0), 0)
-  const orderFull = (id: string) => orders.data?.find((o: any) => o.order_id === id)
 
   return (
     <>
@@ -174,7 +170,7 @@ export default function Worklist() {
             {rows.slice(0, 250).map((o: any) => (
               <tr key={o.order_id} className={o.days_in_stage > 14 ? 'risk-amber' : ''}>
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  <button className="linkbtn" style={{ padding: 0 }} onClick={() => setOpen(orderFull(o.order_id))}>
+                  <button className="linkbtn" style={{ padding: 0 }} onClick={() => router.push(`/orders/${o.order_id}`)}>
                     {o.order_id}
                   </button>
                   <div className="fill-label">{shortDate(o.order_date)} · {o.lines} line{o.lines === 1 ? '' : 's'}</div>
@@ -226,8 +222,6 @@ export default function Worklist() {
         </table>
         {rows.length === 0 && <div className="empty">Nothing in this queue.</div>}
       </div>
-
-      {open && <OrderDrawer order={open} onClose={() => setOpen(null)} />}
     </>
   )
 }

@@ -33,9 +33,10 @@ const PRIORITY_CLASS: Record<string, string> = {
 // Best-effort drill-through from a task/notification entity to a screen.
 function entityHref(entityType?: string, entityId?: string): string | null {
   if (!entityType) return null
-  if (entityType === 'order' || entityType === 'order_line') return entityId ? `/orders?q=${encodeURIComponent(entityId)}` : '/orders'
+  if (entityType === 'order') return entityId ? `/orders/${encodeURIComponent(entityId)}` : '/orders'
+  if (entityType === 'order_line') return entityId ? `/orders?q=${encodeURIComponent(entityId)}` : '/orders'
+  if (entityType === 'schedule') return entityId ? `/session/${encodeURIComponent(entityId)}` : '/calendar?month=all'
   if (entityType === 'client' || entityType === 'organization') return '/clients'
-  if (entityType === 'schedule') return '/calendar?month=all'
   if (entityType === 'course') return '/calendar?month=all'
   if (entityType === 'import_exception') return '/sap-import'
   if (entityType === 'approval') return '/approvals'
