@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInvalidate } from '../hooks/data'
+import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInvalidate, useScheduleApprovals, useEntityActivity, useAuditTrail } from '../hooks/data'
+import ActivityTimeline from '../components/ActivityTimeline'
+import { noteEvents, approvalEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import RosterPanel from '../components/RosterPanel'
 import TransferOrder from '../components/TransferOrder'
 import CloseSession from '../components/CloseSession'
@@ -40,6 +42,9 @@ export default function SessionDetail() {
   const paxAll = useChannelPax()
   const notes = useSessionNotes(id)
   const sessionOrders = useSessionOrders(id)
+  const schedApprovals = useScheduleApprovals(id)
+  const activity = useEntityActivity('schedule', id)
+  const audit = useAuditTrail('schedule', id)
   const invalidate = useInvalidate()
 
   const [noteText, setNoteText] = useState('')
@@ -106,11 +111,20 @@ export default function SessionDetail() {
     setBusy('')
   }
 
+  const timeline = mergeActivity(
+    noteEvents(notes.data),
+    approvalEvents(schedApprovals.data),
+    taskEvents(activity.data?.tasks),
+    notificationEvents(activity.data?.notifs),
+    auditEvents(audit.data)
+  )
+
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'orders', label: `Orders (${sessionOrders.data?.length ?? 0})` },
     { key: 'participants', label: 'Participants' },
     { key: 'notes', label: 'Notes' },
+    { key: 'history', label: 'History' },
   ]
 
   return (
@@ -243,6 +257,12 @@ export default function SessionDetail() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="card card-pad">
+          <ActivityTimeline events={timeline} loading={notes.isLoading || schedApprovals.isLoading || activity.isLoading} />
         </div>
       )}
 

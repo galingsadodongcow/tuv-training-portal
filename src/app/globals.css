@@ -318,6 +318,20 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .blockerbar-danger .blockerbar-dot { background: var(--danger); }
 .blockerbar-info .blockerbar-dot { background: var(--accent); }
 
+/* --------------------------------------------- Activity timeline */
+.timeline { display: flex; flex-direction: column; }
+.timeline-row { display: flex; gap: 12px; }
+.timeline-rail { position: relative; width: 12px; flex-shrink: 0; display: flex; justify-content: center; }
+.timeline-rail::before { content: ''; position: absolute; top: 0; bottom: 0; width: 2px; background: var(--border); }
+.timeline-row:first-child .timeline-rail::before { top: 7px; }
+.timeline-row:last-child .timeline-rail::before { bottom: calc(100% - 12px); }
+.timeline-dot { position: relative; z-index: 1; width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); margin-top: 5px; }
+.timeline-body { padding-bottom: 16px; min-width: 0; flex: 1; }
+.timeline-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.timeline-title { font-weight: 600; }
+.timeline-when { margin-left: auto; }
+.timeline-detail { font-size: 13.5px; margin-top: 3px; word-break: break-word; }
+
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }

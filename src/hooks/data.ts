@@ -245,6 +245,58 @@ export function useScheduleApprovals(scheduleId?: string) {
   })
 }
 
+// System tasks and notifications tied to one entity, for the activity timeline.
+// Defensive: RLS scopes rows to what the caller may see, and a missing column
+// or table yields an empty list rather than breaking the record page.
+export function useEntityActivity(entityType?: string, entityId?: string) {
+  return useQuery({
+    queryKey: ['entity_activity', entityType, entityId],
+    enabled: !!entityType && !!entityId,
+    queryFn: async () => {
+      const eid = String(entityId)
+      const safe = async (q: any) => {
+        const { data, error } = await q
+        return error ? [] : (data || [])
+      }
+      const [tasks, notifs] = await Promise.all([
+        safe(
+          supabase.from('task')
+            .select('task_id, title, detail, reason, status, priority, source, created_at, completed_at')
+            .eq('entity_type', entityType).eq('entity_id', eid)
+            .order('created_at', { ascending: false })
+        ),
+        safe(
+          supabase.from('notification')
+            .select('notif_id, kind, title, body, created_at')
+            .eq('entity_type', entityType).eq('entity_id', eid)
+            .order('created_at', { ascending: false })
+        ),
+      ])
+      return { tasks, notifs }
+    },
+  })
+}
+
+// Audit trail for one row, when an audit_log table is present. Fully defensive:
+// if the table or columns are absent, or RLS hides the rows, it returns an
+// empty list so the timeline simply shows the other sources.
+export function useAuditTrail(tableName?: string, rowPk?: string) {
+  return useQuery({
+    queryKey: ['audit_trail', tableName, rowPk],
+    enabled: !!tableName && !!rowPk,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('audit_id, table_name, row_pk, action, actor_role, changed_at, changed_fields')
+        .eq('table_name', tableName)
+        .eq('row_pk', String(rowPk))
+        .order('changed_at', { ascending: false })
+        .limit(100)
+      return error ? [] : (data || [])
+    },
+  })
+}
+
 export function useSessionNotes(scheduleId?: string) {
   return useQuery({
     queryKey: ['notes', scheduleId],
