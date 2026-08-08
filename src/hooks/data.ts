@@ -274,6 +274,22 @@ export function useClients() {
   })
 }
 
+// Single client for the Customer 360 route.
+export function useClient(clientId?: string) {
+  return useQuery({
+    queryKey: ['client', clientId],
+    enabled: !!clientId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('client')
+          .select('client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)')
+          .eq('client_id', clientId)
+          .single()
+      ),
+  })
+}
+
 export function useAttribution() {
   return useQuery({
     queryKey: ['attribution'],
@@ -344,7 +360,7 @@ export function useClientHistory(clientId?: string) {
       sel(
         supabase
           .from('orders')
-          .select('order_id, order_date, channel, payment_status, order_status, total_seats, total_amount, fulfillment_stage, lines:order_line(line_id, seats, amount_php, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments))')
+          .select('order_id, order_date, channel, payment_status, order_status, total_seats, total_amount, fulfillment_stage, lines:order_line(line_id, seats, amount_php, schedule_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status))')
           .eq('client_id', clientId)
           .order('order_date', { ascending: false })
       ),
