@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTemplates, useCommsLog, useInvalidate } from '../hooks/data'
-import { ErrorNote } from '../components/ui'
+import { ErrorNote, Spinner } from '../components/ui'
 import { TableSkeleton } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 
@@ -80,7 +80,7 @@ export default function Communications() {
 
       {tab === 'templates' && (
         <div className="card">
-          {(templates.data?.length || 0) === 0 ? (
+          {templates.isLoading ? <Spinner /> : templates.error ? <ErrorNote error={templates.error} /> : (templates.data?.length || 0) === 0 ? (
             <div className="empty">No templates. Apply the communications migration to seed the defaults.</div>
           ) : (
             <table>
@@ -102,7 +102,9 @@ export default function Communications() {
 
       {edit && (
         <div className="cmdk-scrim" onClick={() => setEdit(null)}>
-          <div className="card card-pad" style={{ maxWidth: 640, width: '100%', margin: '8vh auto' }} onClick={(e) => e.stopPropagation()}>
+          <div className="card card-pad" role="dialog" aria-modal="true" aria-label={`Edit template ${edit.name}`}
+            style={{ maxWidth: 640, width: '100%', margin: '8vh auto' }} onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === 'Escape') setEdit(null) }}>
             <div className="k-label" style={{ marginBottom: 8 }}>Edit template · {edit.name}</div>
             <label className="field"><span>Subject</span><input value={edit.subject} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} /></label>
             <label className="field"><span>Body</span><textarea rows={8} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} /></label>

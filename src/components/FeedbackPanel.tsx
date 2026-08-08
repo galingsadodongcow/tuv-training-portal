@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useSessionFeedback, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
-import { Spinner } from './ui'
+import { Spinner, ErrorNote } from './ui'
 import { shortDate } from '../lib/format'
 
 const RATINGS = [
@@ -90,7 +90,7 @@ export default function FeedbackPanel({ scheduleId }: { scheduleId: string }) {
         </div>
       )}
 
-      {list.isLoading ? <Spinner /> : rows.length === 0 ? (
+      {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} /> : rows.length === 0 ? (
         <div className="empty">No responses recorded for this session.</div>
       ) : (
         <table>

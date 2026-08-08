@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useCallback, useRef, useState, ReactNode } from 'react'
+import { createContext, useContext, useCallback, useEffect, useRef, useState, ReactNode } from 'react'
 
 export interface ConfirmOptions {
   title: string
@@ -41,13 +41,21 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   }
 
   const reasonMissing = opts?.reason === 'required' && !reason.trim()
+  const confirmBtn = useRef<HTMLButtonElement | null>(null)
+
+  // On open, move focus into the dialog (the reason field autofocuses itself).
+  useEffect(() => {
+    if (opts && !opts.reason) confirmBtn.current?.focus()
+  }, [opts])
 
   return (
     <Ctx.Provider value={confirm}>
       {children}
       {opts && (
         <div className="dialog-scrim" onClick={() => close(false)}>
-          <div className="dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <div className="dialog" role="dialog" aria-modal="true" aria-label={opts.title}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(false) } }}>
             <div className="dialog-title">{opts.title}</div>
             {opts.body && <div className="dialog-body">{opts.body}</div>}
             {opts.reason && (
@@ -60,7 +68,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             )}
             <div className="toolbar" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => close(false)}>{opts.cancelLabel || 'Cancel'}</button>
-              <button className={`btn btn-sm ${opts.tone === 'danger' ? 'btn-danger' : ''}`}
+              <button ref={confirmBtn} className={`btn btn-sm ${opts.tone === 'danger' ? 'btn-danger' : ''}`}
                 disabled={reasonMissing} onClick={() => close(true)}>
                 {opts.confirmLabel || 'Confirm'}
               </button>

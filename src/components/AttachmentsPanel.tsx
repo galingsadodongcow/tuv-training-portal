@@ -70,6 +70,7 @@ export default function AttachmentsPanel({ entityType, entityId }: { entityType:
       {(files.data?.length || 0) === 0 ? (
         <div className="muted fill-label">No files attached yet.</div>
       ) : (
+        <div className="scroll-x">
         <table>
           <thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead>
           <tbody>
@@ -83,6 +84,7 @@ export default function AttachmentsPanel({ entityType, entityId }: { entityType:
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

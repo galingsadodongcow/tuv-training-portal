@@ -6,6 +6,7 @@ import { useInquiries, useCourses, useSalespeople, useInvalidate } from '../hook
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { shortDate, php } from '../lib/format'
 
 // The lead pipeline, left to right. Matches the inquiry_status enum.
@@ -23,6 +24,7 @@ export default function Inquiries() {
   const people = useSalespeople()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const confirm = useConfirm()
   const isAdmin = profile?.role === 'super_admin'
 
   const [creating, setCreating] = useState(false)
@@ -75,8 +77,9 @@ export default function Inquiries() {
   }
 
   const markLost = async (id: string) => {
-    const reason = window.prompt('Reason this lead was lost?') ?? ''
-    const { error } = await supabase.from('inquiry').update({ status: 'Closed Lost', lost_reason: reason.trim() || null }).eq('inquiry_id', id)
+    const res = await confirm({ title: 'Mark this lead as lost?', confirmLabel: 'Mark lost', tone: 'danger', reason: 'optional', reasonLabel: 'Reason lost' })
+    if (!res.ok) return
+    const { error } = await supabase.from('inquiry').update({ status: 'Closed Lost', lost_reason: res.reason || null }).eq('inquiry_id', id)
     if (error) toast.error(error.message)
     else invalidate(['inquiries'])
   }
@@ -173,8 +176,8 @@ export default function Inquiries() {
                         <button className="btn btn-ghost btn-sm" title="Reopen" onClick={() => move(q.inquiry_id, 'Received')}>Reopen</button>
                       ) : (
                         <>
-                          {i > 0 && <button className="btn btn-ghost btn-sm" title="Move back" onClick={() => move(q.inquiry_id, STAGES[i - 1])}>‹</button>}
-                          {i < 4 && <button className="btn btn-sm" title="Advance" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
+                          {i > 0 && <button className="btn btn-ghost btn-sm" title="Move back" aria-label="Move back a stage" onClick={() => move(q.inquiry_id, STAGES[i - 1])}>‹</button>}
+                          {i < 4 && <button className="btn btn-sm" title="Advance" aria-label="Advance a stage" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
                           {OPEN_STAGES.includes(stage) && <button className="btn btn-ghost btn-sm" title="Mark lost" onClick={() => markLost(q.inquiry_id)}>Lost</button>}
                         </>
                       )}

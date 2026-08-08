@@ -113,6 +113,7 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
       {(invoices.data?.length || 0) > 0 && (
         <>
           <div className="k-label" style={{ margin: '4px 0 6px' }}>Invoices</div>
+          <div className="scroll-x">
           <table style={{ marginBottom: 14 }}>
             <thead><tr><th>Number</th><th>Issued</th><th>Due</th><th className="right">Amount</th><th>Status</th></tr></thead>
             <tbody>
@@ -127,12 +128,14 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
               ))}
             </tbody>
           </table>
+          </div>
         </>
       )}
 
       {(payments.data?.length || 0) > 0 && (
         <>
           <div className="k-label" style={{ margin: '4px 0 6px' }}>Payments</div>
+          <div className="scroll-x">
           <table>
             <thead><tr><th>Date</th><th>Method</th><th>Reference</th><th className="right">Amount</th>{canManage && <th></th>}</tr></thead>
             <tbody>
@@ -147,6 +150,7 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
               ))}
             </tbody>
           </table>
+          </div>
         </>
       )}
 

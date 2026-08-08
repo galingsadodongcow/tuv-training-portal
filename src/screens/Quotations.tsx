@@ -82,7 +82,10 @@ export default function Quotations() {
             <thead><tr><th>Number</th><th>Client</th><th>Status</th><th>Valid until</th><th>Owner</th><th>Created</th></tr></thead>
             <tbody>
               {quotes.data.map((q: any) => (
-                <tr key={q.quote_id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/quotations/${q.quote_id}`)}>
+                <tr key={q.quote_id} style={{ cursor: 'pointer' }} role="button" tabIndex={0}
+                  aria-label={`Open quote ${q.quote_number}`}
+                  onClick={() => router.push(`/quotations/${q.quote_id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/quotations/${q.quote_id}`) } }}>
                   <td style={{ fontWeight: 600 }}>{q.quote_number}</td>
                   <td className="fill-label">{q.client?.company || q.client?.name || '—'}</td>
                   <td><span className={`pill ${STATUS_TONE[q.status] || 'pill-webshop'}`}>{q.status}</span></td>

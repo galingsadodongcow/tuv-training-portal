@@ -236,7 +236,7 @@ export default function SalesEntry() {
             ))}
           </div>
           {client.mode === 'existing' ? (
-            <select value={client.client_id} onChange={(e) => setClient({ ...client, client_id: e.target.value })}>
+            <select aria-label="Existing client" value={client.client_id} onChange={(e) => setClient({ ...client, client_id: e.target.value })}>
               <option value="">Select a client…</option>
               {clients.data?.map((c: any) => (
                 <option key={c.client_id} value={c.client_id}>{c.company || c.name} — {c.email}</option>
@@ -244,10 +244,10 @@ export default function SalesEntry() {
             </select>
           ) : (
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <input placeholder="Contact name" value={client.name} onChange={(e) => setClient({ ...client, name: e.target.value })} />
-              <input placeholder="Company (blank for individuals)" value={client.company} onChange={(e) => setClient({ ...client, company: e.target.value })} />
-              <input placeholder="Email" type="email" value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} />
-              <input placeholder="Phone" value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} />
+              <input aria-label="Contact name" placeholder="Contact name" value={client.name} onChange={(e) => setClient({ ...client, name: e.target.value })} />
+              <input aria-label="Company" placeholder="Company (blank for individuals)" value={client.company} onChange={(e) => setClient({ ...client, company: e.target.value })} />
+              <input aria-label="Email" placeholder="Email" type="email" value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} />
+              <input aria-label="Phone" placeholder="Phone" value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} />
             </div>
           )}
         </div>
@@ -285,7 +285,7 @@ export default function SalesEntry() {
                     <button type="button" className="linkbtn" onClick={() => setLines(lines.filter((_, x) => x !== i))}>Remove</button>
                   )}
                 </div>
-                <select value={l.course_id} onChange={(e) => onCourse(i, e.target.value)} style={{ marginBottom: 8 }}>
+                <select aria-label="Course" value={l.course_id} onChange={(e) => onCourse(i, e.target.value)} style={{ marginBottom: 8 }}>
                   <option value="">Select a course…</option>
                   {courses.data.map((c: any) => (
                     <option key={c.course_id} value={c.course_id}>{c.course_name} ({c.training_type})</option>
