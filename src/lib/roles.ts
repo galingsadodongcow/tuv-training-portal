@@ -27,4 +27,5 @@ export const NAV: NavItem[] = [
   { path: '/sap-import', label: 'SAP import', roles: ['super_admin', 'operations'] },
   { path: '/resources', label: 'Trainers & venues', roles: ['super_admin', 'operations', 'business_owner'] },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'] },
+  { path: '/data-quality', label: 'Data quality', roles: ['super_admin'] },
 ]
