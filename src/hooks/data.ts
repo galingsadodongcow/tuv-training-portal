@@ -519,6 +519,25 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// ---- Analytics ----
+export function useFunnel() {
+  return useQuery({
+    queryKey: ['funnel'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_funnel')
+      if (error) return null
+      return data && data.length ? data[0] : null
+    },
+  })
+}
+
+export function useForecastVsActual() {
+  return useQuery({
+    queryKey: ['forecast_actual'],
+    queryFn: () => okOr(supabase.from('v_forecast_vs_actual').select('*').order('start_date', { ascending: false }).limit(1000), []),
+  })
+}
+
 // ---- SLA ----
 export function useSlaBreaches() {
   return useQuery({
