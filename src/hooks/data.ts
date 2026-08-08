@@ -121,6 +121,21 @@ export function useOrder(orderId?: string) {
   })
 }
 
+// Sales inquiry pipeline. RLS scopes rows to the owning salesperson, or all for
+// the super admin.
+export function useInquiries() {
+  return useQuery({
+    queryKey: ['inquiries'],
+    queryFn: () =>
+      sel(
+        supabase
+          .from('inquiry')
+          .select('inquiry_id, inquiry_date, sales_id, course_id, company, contact, email, phone, offering_type, pax, status, converted_order_id, course:course_id(course_name), salesperson:sales_id(name, code)')
+          .order('inquiry_date', { ascending: false })
+      ),
+  })
+}
+
 export function useSalespeople() {
   return useQuery({
     queryKey: ['salespeople'],
