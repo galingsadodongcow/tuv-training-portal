@@ -91,6 +91,13 @@ declare
   v_sales uuid[]; v_sa uuid; v_sb uuid; v_sc uuid; v_asg uuid;
   v_u_admin uuid; v_u_ops uuid; v_u_bo uuid; v_u_any uuid;
   sc_run uuid; sc_wait uuid; sc_cancel uuid; irca_course uuid; irca_price numeric;
+  -- roster generation
+  pp int; v_pcount int := 100000; v_att text; v_isc boolean; v_pname text; v_pemail text;
+  v_fn text[] := array['Andrea','Ben','Cara','Diego','Elena','Frank','Gina','Hector','Ivy','Jomar',
+                       'Kim','Lara','Miguel','Nadia','Oscar','Paula','Quennie','Rafael','Sofia','Tomas',
+                       'Ula','Victor','Wilma','Xavier','Yna','Zeke'];
+  v_ln text[] := array['Santos','Reyes','Cruz','Bautista','Ocampo','Garcia','Mendoza','Torres','Flores','Ramos',
+                       'Aquino','Villanueva','Castro','Navarro','Salazar','Domingo','Fernandez','Rivera','Gonzales','Padilla'];
 begin
   select array_agg(sales_id) into v_sales from salesperson where active;
   v_sa := v_sales[1]; v_sb := coalesce(v_sales[2], v_sales[1]); v_sc := coalesce(v_sales[3], v_sales[1]);
@@ -127,20 +134,41 @@ begin
     ('Cebu Pacific','Cebu Air Inc.','Tina Soriano','tina@ceb.example','+63 2 7702 0888','Aviation', null),
     ('PLDT','PLDT Inc.','Jerome Tan','jerome@pldt.example','+63 2 8816 8000','Telecommunications', null),
     ('Aboitiz Power','Aboitiz Power Corp.','Liza Cruz','liza@aboitiz.example','+63 32 411 1800','Energy', v_sa),
-    ('Unilab','United Laboratories Inc.','Ben Sy','ben@unilab.example','+63 2 8858 9000','Pharmaceutical', v_sb);
+    ('Unilab','United Laboratories Inc.','Ben Sy','ben@unilab.example','+63 2 8858 9000','Pharmaceutical', v_sb),
+    ('SM Retail','SM Retail Inc.','Joan Uy','joan@sm.example','+63 2 8833 2100','Retail', v_sc),
+    ('Petron','Petron Corp.','Cely Ramos','cely@petron.example','+63 2 8884 9200','Oil and Gas', v_sa),
+    ('Maynilad','Maynilad Water Services','Rex Uy','rex@maynilad.example','+63 2 1626 0000','Utilities', v_sb),
+    ('Nestle PH','Nestle Philippines','Amy Tan','amy@nestle.example','+63 2 8898 0000','Food Manufacturing', v_sc),
+    ('Converge','Converge ICT Solutions','Ken Tan','ken@converge.example','+63 2 8667 0888','Telecommunications', v_sa),
+    ('Toyota PH','Toyota Motor Philippines','Rod Lim','rod@toyota.example','+63 2 8819 2333','Automotive', v_sb),
+    ('DMCI','DMCI Holdings Inc.','Mia Reyes','mia@dmci.example','+63 2 8888 3000','Construction', v_sc),
+    ('Robinsons','Robinsons Land Corp.','Karl Sy','karl@rlc.example','+63 2 8397 1888','Real Estate', v_sa),
+    ('Century Pacific','Century Pacific Food Inc.','Del Cruz','del@cnpf.example','+63 2 8633 8555','Food Manufacturing', v_sb),
+    ('Manila Water','Manila Water Company','Grace Yu','graceyu@mwc.example','+63 2 1627 0000','Utilities', v_sc),
+    ('Shell PH','Pilipinas Shell','Ivan Lee','ivanl@shell.example','+63 2 8499 3000','Oil and Gas', v_sa),
+    ('Accenture PH','Accenture Philippines','Nina Tan','ninat@accenture.example','+63 2 8888 8888','IT Services', v_sb),
+    ('Concentrix','Concentrix Philippines','Paul Ong','paul@cnx.example','+63 2 8858 2000','BPO', v_sc),
+    ('Universal Robina','Universal Robina Corp.','Tess Uy','tess@urc.example','+63 2 8633 7631','Food Manufacturing', v_sa),
+    ('Megaworld','Megaworld Corp.','Vic Reyes','vic@megaworld.example','+63 2 8867 8826','Real Estate', v_sb),
+    ('DOST','Department of Science and Tech','Ella Cruz','ella@dost.example','+63 2 8837 2071','Government', null),
+    ('DOLE PH','Department of Labor','Mario Diaz','mario@dole.example','+63 2 8527 3000','Government', null);
   select array_agg(client_id order by created_date, client_id) into v_clients from client;
 
   insert into organization(name, industry, country) values ('Ayala Group','Conglomerate','PH') returning org_id into v_org1;
   insert into organization(name, industry, country) values ('San Miguel Group','Conglomerate','PH') returning org_id into v_org2;
   insert into organization(name, industry, country) values ('PLDT-Smart Group','Telecommunications','PH') returning org_id into v_org3;
-  update client set org_id = v_org1 where company in ('Ayala Land Inc.','BDO Unibank Inc.');
-  update client set org_id = v_org2 where company in ('San Miguel Corp.');
-  update client set org_id = v_org3 where company in ('PLDT Inc.','Globe Telecom Inc.');
+  insert into organization(name, industry, country) values ('Aboitiz Group','Conglomerate','PH');
+  insert into organization(name, industry, country) values ('Gokongwei Group','Conglomerate','PH');
+  update client set org_id = v_org1 where company in ('Ayala Land Inc.','BDO Unibank Inc.','Manila Water Company','Globe Telecom Inc.');
+  update client set org_id = v_org2 where company in ('San Miguel Corp.','Petron Corp.');
+  update client set org_id = v_org3 where company in ('PLDT Inc.');
+  update client set org_id = (select org_id from organization where name='Aboitiz Group') where company in ('Aboitiz Power Corp.');
+  update client set org_id = (select org_id from organization where name='Gokongwei Group') where company in ('Universal Robina Corp.','Cebu Air Inc.','Robinsons Land Corp.');
 
   select array_agg(course_id order by course_name), array_agg(course_name order by course_name)
     into v_cids, v_names from course where active;
   n := array_length(v_cids,1);
-  kk := least(n*2, 60);
+  kk := least(n*6, 156);
   v_gap := 358.0 / kk;
 
   -- ---- the year-round calendar, each session backed by a real order ----
@@ -212,6 +240,25 @@ begin
       end if;
       if v_status = 'Completed' then
         update schedule set actual_participants = f, actual_revenue = f*v_price where schedule_id = sid;
+        -- Real roster on completed sessions: attendance, and a certificate for
+        -- each attendee. PART 3 backfills scores and certificate expiry.
+        v_isc := cname ~* '(IRCA|Lead Auditor|Certification|DPO)';
+        for pp in 1..f loop
+          v_pcount := v_pcount + 1;
+          v_pname := v_fn[(v_pcount % array_length(v_fn,1)) + 1] || ' ' || v_ln[((v_pcount / 7) % array_length(v_ln,1)) + 1];
+          v_pemail := lower(replace(v_pname,' ','.')) || v_pcount || '@' || split_part(coalesce((select email from client where client_id = v_cl), 'x@co.example'),'@',2);
+          v_att := case when (pp % 12) = 0 then 'No Show' else 'Attended' end;
+          if v_att = 'Attended' then
+            insert into participant(order_id, schedule_id, full_name, email, position_title, attendance_status, cert_number, cert_issued_date)
+              values (oid, sid, v_pname, v_pemail,
+                      (array['Engineer','Supervisor','Manager','Officer','Analyst','Coordinator'])[(v_pcount % 6) + 1],
+                      'Attended', 'TRA-2026-' || lpad(v_pcount::text, 6, '0'), v_end + 5);
+          else
+            insert into participant(order_id, schedule_id, full_name, email, position_title, attendance_status)
+              values (oid, sid, v_pname, v_pemail,
+                      (array['Engineer','Supervisor','Manager','Officer','Analyst','Coordinator'])[(v_pcount % 6) + 1], 'No Show');
+          end if;
+        end loop;
       end if;
     end if;
   end loop;
@@ -334,6 +381,18 @@ begin
       (current_date-3,  v_sa, v_cids[8],  'DOST','Ivan Lee','ivan@dost.example',               null,'Public',   5,  'Received'),
       (current_date-6,  v_sc, v_cids[3],  'SM Retail','Joan Uy','joan@sm.example',             null,'In-house', 20, 'Responded'),
       (current_date-15, v_sb, v_cids[12], 'Converge','Ken Tan','ken@converge.example',         null,'Public',   7,  'RFQ or P Sent');
+    -- More inquiries across every stage, cycling courses/owners/clients.
+    for j in 0..23 loop
+      insert into inquiry(inquiry_date, sales_id, course_id, company, contact, email, offering_type, pax, status)
+      select current_date - (2 + j),
+             (array[v_sa, v_sb, v_sc])[(j % 3) + 1],
+             v_cids[(j % n) + 1],
+             c.company, c.contact, c.email,
+             (array['Public','In-house'])[(j % 2) + 1]::offering_t,
+             4 + (j % 16),
+             (array['Received','Responded','RFQ or P Sent','Awaiting Feedback','Closed Won'])[(j % 5) + 1]::inquiry_status_t
+        from client c order by c.created_date offset (j % greatest(array_length(v_clients,1),1)) limit 1;
+    end loop;
   end if;
 end $$;
 
@@ -374,13 +433,17 @@ commit;
 begin;
 do $$
 declare
-  v_any uuid; v_sa uuid; v_sb uuid;
+  v_any uuid; v_sa uuid; v_sb uuid; v_sc uuid;
   v_cl1 uuid; v_cl2 uuid; v_cl3 uuid; v_qid uuid; v_course uuid; v_price numeric;
+  pp int; v_cids uuid[]; n int;
 begin
   select user_id into v_any from profiles order by (role='super_admin') desc, (role='operations') desc limit 1;
   select sales_id into v_sa from salesperson where active order by sales_id limit 1;
   select sales_id into v_sb from salesperson where active order by sales_id offset 1 limit 1;
-  v_sb := coalesce(v_sb, v_sa);
+  select sales_id into v_sc from salesperson where active order by sales_id offset 2 limit 1;
+  v_sb := coalesce(v_sb, v_sa); v_sc := coalesce(v_sc, v_sa);
+  select array_agg(course_id order by course_name) into v_cids from course where active;
+  n := array_length(v_cids, 1);
   select client_id into v_cl1 from client order by created_date, client_id limit 1;
   select client_id into v_cl2 from client order by created_date, client_id offset 1 limit 1;
   select client_id into v_cl3 from client order by created_date, client_id offset 2 limit 1;
@@ -407,6 +470,16 @@ begin
            cert_expiry_date = coalesce(p.cert_issued_date, current_date-17) + interval '36 months'
      where p.cert_number is not null;
     update participant set result = 'Pending' where cert_number is null and attendance_status in ('Registered','Attended');
+    -- A dozen certificates renewing soon, so the "expiring within four months"
+    -- watch has content (a certificate issued three years ago is due now).
+    with picks as (
+      select participant_id, row_number() over (order by participant_id) as rn
+        from participant where cert_number is not null order by participant_id limit 12)
+    update participant p set
+      cert_issued_date = current_date - interval '35 months',
+      assessed_date = current_date - interval '35 months',
+      cert_expiry_date = current_date + (picks.rn * 9)::int
+      from picks where p.participant_id = picks.participant_id;
   end if;
 
   -- ---- Inquiry pipeline depth (value, probability, source, close date) ----
@@ -427,14 +500,26 @@ begin
     end if;
   end if;
 
+  -- ---- Multi-country: bill a batch of orders in Indonesia (IDR) so the
+  -- by-country revenue panel and fn_current_country have two countries. ----
+  if exists (select 1 from information_schema.columns where table_name='orders' and column_name='country') then
+    update orders set country = 'ID', currency = 'IDR'
+      where order_id in (
+        select order_id from orders where order_status::text <> 'Cancelled'
+        order by order_id offset 7 limit 22);
+  end if;
+
   -- ---- Pricing and discount rules ----
   if to_regclass('public.discount_rule') is not null then
     truncate table discount_rule;
     insert into discount_rule(label, course_id, training_type, country, min_seats, discount_pct, active) values
       ('Volume: 10 or more seats', null, null, null, 10, 10, true),
-      ('Public schedule promo (PH)', null, 'Professional', 'PH', 5, 5, true);
+      ('Volume: 15 or more seats', null, null, null, 15, 15, true),
+      ('Public schedule promo (PH)', null, 'Professional', 'PH', 5, 5, true),
+      ('Q1 early-bird', null, null, null, 1, 7, true);
     insert into discount_rule(label, course_id, training_type, country, min_seats, discount_amount, active) values
-      ('Certification bulk rebate', null, 'PersCert', null, 8, 3000, true);
+      ('Certification bulk rebate', null, 'PersCert', null, 8, 3000, true),
+      ('In-house group rebate', null, null, null, 12, 5000, true);
   end if;
 
   -- ---- Accounts receivable: invoices + payments (triggers recompute AR) ----
@@ -482,6 +567,20 @@ begin
       select v_qid, c.course_id, 12,
              coalesce((select fee_php from course_fee f where f.course_id = c.course_id and f.modality = 'Live Online Training' limit 1), 10000)
         from course c where c.course_name ~* 'Internal Auditor' order by c.course_name limit 1;
+    -- More quotes across clients and statuses, each with a couple of lines.
+    for pp in 0..9 loop
+      insert into quote(client_id, sales_id, status, valid_until, discount_pct, note, created_by)
+      select c.client_id, (array[v_sa, v_sb, v_sc])[(pp % 3) + 1],
+             (array['Draft','Sent','Sent','Accepted','Declined'])[(pp % 5) + 1],
+             current_date + 14 + pp, (array[0,0,5,10,0])[(pp % 5) + 1],
+             'Auto-generated sample quote.', v_any
+        from client c order by c.created_date offset (pp % greatest((select count(*)::int from client),1)) limit 1
+      returning quote_id into v_qid;
+      insert into quote_line(quote_id, course_id, seats, unit_price)
+        select v_qid, v_cids[((pp + gs) % n) + 1], 6 + gs * 4,
+               coalesce((select fee_php from course_fee f where f.course_id = v_cids[((pp + gs) % n) + 1] order by fee_php desc limit 1), 12000)
+          from generate_series(0, 1) gs;
+    end loop;
   end if;
 
   -- ---- Feedback and quality (NPS + ratings) for completed sessions ----
@@ -514,6 +613,14 @@ begin
       ('Certificate name misspelled', 'Participant name on the certificate needs correction.', 'Medium', 'Open', v_cl3, 'DONE-001', v_any),
       ('Room temperature too cold', 'Onsite feedback: training room aircon set too low.', 'Low', 'Resolved', null, 'RUN-001', v_any),
       ('Invoice amount discrepancy', 'Billed amount does not match the purchase order.', 'High', 'In Progress', v_cl2, null, v_any);
+    -- A few more tied to real completed orders, across severities and statuses.
+    insert into complaint(subject, description, severity, status, client_id, order_id, opened_by)
+      select (array['Late joining link','Materials not received','Trainer substitution','Parking access','Catering issue'])[(row_number() over () % 5)::int + 1],
+             'Auto-generated sample complaint for QA coverage.',
+             (array['Low','Medium','High'])[(row_number() over () % 3)::int + 1],
+             (array['Open','In Progress','Resolved','Closed'])[(row_number() over () % 4)::int + 1],
+             o.client_id, o.order_id, v_any
+        from orders o where o.order_status::text = 'Completed' order by o.order_id limit 6;
   end if;
 
   -- ---- Trainer availability + co-trainer assignments ----
@@ -521,6 +628,10 @@ begin
     truncate table trainer_availability;
     insert into trainer_availability(trainer_id, start_date, end_date, reason)
       select trainer_id, current_date + 10, current_date + 14, 'On leave' from trainer where code = 'TR-03';
+    insert into trainer_availability(trainer_id, start_date, end_date, reason)
+      select trainer_id, current_date + 30, current_date + 32, 'Conference' from trainer where code = 'TR-02';
+    insert into trainer_availability(trainer_id, start_date, end_date, reason)
+      select trainer_id, current_date + 45, current_date + 47, 'Personal leave' from trainer where code = 'TR-06';
   end if;
   if to_regclass('public.session_trainer') is not null then
     truncate table session_trainer;
@@ -540,6 +651,13 @@ begin
       ('booking_confirmation', 'grace@bdo.example', 'Your booking is confirmed', 'Thank you for booking with TÜV Rheinland Academy.', 'order', 'DONE-001', 'Sent', v_any),
       ('certificate_issued', 'danilo@bdo.example', 'Your certificate is ready', 'Your certificate has been issued and is attached.', 'order', 'DONE-001', 'Sent', v_any),
       ('payment_reminder', 'ella@meralco.example', 'Payment reminder', 'A balance remains on your order RUN-001.', 'order', 'RUN-001', 'Queued', v_any);
+    -- Booking confirmations for a batch of confirmed/completed orders.
+    insert into comms_log(template_key, to_email, subject, body, entity_type, entity_id, status, created_by)
+      select 'booking_confirmation', coalesce(cl.email, 'noreply@tuv.example'),
+             'Your booking is confirmed', 'Thank you for booking with TÜV Rheinland Academy.',
+             'order', o.order_id, (array['Sent','Queued'])[(row_number() over () % 2)::int + 1], v_any
+        from orders o join client cl on cl.client_id = o.client_id
+       where o.order_status::text in ('Confirmed','Completed') order by o.order_id limit 20;
     update comms_log set sent_at = now() - interval '2 days' where status = 'Sent';
   end if;
 
@@ -551,7 +669,10 @@ begin
       ('order', 'RUN-001', 'attachments/order/RUN-001/signed-quote.pdf', 'Signed Quote.pdf', 'application/pdf', v_any);
     insert into attachment(entity_type, entity_id, path, file_name, mime, uploaded_by)
       select 'session', s.schedule_id::text, 'attachments/session/' || s.schedule_id || '/roster.xlsx', 'Attendance Roster.xlsx', 'application/vnd.ms-excel', v_any
-        from schedule s where s.status = 'Completed' order by s.start_date desc limit 1;
+        from schedule s where s.status = 'Completed' order by s.start_date desc limit 8;
+    insert into attachment(entity_type, entity_id, path, file_name, mime, uploaded_by)
+      select 'order', o.order_id, 'attachments/order/' || o.order_id || '/purchase-order.pdf', 'Purchase Order.pdf', 'application/pdf', v_any
+        from orders o where o.order_status::text = 'Completed' order by o.order_id limit 10;
   end if;
 end $$;
 
