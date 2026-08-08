@@ -40,4 +40,5 @@ export const NAV: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', roles: ALL, icon: 'dashboard' },
   { path: '/reports', label: 'Reports', roles: ['super_admin', 'operations', 'business_owner'], icon: 'reports' },
   { path: '/data-quality', label: 'Data quality', roles: ['super_admin'], icon: 'quality' },
+  { path: '/admin', label: 'Users and access', roles: ['super_admin'], icon: 'admin' },
 ]

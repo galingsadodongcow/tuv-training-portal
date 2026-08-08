@@ -151,6 +151,36 @@ export function useSalespeople() {
   })
 }
 
+// ---- Admin console (super_admin) ----
+// Every salesperson, active or not, with team and region for access scoping.
+export function useAllSalespeople() {
+  return useQuery({
+    queryKey: ['salespeople_all'],
+    queryFn: () =>
+      okOr(
+        supabase.from('salesperson').select('sales_id, name, code, team, region, is_supervisor, active').order('name'),
+        []
+      ),
+  })
+}
+
+// Every user profile with its linked salesperson. RLS already limits reads of
+// other users' profiles to super_admin, so this returns just the caller's row
+// for anyone else.
+export function useAllProfiles() {
+  return useQuery({
+    queryKey: ['profiles_all'],
+    queryFn: () =>
+      okOr(
+        supabase
+          .from('profiles')
+          .select('user_id, full_name, role, sales_id, salesperson:sales_id(name, code, team, region)')
+          .order('full_name'),
+        []
+      ),
+  })
+}
+
 export function useOpenSchedules(year = 2026) {
   return useQuery({
     queryKey: ['open_schedules', year],
