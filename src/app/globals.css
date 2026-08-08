@@ -367,6 +367,15 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .cal-event-completed { background: var(--bg-subtle); color: var(--text-muted); box-shadow: inset 3px 0 0 var(--text-muted); }
 .cal-event-cancelled { background: var(--bg-subtle); color: var(--text-muted); text-decoration: line-through; box-shadow: inset 3px 0 0 var(--danger); }
 
+/* --------------------------------------------- Inquiry pipeline */
+.pipeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+.pipeline-col { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; min-width: 220px; }
+.pipeline-head { padding: 10px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pipeline-count { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text-muted); border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+.pipeline-body { padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 56px; }
+.pipeline-empty { color: var(--text-faint); text-align: center; font-size: 12px; padding: 6px; }
+.pipeline-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; box-shadow: var(--shadow-sm); }
+
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
