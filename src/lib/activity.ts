@@ -63,13 +63,28 @@ export function notificationEvents(rows: any[] = []): ActivityEvent[] {
   }))
 }
 
+// changed_fields comes back in several shapes depending on how the audit row
+// was written: an array of field names, a plain string, or a JSON object keyed
+// by field name (e.g. {stage_changed_at: {...}}). Reduce all of them to a short
+// string so React never receives an object as a child.
+function changedFieldsText(v: any): string | undefined {
+  if (v == null) return undefined
+  if (Array.isArray(v)) return v.length ? v.join(', ') : undefined
+  if (typeof v === 'object') {
+    const keys = Object.keys(v)
+    return keys.length ? keys.join(', ') : undefined
+  }
+  const s = String(v)
+  return s || undefined
+}
+
 export function auditEvents(rows: any[] = []): ActivityEvent[] {
   return rows.map((a) => ({
     id: `audit-${a.audit_id}`,
     at: a.changed_at,
     kind: 'audit',
     title: `${a.action} ${a.table_name}`,
-    detail: Array.isArray(a.changed_fields) ? a.changed_fields.join(', ') : (a.changed_fields || undefined),
+    detail: changedFieldsText(a.changed_fields),
     meta: a.actor_role,
   }))
 }
