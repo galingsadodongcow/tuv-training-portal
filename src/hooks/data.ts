@@ -181,6 +181,48 @@ export function useAllProfiles() {
   })
 }
 
+// ---- Feedback and quality ----
+export function useNpsSummary() {
+  return useQuery({
+    queryKey: ['nps_summary'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_nps_summary')
+      if (error) return null
+      return data && data.length ? data[0] : null
+    },
+  })
+}
+
+export function useTrainerQuality() {
+  return useQuery({
+    queryKey: ['trainer_quality'],
+    queryFn: () => okOr(supabase.from('v_trainer_quality').select('*').order('avg_trainer', { ascending: false, nullsFirst: false }), []),
+  })
+}
+
+export function useSessionFeedback(scheduleId?: string) {
+  return useQuery({
+    queryKey: ['session_feedback', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () => okOr(supabase.from('feedback').select('*').eq('schedule_id', scheduleId).order('submitted_at', { ascending: false }), []),
+  })
+}
+
+export function useComplaints() {
+  return useQuery({
+    queryKey: ['complaints'],
+    queryFn: () =>
+      okOr(
+        supabase
+          .from('complaint')
+          .select('*, client:client_id(company), schedule:schedule_id(start_date, course:course_id(course_name))')
+          .order('opened_at', { ascending: false })
+          .limit(500),
+        []
+      ),
+  })
+}
+
 export function useOpenSchedules(year = 2026) {
   return useQuery({
     queryKey: ['open_schedules', year],

@@ -39,6 +39,7 @@ export const NAV: NavItem[] = [
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'], icon: 'rollover' },
   { path: '/dashboard', label: 'Dashboard', roles: ALL, icon: 'dashboard' },
   { path: '/reports', label: 'Reports', roles: ['super_admin', 'operations', 'business_owner'], icon: 'reports' },
+  { path: '/quality', label: 'Feedback and quality', roles: ['super_admin', 'operations', 'business_owner'], icon: 'quality-star' },
   { path: '/data-quality', label: 'Data quality', roles: ['super_admin'], icon: 'quality' },
   { path: '/admin', label: 'Users and access', roles: ['super_admin'], icon: 'admin' },
 ]
