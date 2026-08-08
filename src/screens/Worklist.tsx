@@ -36,7 +36,9 @@ export default function Worklist() {
   const [msg, setMsg] = useState<string | null>(null)
 
   const stage = params.get('stage') || 'all'
-  const who = params.get('who') || 'mine'
+  // Salespeople land on their own queue; operations and other non-selling roles
+  // land on everyone, since they do not own orders.
+  const who = params.get('who') || (profile?.salesperson?.code ? 'mine' : 'all')
   const view = params.get('view') || 'all'
   const setParam = (k: string, v: string) => {
     const n = new URLSearchParams(params.toString())
@@ -221,8 +223,10 @@ export default function Worklist() {
                       <option value="">Unassigned</option>
                       {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
                     </select>
-                  ) : o.owner ? o.owner : (
+                  ) : o.owner ? o.owner : profile?.sales_id ? (
                     <button className="btn btn-sm" disabled={busy === o.order_id} onClick={() => selfAssign(o.order_id)}>Pick up</button>
+                  ) : (
+                    <span className="fill-label">Unassigned</span>
                   )}
                 </td>
                 <td className="right">{php(o.total_amount)}</td>
