@@ -9,6 +9,7 @@ import RosterPanel from '../components/RosterPanel'
 import TransferOrder from '../components/TransferOrder'
 import CloseSession from '../components/CloseSession'
 import CancelSession from '../components/CancelSession'
+import GoNoGoPanel from '../components/GoNoGoPanel'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordTabs, RecordSection, KeyVal, RecordNotice } from '../components/record'
 import { useToast } from '../components/Toast'
@@ -97,19 +98,6 @@ export default function SessionDetail() {
     setBusy('')
   }
 
-  const proposeCancel = async () => {
-    setBusy('cancel'); setMsg(null)
-    const { error } = await supabase.from('approval').insert({
-      object_type: 'Schedule cancellation',
-      schedule_id: schedule.schedule_id,
-      requested_by: profile?.user_id,
-      note: `Proposed from session. Booked ${schedule.booked_participants} of ${schedule.min_participants} min.`,
-    })
-    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
-    else { setMsg({ ok: true, t: 'Cancellation proposed. The business owner decides on the Approvals screen.' }); invalidate(['approvals']); toast.success('Cancellation proposed.') }
-    setBusy('')
-  }
-
   const setStatus = async (status: string) => {
     setBusy('status'); setMsg(null)
     const { error } = await supabase.from('schedule').update({ status }).eq('schedule_id', schedule.schedule_id)
@@ -167,6 +155,8 @@ export default function SessionDetail() {
             ))}
           </div>
 
+          <GoNoGoPanel schedule={schedule} />
+
           {canForecast(role) && (
             <RecordSection title="Forecast (business owner)">
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -188,7 +178,6 @@ export default function SessionDetail() {
                   <button key={s} className="btn btn-ghost btn-sm" disabled={busy === 'status' || schedule.status === s} onClick={() => setStatus(s)}>{s}</button>
                 ))}
                 {schedule.status !== 'Completed' && <button className="btn btn-sm" onClick={() => setClosing(true)}>Close session</button>}
-                <button className="btn btn-danger btn-sm" disabled={busy === 'cancel'} onClick={proposeCancel}>Propose cancellation</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setCancelling(true)}>Cancel with dispositions</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => router.push(`/session/new?clone=${schedule.schedule_id}`)}>Clone</button>
               </div>

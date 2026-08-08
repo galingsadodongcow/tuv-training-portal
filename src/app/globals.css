@@ -301,6 +301,9 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .record-actions { flex-shrink: 0; }
 .record-section { border-top: 1px solid var(--border-soft); padding-top: 18px; margin-top: 18px; }
 .record-kv-value { font-weight: 600; margin-top: 2px; }
+.gng-list { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; }
+.gng-prior { display: flex; flex-direction: column; gap: 6px; }
+.gng-prior-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
 
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }

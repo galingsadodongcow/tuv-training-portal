@@ -228,6 +228,23 @@ export function useYears() {
   })
 }
 
+// Every approval tied to one schedule, newest first. Feeds the Go/No-Go
+// panel's prior-decisions list (cancellations, no-go proposals, reviews).
+export function useScheduleApprovals(scheduleId?: string) {
+  return useQuery({
+    queryKey: ['schedule_approvals', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('approval')
+          .select('approval_id, object_type, decision, decision_date, note, requested_by, created_at')
+          .eq('schedule_id', scheduleId)
+          .order('created_at', { ascending: false })
+      ),
+  })
+}
+
 export function useSessionNotes(scheduleId?: string) {
   return useQuery({
     queryKey: ['notes', scheduleId],
