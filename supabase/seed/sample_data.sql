@@ -65,7 +65,7 @@ begin
   insert into trainer(name, code, trainer_type, email) values ('Jose Ramos','TR-02','Internal','jose@example.com') returning trainer_id into v_t2;
   insert into trainer(name, code, trainer_type, email) values ('Lea Gomez','TR-03','Associate','lea@example.com') returning trainer_id into v_t3;
   insert into venue(name, city, capacity, venue_type) values ('Makati Training Center','Makati',25,'Training Room') returning venue_id into v_v1;
-  insert into venue(name, city, capacity, venue_type) values ('Cebu Hub','Cebu',18,'Training Room') returning venue_id into v_v2;
+  insert into venue(name, city, capacity, venue_type) values ('Cebu Hub','Cebu',22,'Training Room') returning venue_id into v_v2;
   insert into venue(name, city, capacity, venue_type) values ('Virtual Classroom',null,100,'Online') returning venue_id into v_v3;
 
   -- Courses. QMS and EMS are IRCA lead auditor courses (max 10). The rest are
@@ -100,7 +100,7 @@ begin
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, actual_participants, actual_revenue, trainer_id, venue_id)
     values (v_qms, v_year, 'January', current_date - 20, current_date - 18, 'Live Online Training', 38000, 'Completed', 'Go', 8, 10, 8, 8, 304000, v_t2, v_v3) returning schedule_id into v_s6;
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
-    values (v_bosh, v_year, 'March', current_date + 30, current_date + 31, 'Face-to-face', 12000, 'Cancelled', 'No-Go', 8, 20, 0, null, null) returning schedule_id into v_s7;
+    values (v_bosh, v_year, 'March', current_date + 30, current_date + 31, 'Face-to-face', 12000, 'Tentative', 'No-Go', 8, 20, 0, null, null) returning schedule_id into v_s7;
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, private_run, trainer_id, venue_id)
     values (v_ems, v_year, 'February', current_date + 25, current_date + 27, 'Face-to-face', 45000, 'Confirmed', 'No-Go', 8, 10, 6, true, v_t3, v_v1) returning schedule_id into v_s8;
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants)
@@ -212,15 +212,19 @@ begin
     (v_s1, v_u_any, 'Venue confirmed. Awaiting final headcount from Globe.'),
     (v_s5, v_u_any, 'Session running. 3 of 6 attended day one.');
 
-  -- Approvals: two pending (decide on the Approvals screen), two decided.
+  -- Approvals. Pending: a cancellation on s2 and the Q1 forecast. Decided: an
+  -- approved cancellation on s7, and a rejected forecast.
   insert into approval(object_type, schedule_id, quarter, requested_by, decision, note) values
-    ('Schedule cancellation', v_s7, null, v_u_ops, 'Pending', 'Below minimum with no movement.');
+    ('Schedule cancellation', v_s2, null, v_u_ops, 'Pending', 'Below minimum with no movement.');
   insert into approval(object_type, schedule_id, quarter, requested_by, decision, note) values
     ('Forecast sign-off', null, 'Q1 2026', v_u_bo, 'Pending', 'Q1 forecast for review.');
   insert into approval(object_type, schedule_id, quarter, requested_by, decided_by, decision, decision_date, note) values
-    ('Schedule cancellation', v_s2, null, v_u_ops, v_u_bo, 'Approved', current_date - 2, 'Approved, notify registrants.');
+    ('Schedule cancellation', v_s7, null, v_u_ops, v_u_bo, 'Approved', current_date - 3, 'Approved, session cancelled.');
   insert into approval(object_type, schedule_id, quarter, requested_by, decided_by, decision, decision_date, note) values
     ('Forecast sign-off', null, 'Q4 2025', v_u_bo, v_u_bo, 'Rejected', current_date - 30, 'Numbers too optimistic.');
+
+  -- With an approved cancellation on record, cancel s7 (the guard now passes).
+  update schedule set status = 'Cancelled', go_status = 'No-Go' where schedule_id = v_s7;
 
   -- A duplicate candidate for review.
   insert into duplicate_candidate(order_id_a, order_id_b, match_basis, status) values
