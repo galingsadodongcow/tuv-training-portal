@@ -143,9 +143,9 @@ begin
   select total_amount into v_total from orders where order_id = p_order;
   select coalesce(sum(amount), 0) into v_paid from payment where order_id = p_order;
   update orders set payment_status =
-    case when coalesce(v_total,0) > 0 and v_paid >= v_total then 'Paid'
+    (case when coalesce(v_total,0) > 0 and v_paid >= v_total then 'Paid'
          when v_paid > 0 then 'Partial'
-         else 'Unpaid' end
+         else 'Unpaid' end)::payment_status_t
   where order_id = p_order;
 end $$;
 

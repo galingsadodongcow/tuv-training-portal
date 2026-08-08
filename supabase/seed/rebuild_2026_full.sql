@@ -361,3 +361,198 @@ select p.user_id, 'approval', 'Approval waiting', 'A schedule cancellation is pe
 from profiles p where p.role in ('business_owner','super_admin');
 
 commit;
+
+-- ===========================================================================
+-- PART 3 - A–N feature data (accounts receivable, quotations, CRM, feedback
+-- and quality, pricing rules, trainer availability, communications,
+-- attachments, assessments and certificate validity).
+--
+-- Every block is guarded: a table section runs only if that migration has been
+-- applied, and a column update runs only if that column exists. So this part is
+-- safe on any subset of the program, and safe to re-run.
+-- ===========================================================================
+begin;
+do $$
+declare
+  v_any uuid; v_sa uuid; v_sb uuid;
+  v_cl1 uuid; v_cl2 uuid; v_cl3 uuid; v_qid uuid; v_course uuid; v_price numeric;
+begin
+  select user_id into v_any from profiles order by (role='super_admin') desc, (role='operations') desc limit 1;
+  select sales_id into v_sa from salesperson where active order by sales_id limit 1;
+  select sales_id into v_sb from salesperson where active order by sales_id offset 1 limit 1;
+  v_sb := coalesce(v_sb, v_sa);
+  select client_id into v_cl1 from client order by created_date, client_id limit 1;
+  select client_id into v_cl2 from client order by created_date, client_id offset 1 limit 1;
+  select client_id into v_cl3 from client order by created_date, client_id offset 2 limit 1;
+
+  -- ---- Cost inputs so profitability shows a real margin ----
+  update trainer set daily_rate = case when trainer_type = 'Internal' then 8000 else 12000 end where daily_rate is null;
+  update venue   set day_rate   = case when venue_type = 'Online' then 3000 else 15000 end     where day_rate is null;
+  if exists (select 1 from information_schema.columns where table_name='schedule' and column_name='material_cost') then
+    update schedule set material_cost = greatest(coalesce(booked_participants,0),1) * 500 where coalesce(material_cost,0) = 0;
+  end if;
+
+  -- ---- Course assessment attributes + certificate validity ----
+  if exists (select 1 from information_schema.columns where table_name='course' and column_name='has_assessment') then
+    update course set has_assessment = true, pass_mark = 70,
+           cert_validity_months = case when training_type = 'PersCert' then 36 else null end
+     where training_type = 'PersCert';
+    update course set has_assessment = true, pass_mark = 60 where course_name ~* 'Internal Auditor';
+  end if;
+
+  -- ---- Participant scores, results, and certificate expiry ----
+  if exists (select 1 from information_schema.columns where table_name='participant' and column_name='score') then
+    update participant p set score = 85 + (abs(hashtext(p.participant_id::text) % 12)),
+           result = 'Pass', assessed_date = coalesce(p.cert_issued_date, current_date-17),
+           cert_expiry_date = coalesce(p.cert_issued_date, current_date-17) + interval '36 months'
+     where p.cert_number is not null;
+    update participant set result = 'Pending' where cert_number is null and attendance_status in ('Registered','Attended');
+  end if;
+
+  -- ---- Inquiry pipeline depth (value, probability, source, close date) ----
+  if exists (select 1 from information_schema.columns where table_name='inquiry' and column_name='est_value') then
+    update inquiry set
+      est_value = coalesce(pax,5) * 15000,
+      probability = case status::text when 'Received' then 20 when 'Responded' then 40
+                    when 'RFQ or P Sent' then 60 when 'Awaiting Feedback' then 75
+                    when 'Closed Won' then 100 else 15 end,
+      source = (array['Website','Referral','Webshop','Event','Email campaign'])[(abs(hashtext(company) % 5)) + 1],
+      expected_close = inquiry_date + 45
+     where est_value is null;
+    if v_sa is not null then
+      insert into inquiry(inquiry_date, sales_id, course_id, company, contact, email, offering_type, pax, status, est_value, probability, source, lost_reason)
+      select current_date-25, v_sa, course_id, 'Wilcon Depot', 'Rina Sy', 'rina@wilcon.example', 'In-house', 9,
+             'Closed Lost'::inquiry_status_t, 135000, 0, 'Referral', 'Chose a competitor on price'
+      from course order by course_name limit 1;
+    end if;
+  end if;
+
+  -- ---- Pricing and discount rules ----
+  if to_regclass('public.discount_rule') is not null then
+    truncate table discount_rule;
+    insert into discount_rule(label, course_id, training_type, country, min_seats, discount_pct, active) values
+      ('Volume: 10 or more seats', null, null, null, 10, 10, true),
+      ('Public schedule promo (PH)', null, 'Professional', 'PH', 5, 5, true);
+    insert into discount_rule(label, course_id, training_type, country, min_seats, discount_amount, active) values
+      ('Certification bulk rebate', null, 'PersCert', null, 8, 3000, true);
+  end if;
+
+  -- ---- Accounts receivable: invoices + payments (triggers recompute AR) ----
+  if to_regclass('public.invoice') is not null then
+    truncate table invoice, payment;
+    insert into invoice(order_id, invoice_number, issue_date, due_date, amount, status, created_by)
+      select o.order_id, 'INV-' || right(o.order_id, 6), o.order_date + 2, o.order_date + 32, o.total_amount,
+             case when o.payment_status::text = 'Paid' then 'Paid' else 'Sent' end, v_any
+        from orders o
+       where o.order_status::text in ('Confirmed','Completed') and coalesce(o.total_amount,0) > 0;
+    insert into payment(order_id, paid_date, amount, method, reference, created_by)
+      select o.order_id, o.order_date + 10,
+             case when o.payment_status::text = 'Paid' then o.total_amount else round(o.total_amount * 0.5) end,
+             'Bank transfer', 'OR-' || right(o.order_id, 6), v_any
+        from orders o
+       where o.order_status::text in ('Confirmed','Completed')
+         and o.payment_status::text in ('Paid','Partial') and coalesce(o.total_amount,0) > 0;
+  end if;
+
+  -- ---- CRM contacts ----
+  if to_regclass('public.contact') is not null then
+    truncate table contact;
+    insert into contact(client_id, name, title, email, phone, is_primary)
+      select c.client_id, c.contact, 'Primary Contact', c.email, c.phone, true
+        from client c where c.contact is not null;
+    insert into contact(client_id, name, title, email, is_primary)
+      select c.client_id, 'L&D Coordinator', 'Learning and Development', 'learning.' || c.email, false
+        from client c where c.email is not null order by c.created_date limit 6;
+  end if;
+
+  -- ---- Quotations ----
+  if to_regclass('public.quote') is not null then
+    truncate table quote cascade;
+    insert into quote(client_id, sales_id, status, valid_until, note, created_by)
+      values (v_cl1, v_sa, 'Sent', current_date + 21, 'Standard corporate rate for Q3 intake.', v_any)
+      returning quote_id into v_qid;
+    insert into quote_line(quote_id, course_id, seats, unit_price)
+      select v_qid, c.course_id, 8,
+             coalesce((select fee_php from course_fee f where f.course_id = c.course_id and f.modality = 'Face-to-face' limit 1), 12000)
+        from course c order by c.course_name limit 2;
+    insert into quote(client_id, sales_id, status, valid_until, discount_pct, note, created_by)
+      values (v_cl2, v_sb, 'Accepted', current_date + 30, 10, 'Volume discount applied.', v_any)
+      returning quote_id into v_qid;
+    insert into quote_line(quote_id, course_id, seats, unit_price)
+      select v_qid, c.course_id, 12,
+             coalesce((select fee_php from course_fee f where f.course_id = c.course_id and f.modality = 'Live Online Training' limit 1), 10000)
+        from course c where c.course_name ~* 'Internal Auditor' order by c.course_name limit 1;
+  end if;
+
+  -- ---- Feedback and quality (NPS + ratings) for completed sessions ----
+  if to_regclass('public.feedback') is not null then
+    truncate table feedback;
+    insert into feedback(schedule_id, nps, content_rating, trainer_rating, venue_rating, comments, created_by)
+      select s.schedule_id,
+             6 + (abs(hashtext(s.schedule_id::text) % 5)),
+             4 + (abs(hashtext(s.schedule_id::text) % 2)),
+             4 + (abs(hashtext(s.schedule_id::text || 'x') % 2)),
+             4,
+             (array['Great facilitation and practical examples.','Well paced, clear material.',
+                    'Trainer was knowledgeable.','Good venue and logistics.'])[(abs(hashtext(s.schedule_id::text) % 4)) + 1],
+             v_any
+        from schedule s where s.status = 'Completed';
+    -- a second response per completed session for a fuller distribution
+    insert into feedback(schedule_id, nps, content_rating, trainer_rating, comments, created_by)
+      select s.schedule_id,
+             5 + (abs(hashtext(s.schedule_id::text || 'b') % 6)),
+             3 + (abs(hashtext(s.schedule_id::text || 'b') % 3)),
+             4 + (abs(hashtext(s.schedule_id::text || 'c') % 2)),
+             'Would attend another course.', v_any
+        from schedule s where s.status = 'Completed';
+  end if;
+
+  -- ---- Complaints ----
+  if to_regclass('public.complaint') is not null then
+    truncate table complaint;
+    insert into complaint(subject, description, severity, status, client_id, order_id, opened_by) values
+      ('Certificate name misspelled', 'Participant name on the certificate needs correction.', 'Medium', 'Open', v_cl3, 'DONE-001', v_any),
+      ('Room temperature too cold', 'Onsite feedback: training room aircon set too low.', 'Low', 'Resolved', null, 'RUN-001', v_any),
+      ('Invoice amount discrepancy', 'Billed amount does not match the purchase order.', 'High', 'In Progress', v_cl2, null, v_any);
+  end if;
+
+  -- ---- Trainer availability + co-trainer assignments ----
+  if to_regclass('public.trainer_availability') is not null then
+    truncate table trainer_availability;
+    insert into trainer_availability(trainer_id, start_date, end_date, reason)
+      select trainer_id, current_date + 10, current_date + 14, 'On leave' from trainer where code = 'TR-03';
+  end if;
+  if to_regclass('public.session_trainer') is not null then
+    truncate table session_trainer;
+    insert into session_trainer(schedule_id, trainer_id, role)
+      select s.schedule_id, t.trainer_id, 'Assistant'
+        from schedule s
+        cross join lateral (select trainer_id from trainer where code = 'TR-05' limit 1) t
+       where s.status in ('Running','Confirmed') and s.trainer_id is not null and s.trainer_id <> t.trainer_id
+       limit 4
+      on conflict do nothing;
+  end if;
+
+  -- ---- Communications log ----
+  if to_regclass('public.comms_log') is not null then
+    truncate table comms_log;
+    insert into comms_log(template_key, to_email, subject, body, entity_type, entity_id, status, created_by) values
+      ('booking_confirmation', 'grace@bdo.example', 'Your booking is confirmed', 'Thank you for booking with TÜV Rheinland Academy.', 'order', 'DONE-001', 'Sent', v_any),
+      ('certificate_issued', 'danilo@bdo.example', 'Your certificate is ready', 'Your certificate has been issued and is attached.', 'order', 'DONE-001', 'Sent', v_any),
+      ('payment_reminder', 'ella@meralco.example', 'Payment reminder', 'A balance remains on your order RUN-001.', 'order', 'RUN-001', 'Queued', v_any);
+    update comms_log set sent_at = now() - interval '2 days' where status = 'Sent';
+  end if;
+
+  -- ---- Attachments (metadata; storage objects are illustrative) ----
+  if to_regclass('public.attachment') is not null then
+    truncate table attachment;
+    insert into attachment(entity_type, entity_id, path, file_name, mime, uploaded_by) values
+      ('order', 'DONE-001', 'attachments/order/DONE-001/purchase-order.pdf', 'Purchase Order.pdf', 'application/pdf', v_any),
+      ('order', 'RUN-001', 'attachments/order/RUN-001/signed-quote.pdf', 'Signed Quote.pdf', 'application/pdf', v_any);
+    insert into attachment(entity_type, entity_id, path, file_name, mime, uploaded_by)
+      select 'session', s.schedule_id::text, 'attachments/session/' || s.schedule_id || '/roster.xlsx', 'Attendance Roster.xlsx', 'application/vnd.ms-excel', v_any
+        from schedule s where s.status = 'Completed' order by s.start_date desc limit 1;
+  end if;
+end $$;
+
+commit;
