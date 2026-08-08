@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useFulfillmentQueue, useSalespeople, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
 import { primaryFlag, ORDER_VIEWS, orderView } from '../lib/orderState'
@@ -27,6 +28,7 @@ export default function Worklist() {
   const invalidate = useInvalidate()
   const qc = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -116,6 +118,16 @@ export default function Worklist() {
   }
 
   const reassign = async (orderId: string, salesId: string) => {
+    // Reassignment is a destructive action: confirm and take a reason first.
+    const who = salesId ? (people.data?.find((p: any) => p.sales_id === salesId)?.name || 'another owner') : 'no one'
+    const res = await confirm({
+      title: salesId ? 'Reassign this order?' : 'Unassign this order?',
+      body: `Ownership changes to ${who}.`,
+      confirmLabel: salesId ? 'Reassign' : 'Unassign',
+      tone: salesId ? 'default' : 'danger',
+      reason: 'optional',
+    })
+    if (!res.ok) return
     setBusy(orderId); setMsg(null)
     // Empty selection means unassign: delete the row rather than writing an empty FK.
     const { error } = salesId

@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useApprovals } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate } from '../lib/format'
 
@@ -15,15 +16,25 @@ export default function Approvals() {
   const approvals = useApprovals()
   const qc = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const [msg, setMsg] = useState(null)
   const canDecide = ['business_owner', 'super_admin'].includes(profile?.role)
 
-  const decide = async (id, decision) => {
+  const decide = async (a, decision) => {
+    // Approving or rejecting is consequential: confirm and record a reason.
+    const res = await confirm({
+      title: `${decision === 'Approved' ? 'Approve' : 'Reject'} this request?`,
+      body: a.object_type,
+      confirmLabel: decision === 'Approved' ? 'Approve' : 'Reject',
+      tone: decision === 'Rejected' ? 'danger' : 'default',
+      reason: 'optional',
+      reasonLabel: 'Decision note',
+    })
+    if (!res.ok) return
     setMsg(null)
-    const { error } = await supabase
-      .from('approval')
-      .update({ decision, decided_by: profile.user_id, decision_date: new Date().toISOString().slice(0, 10) })
-      .eq('approval_id', id)
+    const patch: any = { decision, decided_by: profile.user_id, decision_date: new Date().toISOString().slice(0, 10) }
+    if (res.reason) patch.note = a.note ? `${a.note} — ${decision}: ${res.reason}` : `${decision}: ${res.reason}`
+    const { error } = await supabase.from('approval').update(patch).eq('approval_id', a.approval_id)
     if (error) { setMsg(error.message); toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['approvals'] })
     toast.success(`Marked ${decision}.`)
@@ -53,8 +64,8 @@ export default function Approvals() {
         <td className="right">
           {canDecide ? (
             <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
-              <button className="btn btn-sm" onClick={() => decide(a.approval_id, 'Approved')}>Approve</button>
-              <button className="btn btn-danger btn-sm" onClick={() => decide(a.approval_id, 'Rejected')}>Reject</button>
+              <button className="btn btn-sm" onClick={() => decide(a, 'Approved')}>Approve</button>
+              <button className="btn btn-danger btn-sm" onClick={() => decide(a, 'Rejected')}>Reject</button>
             </div>
           ) : (
             <span className="muted fill-label">Awaiting business owner</span>
