@@ -46,11 +46,10 @@ export default function ClientDetail() {
   // without destroying history; Restore clears it.
   const softDeleteReady = c.deleted_at !== undefined
   const archived = !!c.deleted_at
-  // Match the database: the super admin, or the salesperson who owns this
-  // client, may archive it. Business owner cannot write client rows, so the
-  // control is not offered to them (it would be denied by RLS).
+  // Match the database: the super admin, the business owner, or the salesperson
+  // who owns this client may archive it.
   const isOwnerSales = profile?.role === 'sales' && !!profile?.sales_id && c.owner_sales_id === profile?.sales_id
-  const canArchive = softDeleteReady && (profile?.role === 'super_admin' || isOwnerSales)
+  const canArchive = softDeleteReady && (['super_admin', 'business_owner'].includes(profile?.role as string) || isOwnerSales)
 
   const setDeleted = async (value: string | null) => {
     const { error } = await supabase.from('client').update({ deleted_at: value }).eq('client_id', id)
