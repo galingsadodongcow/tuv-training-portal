@@ -519,6 +519,38 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// ---- Trainer management ----
+export function useTrainerCourseMap() {
+  return useQuery({
+    queryKey: ['trainer_course_map'],
+    queryFn: () => okOr(supabase.from('trainer_course').select('trainer_id, course_id'), []),
+  })
+}
+
+export function useTrainerCourses(trainerId?: string) {
+  return useQuery({
+    queryKey: ['trainer_courses', trainerId],
+    enabled: !!trainerId,
+    queryFn: () => okOr(supabase.from('trainer_course').select('course_id').eq('trainer_id', trainerId), []),
+  })
+}
+
+export function useTrainerAvailability(trainerId?: string) {
+  return useQuery({
+    queryKey: ['trainer_availability', trainerId],
+    enabled: !!trainerId,
+    queryFn: () => okOr(supabase.from('trainer_availability').select('*').eq('trainer_id', trainerId).order('start_date', { ascending: false }), []),
+  })
+}
+
+export function useSessionTrainers(scheduleId?: string) {
+  return useQuery({
+    queryKey: ['session_trainers', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () => okOr(supabase.from('session_trainer').select('*, trainer:trainer_id(name)').eq('schedule_id', scheduleId), []),
+  })
+}
+
 // ---- CRM: contacts and interactions ----
 export function useContacts(clientId?: string) {
   return useQuery({

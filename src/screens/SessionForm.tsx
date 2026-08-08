@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
-import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate, useTrainers, useVenues, checkConflicts } from '../hooks/data'
+import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate, useTrainers, useVenues, checkConflicts, useTrainerCourseMap, useSessionTrainers } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import DateSegments from '../components/DateSegments'
 import { useToast } from '../components/Toast'
@@ -22,6 +22,8 @@ export default function SessionForm() {
   const people = useSalespeople()
   const trainers = useTrainers()
   const venues = useVenues()
+  const tcMap = useTrainerCourseMap()
+  const sessionTrainers = useSessionTrainers(editing ? id : undefined)
   const invalidate = useInvalidate()
   const router = useRouter()
   const toast = useToast()
@@ -142,6 +144,13 @@ export default function SessionForm() {
     }
   }
 
+  const assistantIds = new Set((sessionTrainers.data || []).map((s: any) => s.trainer_id))
+  const toggleAssistant = async (trainerId: string, on: boolean) => {
+    if (on) await supabase.from('session_trainer').insert({ schedule_id: id, trainer_id: trainerId, role: 'Assistant' })
+    else await supabase.from('session_trainer').delete().eq('schedule_id', id).eq('trainer_id', trainerId)
+    invalidate(['session_trainers'])
+  }
+
   if (courses.isLoading || years.isLoading || !loaded) return <Spinner label="Loading" />
   if (courses.error) return <ErrorNote error={courses.error} />
 
@@ -202,7 +211,10 @@ export default function SessionForm() {
             <label className="field"><span>Trainer</span>
               <select value={f.trainer_id} onChange={set('trainer_id')}>
                 <option value="">Not assigned yet</option>
-                {trainers.data?.map((t: any) => (<option key={t.trainer_id} value={t.trainer_id}>{t.name} ({t.trainer_type})</option>))}
+                {trainers.data?.map((t: any) => {
+                  const qualified = (tcMap.data || []).some((m: any) => m.trainer_id === t.trainer_id && m.course_id === f.course_id)
+                  return <option key={t.trainer_id} value={t.trainer_id}>{t.name} ({t.trainer_type}){f.course_id && qualified ? ' · qualified' : ''}</option>
+                })}
               </select>
             </label>
             <label className="field"><span>Venue</span>
@@ -225,6 +237,20 @@ export default function SessionForm() {
               <span style={{ margin: 0 }}>Private run (closed in-house)</span>
             </label>
           </div>
+
+          {editing && (
+            <div className="drawer-section" style={{ marginBottom: 12 }}>
+              <div className="k-label" style={{ marginBottom: 6 }}>Co-trainers (assistants)</div>
+              <div className="chip-row" style={{ gap: 12 }}>
+                {(trainers.data || []).filter((t: any) => t.trainer_id !== f.trainer_id).map((t: any) => (
+                  <label key={t.trainer_id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    <input type="checkbox" style={{ width: 'auto' }} checked={assistantIds.has(t.trainer_id)} onChange={(e) => toggleAssistant(t.trainer_id, e.target.checked)} />
+                    {t.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {checking && <div className="fill-label" style={{ marginBottom: 8 }}>Checking availability…</div>}
           {conflicts.length > 0 && (

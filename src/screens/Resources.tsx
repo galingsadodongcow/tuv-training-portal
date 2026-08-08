@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num } from '../lib/format'
 import Link from 'next/link'
+import TrainerManage from '../components/TrainerManage'
 
 const T_TYPES = ['Internal', 'Associate', 'External']
 const V_TYPES = ['Training Room', 'Hotel', 'Client Site', 'Online']
@@ -25,6 +26,7 @@ export default function Resources() {
   const [vForm, setVForm] = useState({ name: '', city: '', capacity: '', venue_type: 'Training Room', day_rate: '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [managing, setManaging] = useState<any>(null)
 
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
 
@@ -124,9 +126,12 @@ export default function Resources() {
                       <td className="right fill-label">{l?.next_session ? shortDate(l.next_session) : '—'}</td>
                       <td className="right">
                         {canEdit && (
-                          <button className="linkbtn" onClick={() => toggle('trainer', 'trainer_id', t.trainer_id, t.active)}>
-                            {t.active ? 'Deactivate' : 'Reactivate'}
-                          </button>
+                          <div className="toolbar" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                            <button className="linkbtn" onClick={() => setManaging(t)}>Manage</button>
+                            <button className="linkbtn" onClick={() => toggle('trainer', 'trainer_id', t.trainer_id, t.active)}>
+                              {t.active ? 'Deactivate' : 'Reactivate'}
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -219,6 +224,8 @@ export default function Resources() {
           {load.data?.length === 0 && <div className="empty">No trainer activity yet.</div>}
         </div>
       )}
+
+      {managing && <TrainerManage trainer={managing} onClose={() => setManaging(null)} />}
     </>
   )
 }
