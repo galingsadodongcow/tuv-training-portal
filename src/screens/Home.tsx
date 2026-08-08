@@ -119,7 +119,7 @@ export default function Home() {
     sales: [
       { label: 'Unassigned orders', value: unassigned, sub: 'Claim these', href: '/worklist?who=unassigned', alert: true },
       { label: 'My open orders', value: mine, sub: 'Assigned to me', href: '/worklist?who=mine' },
-      { label: 'My stalled orders', value: myStalled, sub: 'Over 14 days in stage', href: '/worklist?who=mine', alert: true },
+      { label: 'My stalled orders', value: myStalled, sub: 'Over 14 days in stage', href: '/worklist?who=mine&view=stalled', alert: true },
       { label: 'Sessions needing pax', value: belowMin, sub: 'Below minimum, sell seats', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
     ],
     business_owner: [

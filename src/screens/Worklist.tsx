@@ -9,6 +9,7 @@ import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
+import { primaryFlag, ORDER_VIEWS, orderView } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback']
 const NEXT: Record<string, string> = {
@@ -35,6 +36,7 @@ export default function Worklist() {
 
   const stage = params.get('stage') || 'all'
   const who = params.get('who') || 'mine'
+  const view = params.get('view') || 'all'
   const setParam = (k: string, v: string) => {
     const n = new URLSearchParams(params.toString())
     if (!v || v === 'all') n.delete(k)
@@ -45,26 +47,35 @@ export default function Worklist() {
   const myCode = profile?.salesperson?.code
   const canAssignAny = ['super_admin', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
 
-  const rows = useMemo(() => {
+  // Owner scope first: mine, unassigned, or everyone.
+  const whoScoped = useMemo(() => {
     if (!queue.data) return []
     return queue.data.filter(
       (o: any) =>
-        (stage === 'all' || o.fulfillment_stage === stage) &&
-        (who === 'all' ||
-          (who === 'mine' && o.owner_code === myCode) ||
-          (who === 'unassigned' && !o.owner_code))
+        who === 'all' ||
+        (who === 'mine' && o.owner_code === myCode) ||
+        (who === 'unassigned' && !o.owner_code)
     )
-  }, [queue.data, stage, who, myCode])
-
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {}
-    for (const o of queue.data || []) {
-      if (who === 'mine' && o.owner_code !== myCode) continue
-      if (who === 'unassigned' && o.owner_code) continue
-      c[o.fulfillment_stage] = (c[o.fulfillment_stage] || 0) + 1
-    }
-    return c
   }, [queue.data, who, myCode])
+
+  // Rows shown: the owner scope narrowed by the named view and the stage.
+  const rows = useMemo(
+    () => whoScoped.filter((o: any) => (stage === 'all' || o.fulfillment_stage === stage) && orderView(view).test(o)),
+    [whoScoped, stage, view]
+  )
+
+  // How much work of each kind exists in the current owner scope.
+  const viewCounts = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const v of ORDER_VIEWS) c[v.key] = whoScoped.filter(v.test).length
+    return c
+  }, [whoScoped])
+
+  const stageCounts = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const o of whoScoped) c[o.fulfillment_stage] = (c[o.fulfillment_stage] || 0) + 1
+    return c
+  }, [whoScoped])
 
   const advance = async (orderId: string, to: string) => {
     setBusy(orderId); setMsg(null)
@@ -127,7 +138,11 @@ export default function Worklist() {
       <div className="page-head">
         <div>
           <h1>Fulfillment</h1>
-          <p>{rows.length} order{rows.length === 1 ? '' : 's'} · {php(value)} moving through the pipeline. Oldest first.</p>
+          <p>
+            {rows.length} order{rows.length === 1 ? '' : 's'} · {php(value)}
+            {view !== 'all' ? ` · ${orderView(view).label.toLowerCase()}` : ''}
+            {who === 'unassigned' ? ' · unassigned, ready to claim' : ''}. Oldest first.
+          </p>
         </div>
       </div>
 
@@ -142,18 +157,19 @@ export default function Worklist() {
       <div className="filters">
         {['mine', 'unassigned', 'all'].map((w) => (
           <button key={w} className={`btn btn-sm ${who === w ? '' : 'btn-ghost'}`} onClick={() => setParam('who', w)}>
-            {w === 'mine' ? 'Mine' : w === 'unassigned' ? 'Unassigned' : 'Everyone'}
+            {w === 'mine' ? 'Mine' : w === 'unassigned' ? 'Claim queue' : 'Everyone'}
           </button>
         ))}
+        <select value={stage} onChange={(e) => setParam('stage', e.target.value)} style={{ marginLeft: 'auto' }}>
+          <option value="all">All stages ({Object.values(stageCounts).reduce((a, b) => a + b, 0)})</option>
+          {STAGES.map((s) => (<option key={s} value={s}>{s} ({stageCounts[s] || 0})</option>))}
+        </select>
       </div>
 
       <div className="filters">
-        <button className={`btn btn-sm ${stage === 'all' ? '' : 'btn-ghost'}`} onClick={() => setParam('stage', 'all')}>
-          All stages ({Object.values(counts).reduce((a, b) => a + b, 0)})
-        </button>
-        {STAGES.map((s) => (
-          <button key={s} className={`btn btn-sm ${stage === s ? '' : 'btn-ghost'}`} onClick={() => setParam('stage', s)}>
-            {s} ({counts[s] || 0})
+        {ORDER_VIEWS.map((v) => (
+          <button key={v.key} className={`btn btn-sm ${view === v.key ? '' : 'btn-ghost'}`} onClick={() => setParam('view', v.key)}>
+            {v.label} ({viewCounts[v.key] || 0})
           </button>
         ))}
       </div>
@@ -179,7 +195,17 @@ export default function Worklist() {
                   <div style={{ fontWeight: 600 }}>{o.company || o.contact || '—'}</div>
                   <div className="fill-label">{o.email}</div>
                 </td>
-                <td><span className="pill pill-webshop">{o.fulfillment_stage}</span></td>
+                <td>
+                  <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                  {(() => {
+                    const f = primaryFlag(o)
+                    return f ? (
+                      <div className="fill-label" style={{ marginTop: 4, color: f.tone === 'danger' ? 'var(--tr-red)' : f.tone === 'warn' ? 'var(--tr-amber)' : 'inherit' }}>
+                        {f.label}
+                      </div>
+                    ) : null
+                  })()}
+                </td>
                 <td className="right">
                   {o.age_days}d
                   <div className="fill-label" style={{ color: o.days_in_stage > 14 ? 'var(--tr-amber)' : 'inherit' }}>
@@ -220,7 +246,11 @@ export default function Worklist() {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <div className="empty">Nothing in this queue.</div>}
+        {rows.length === 0 && (
+          <div className="empty">
+            {who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
+          </div>
+        )}
       </div>
     </>
   )
