@@ -39,9 +39,9 @@ export default function Approvals() {
     <tr key={a.approval_id}>
       <td>{a.object_type}</td>
       <td>
-        {a.object_type === 'Schedule cancellation'
+        {a.schedule
           ? `${a.schedule?.course?.course_name || 'Session'} · ${shortDate(a.schedule?.start_date)}`
-          : a.quarter}
+          : a.quarter || '—'}
       </td>
       <td>{a.note || '—'}</td>
       <td>

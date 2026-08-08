@@ -4,7 +4,6 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useOrdersPaged } from '../hooks/data'
 import { ErrorNote, ChannelPill } from '../components/ui'
 import { TableSkeleton } from '../components/Skeleton'
-import OrderDrawer from '../components/OrderDrawer'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
@@ -16,7 +15,6 @@ export default function Orders() {
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
-  const [open, setOpen] = useState<any>(null)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [page, setPage] = useState(0)
 
@@ -92,7 +90,7 @@ export default function Orders() {
               <tbody>
                 {rows.map((o) => (
                   <Fragment key={o.order_id}>
-                    <tr className="clickable" onClick={() => setOpen(o)}>
+                    <tr className="clickable" onClick={() => router.push(`/orders/${o.order_id}`)}>
                       <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {o.order_id}
                         <div className="fill-label">{shortDate(o.order_date)}</div>
@@ -148,8 +146,6 @@ export default function Orders() {
           </div>
         </>
       )}
-
-      {open && <OrderDrawer order={open} onClose={() => setOpen(null)} />}
     </>
   )
 }

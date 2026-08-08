@@ -22,6 +22,25 @@ export function useSchedules(year = 2026) {
   })
 }
 
+// Single schedule for the record detail route. Same shape as useSchedules so
+// the detail screen and the calendar rows read the same fields.
+export function useSchedule(scheduleId?: string) {
+  return useQuery({
+    queryKey: ['schedule', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('schedule')
+          .select(
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+          )
+          .eq('schedule_id', scheduleId)
+          .single()
+      ),
+  })
+}
+
 export function useChannelPax() {
   return useQuery({
     queryKey: ['channel_pax'],
@@ -71,6 +90,25 @@ export function useOrders() {
           )
           .order('order_date', { ascending: false })
           .limit(1000)
+      ),
+  })
+}
+
+// Single order for the record detail route. Same select as useOrders so the
+// detail screen reads the header dimensions, client, and training lines.
+export function useOrder(orderId?: string) {
+  return useQuery({
+    queryKey: ['order', orderId],
+    enabled: !!orderId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('orders')
+          .select(
+            'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email, phone), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
+          )
+          .eq('order_id', orderId)
+          .single()
       ),
   })
 }
@@ -187,6 +225,23 @@ export function useYears() {
   return useQuery({
     queryKey: ['years'],
     queryFn: () => sel(supabase.from('calendar_year').select('*').order('year', { ascending: false })),
+  })
+}
+
+// Every approval tied to one schedule, newest first. Feeds the Go/No-Go
+// panel's prior-decisions list (cancellations, no-go proposals, reviews).
+export function useScheduleApprovals(scheduleId?: string) {
+  return useQuery({
+    queryKey: ['schedule_approvals', scheduleId],
+    enabled: !!scheduleId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('approval')
+          .select('approval_id, object_type, decision, decision_date, note, requested_by, created_at')
+          .eq('schedule_id', scheduleId)
+          .order('created_at', { ascending: false })
+      ),
   })
 }
 
