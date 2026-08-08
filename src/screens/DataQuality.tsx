@@ -4,11 +4,10 @@ import {
   useFulfillmentQueue,
   useSchedules,
   useUnstaffed,
-  useOpenExceptions,
   useDuplicates,
 } from '../hooks/data'
 import { KpiSkeleton } from '../components/Skeleton'
-import { isUnowned, isStalled, isOverdue, isAwaitingSap } from '../lib/orderState'
+import { isUnowned, isStalled, isOverdue } from '../lib/orderState'
 
 // Days-out threshold for calling an unstaffed session urgent.
 const SOON_DAYS = 21
@@ -41,7 +40,6 @@ export default function DataQuality() {
   const queue = useFulfillmentQueue()
   const sched = useSchedules()
   const unstaffed = useUnstaffed()
-  const exceptions = useOpenExceptions()
   const dups = useDuplicates()
 
   const loading = queue.isLoading || sched.isLoading || unstaffed.isLoading
@@ -56,10 +54,8 @@ export default function DataQuality() {
     { label: 'Orders without an owner', value: q.filter(isUnowned).length, sub: 'Assign a salesperson', href: '/worklist?who=unassigned' },
     { label: 'Stalled orders', value: q.filter(isStalled).length, sub: 'Over 14 days in stage', href: '/worklist?view=stalled' },
     { label: 'Overdue collections', value: q.filter(isOverdue).length, sub: 'Unpaid past 30 days', href: '/worklist?view=overdue' },
-    { label: 'Awaiting SAP number', value: q.filter(isAwaitingSap).length, sub: 'Endorsed but no SAP', href: '/worklist?view=awaiting_sap' },
     { label: 'Sessions below minimum', value: belowMin, sub: 'Upcoming, need pax', href: '/calendar?month=all&sort=fill&dir=asc' },
     { label: 'Unstaffed sessions', value: (unstaffed.data || []).filter((u: any) => u.days_out <= SOON_DAYS).length, sub: 'No trainer within 3 weeks', href: '/calendar?month=all' },
-    { label: 'Open import exceptions', value: (exceptions.data || []).length, sub: 'Unresolved import rows', href: '/sap-import' },
     { label: 'Duplicate candidates', value: (dups.data || []).length, sub: 'Review and merge', href: '/duplicates' },
   ]
 

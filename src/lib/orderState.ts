@@ -26,7 +26,6 @@ const DUE_SOON_DAYS = 23
 const STALL_DAYS = 14
 
 const NOT_STARTED = ['New', 'In Communication', 'For Order Creation']
-const AWAITING_SAP = ['Endorsed to Ops', 'For Order Creation']
 const TERMINAL_STAGE = ['SAP Created', 'Cancelled', 'No Feedback']
 
 const rawAge = (d?: string | null): number | null =>
@@ -45,8 +44,6 @@ const hasOwner = (o: any) => !!(o?.assignment?.[0]?.sales_id || o?.owner_code ||
 export const isPaidUnendorsed = (o: any) =>
   !isCancelled(o) && o?.payment_status === 'Paid' && NOT_STARTED.includes(o?.fulfillment_stage)
 export const isUnowned = (o: any) => !isCancelled(o) && !hasOwner(o)
-export const isAwaitingSap = (o: any) =>
-  !isCancelled(o) && AWAITING_SAP.includes(o?.fulfillment_stage) && !o?.sap_order_no
 export const isNoFeedback = (o: any) => o?.fulfillment_stage === 'No Feedback'
 export const isStalled = (o: any) => {
   const a = stageAge(o)
@@ -81,7 +78,6 @@ export function orderBlockers(o: any): OrderFlag[] {
   const flags: OrderFlag[] = []
   if (isPaidUnendorsed(o)) flags.push({ label: 'Paid, not yet endorsed', tone: 'danger', kind: 'blocker' })
   if (isUnowned(o)) flags.push({ label: 'No owner assigned', tone: 'warn', kind: 'blocker' })
-  if (isAwaitingSap(o)) flags.push({ label: 'Awaiting SAP number', tone: 'warn', kind: 'blocker' })
   if (isNoFeedback(o)) flags.push({ label: 'No customer feedback', tone: 'warn', kind: 'blocker' })
   if (isStalled(o)) flags.push({ label: `Stalled ${stageAge(o)}d in ${o.fulfillment_stage}`, tone: 'warn', kind: 'blocker' })
   return flags
@@ -121,7 +117,6 @@ export interface OrderView {
 export const ORDER_VIEWS: OrderView[] = [
   { key: 'all', label: 'All work', test: () => true },
   { key: 'overdue', label: 'Overdue collections', test: isOverdue },
-  { key: 'awaiting_sap', label: 'Awaiting SAP', test: isAwaitingSap },
   { key: 'paid_unendorsed', label: 'Paid, not endorsed', test: isPaidUnendorsed },
   { key: 'stalled', label: 'Stalled', test: isStalled },
   { key: 'no_feedback', label: 'No feedback', test: isNoFeedback },

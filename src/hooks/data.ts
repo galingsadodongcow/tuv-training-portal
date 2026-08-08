@@ -200,21 +200,6 @@ export function useMyNotifications(userId?: string) {
   })
 }
 
-// Unresolved import exceptions (super admin stream).
-export function useOpenExceptions() {
-  return useQuery({
-    queryKey: ['open_exceptions'],
-    queryFn: () =>
-      sel(
-        supabase
-          .from('import_exception')
-          .select('exception_id, source, reason, raw, resolved, created_at')
-          .eq('resolved', false)
-          .order('created_at', { ascending: false })
-      ),
-  })
-}
-
 export function useElearningPending() {
   return useQuery({
     queryKey: ['elearning_pending'],

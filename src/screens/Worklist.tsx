@@ -33,7 +33,6 @@ export default function Worklist() {
   const router = useRouter()
   const pathname = usePathname()
   const [busy, setBusy] = useState('')
-  const [sapDraft, setSapDraft] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
 
   const stage = params.get('stage') || 'all'
@@ -94,16 +93,6 @@ export default function Worklist() {
     } else {
       invalidate(['fulfillment_queue', 'orders']); toast.success('Order advanced.')
     }
-    setBusy('')
-  }
-
-  const saveSap = async (orderId: string) => {
-    const v = (sapDraft[orderId] || '').trim()
-    if (!v) return
-    setBusy(orderId); setMsg(null)
-    const { error } = await supabase.from('orders').update({ sap_order_no: v }).eq('order_id', orderId)
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { setSapDraft({ ...sapDraft, [orderId]: '' }); invalidate(['fulfillment_queue', 'orders']); toast.success('SAP number saved.') }
     setBusy('')
   }
 
@@ -238,14 +227,7 @@ export default function Worklist() {
                 </td>
                 <td className="right">{php(o.total_amount)}</td>
                 <td>
-                  {o.fulfillment_stage === 'Endorsed to Ops' || o.fulfillment_stage === 'For Order Creation' ? (
-                    <div className="toolbar" style={{ gap: 4 }}>
-                      <input placeholder="SAP no." value={sapDraft[o.order_id] || ''}
-                        onChange={(e) => setSapDraft({ ...sapDraft, [o.order_id]: e.target.value })}
-                        style={{ maxWidth: 110 }} />
-                      <button className="btn btn-sm" disabled={busy === o.order_id} onClick={() => saveSap(o.order_id)}>Save</button>
-                    </div>
-                  ) : NEXT[o.fulfillment_stage] ? (
+                  {NEXT[o.fulfillment_stage] ? (
                     <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
                       onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
                       → {NEXT[o.fulfillment_stage]}

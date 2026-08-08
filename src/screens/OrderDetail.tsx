@@ -164,11 +164,11 @@ export default function OrderDetail() {
               </select>
             </label>
           </div>
-          <label className="field"><span>SAP order number</span>
+          <label className="field"><span>SAP reference (optional)</span>
             <input value={sap} onChange={(e) => setSap(e.target.value)} placeholder="176152681" />
           </label>
           <div className="fill-label" style={{ marginBottom: 10 }}>
-            Entering a SAP number moves the order to SAP Created automatically.
+            A note for reference only. It does not change the order's stage.
           </div>
           {msg && (
             <div style={{ marginBottom: 10 }}>
