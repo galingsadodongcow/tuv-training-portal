@@ -105,7 +105,7 @@ export function useOrder(orderId?: string) {
         supabase
           .from('orders')
           .select(
-            'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email, phone), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
+            'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email, phone), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))'
           )
           .eq('order_id', orderId)
           .single()
@@ -496,7 +496,7 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
       let query = supabase
         .from('orders')
         .select(
-          'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))',
+          'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))',
           { count: 'exact' }
         )
         .order('order_date', { ascending: false })
