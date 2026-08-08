@@ -519,6 +519,14 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// ---- SLA ----
+export function useSlaBreaches() {
+  return useQuery({
+    queryKey: ['sla_breaches'],
+    queryFn: () => okOr(supabase.from('v_sla_breach').select('*').limit(1000), []),
+  })
+}
+
 // ---- Session profitability ----
 export function useSessionPnl(scheduleId?: string) {
   return useQuery({

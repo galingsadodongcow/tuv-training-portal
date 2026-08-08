@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useFulfillmentQueue, useSalespeople, useInvalidate } from '../hooks/data'
+import { useFulfillmentQueue, useSalespeople, useInvalidate, useSlaBreaches } from '../hooks/data'
 import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
@@ -25,6 +25,7 @@ export default function Worklist() {
   const { profile } = useAuth()
   const queue = useFulfillmentQueue()
   const people = useSalespeople()
+  const sla = useSlaBreaches()
   const invalidate = useInvalidate()
   const qc = useQueryClient()
   const toast = useToast()
@@ -208,6 +209,18 @@ export default function Worklist() {
       {stalled > 0 && (
         <div className="notice notice-info" style={{ marginBottom: 14 }}>
           {stalled} order{stalled === 1 ? '' : 's'} sat in the same stage for more than 14 days.
+        </div>
+      )}
+
+      {(sla.data?.length || 0) > 0 && (
+        <div className="notice notice-warn" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <strong>{sla.data.length} order{sla.data.length === 1 ? '' : 's'} past the stage SLA.</strong>
+          {['operations', 'super_admin'].includes(profile?.role as string) && (
+            <button className="btn btn-sm" onClick={async () => {
+              const { data, error } = await supabase.rpc('fn_notify_sla_breaches')
+              if (error) toast.error(error.message); else toast.success(`${data || 0} owner${data === 1 ? '' : 's'} notified.`)
+            }}>Notify owners</button>
+          )}
         </div>
       )}
 
