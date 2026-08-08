@@ -422,6 +422,49 @@ export function useOrgClients(orgId?: string) {
   })
 }
 
+// ---- Phase 9: reports and digest ----
+// The operational digest: the same at-risk lists the nightly job watches, read
+// straight from the digest views. Each view is optional, so a missing one
+// simply yields an empty list.
+export function useDigest() {
+  return useQuery({
+    queryKey: ['digest'],
+    queryFn: async () => {
+      const [atRisk, rosterGaps, stalled, unstaffed, elearning] = await Promise.all([
+        supabase.from('v_digest_at_risk').select('*'),
+        supabase.from('v_digest_roster_gaps').select('*'),
+        supabase.from('v_digest_stalled_orders').select('*'),
+        supabase.from('v_digest_unstaffed').select('*'),
+        supabase.from('v_digest_elearning_waiting').select('*'),
+      ])
+      const pick = (r: any) => (r.error ? [] : r.data || [])
+      return {
+        atRisk: pick(atRisk),
+        rosterGaps: pick(rosterGaps),
+        stalled: pick(stalled),
+        unstaffed: pick(unstaffed),
+        elearning: pick(elearning),
+      }
+    },
+  })
+}
+
+// Order facts for the revenue report, one row per order with month, channel,
+// course, seats, amount, and who sold it.
+export function useOrderFacts() {
+  return useQuery({
+    queryKey: ['order_facts'],
+    queryFn: () =>
+      sel(
+        supabase
+          .from('v_order_fact')
+          .select('order_id, order_date, order_month, channel, modality, seats, amount_php, payment_status, order_status, course_name, category, sales_name')
+          .order('order_date', { ascending: false })
+          .limit(5000)
+      ),
+  })
+}
+
 export function useInvalidate() {
   const qc = useQueryClient()
   return (keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }))
