@@ -320,6 +320,23 @@ export function useSessionNotes(scheduleId?: string) {
   })
 }
 
+// Order comments, same shape as session notes. Tolerant of the table not
+// existing yet so the order page still loads before the migration.
+export function useOrderNotes(orderId?: string) {
+  return useQuery({
+    queryKey: ['order_notes', orderId],
+    enabled: !!orderId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_note')
+        .select('note_id, note, date, author, profile:author(full_name, role)')
+        .eq('order_id', orderId)
+        .order('date', { ascending: false })
+      return error ? [] : (data || [])
+    },
+  })
+}
+
 export function useClients() {
   return useQuery({
     queryKey: ['clients'],

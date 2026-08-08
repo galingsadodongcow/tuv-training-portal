@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAuditTrail } from '../hooks/data'
+import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAuditTrail, useOrderNotes } from '../hooks/data'
 import ActivityTimeline from '../components/ActivityTimeline'
-import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
+import { noteEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
 import BlockerBar from '../components/BlockerBar'
@@ -65,6 +65,7 @@ export default function OrderDetail() {
   const order = useOrder(id)
   const activity = useEntityActivity('order', id)
   const audit = useAuditTrail('orders', id)
+  const notes = useOrderNotes(id)
 
   const [stage, setStage] = useState('')
   const [sap, setSap] = useState('')
@@ -75,6 +76,17 @@ export default function OrderDetail() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null)
   const [moving, setMoving] = useState<string | null>(null)
+  const [comment, setComment] = useState('')
+  const [posting, setPosting] = useState(false)
+
+  const postComment = async () => {
+    if (!comment.trim()) return
+    setPosting(true)
+    const { error } = await supabase.from('order_note').insert({ order_id: id, author: profile?.user_id, note: comment.trim() })
+    if (error) toast.error(error.message)
+    else { setComment(''); invalidate(['order_notes']); toast.success('Comment posted.') }
+    setPosting(false)
+  }
 
   if (order.isLoading) return <Spinner label="Loading order" />
   if (order.error) return <ErrorNote error={order.error} />
@@ -211,9 +223,33 @@ export default function OrderDetail() {
           ))}
         </RecordSection>
 
+        <RecordSection title={`Comments (${notes.data?.length || 0})`}>
+          <div className="toolbar" style={{ marginBottom: 10 }}>
+            <input placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && postComment()} />
+            <button className="btn btn-sm" onClick={postComment} disabled={posting}>{posting ? 'Posting…' : 'Post'}</button>
+          </div>
+          {notes.isLoading ? <Spinner /> : (notes.data?.length || 0) === 0 ? (
+            <div className="muted fill-label">No comments yet. Start the thread.</div>
+          ) : (
+            <div className="notes">
+              {notes.data?.map((n: any) => (
+                <div key={n.note_id} className="note">
+                  <div className="note-meta">
+                    <strong>{n.profile?.full_name || 'User'}</strong>
+                    <span className="muted"> · {n.profile?.role}{n.date ? ` · ${new Date(n.date).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                  </div>
+                  <div>{n.note}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </RecordSection>
+
         <RecordSection title="Activity">
           <ActivityTimeline
             events={mergeActivity(
+              noteEvents(notes.data),
               taskEvents(activity.data?.tasks),
               notificationEvents(activity.data?.notifs),
               auditEvents(audit.data)
