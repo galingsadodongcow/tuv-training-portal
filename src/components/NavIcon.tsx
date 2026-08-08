@@ -8,6 +8,7 @@ const PATHS: Record<string, JSX.Element> = {
   plus: <><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></>,
   inquiries: <><path d="M4 5h16v11H9l-4 4z" /><path d="M8 9.5h8M8 12.5h5" /></>,
   clients: <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M16 5.5a3 3 0 0 1 0 5.8M17.5 20a5.2 5.2 0 0 0-3-4.7" /></>,
+  organizations: <><path d="M4 21V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15" /><path d="M13 10h6a1 1 0 0 1 1 1v10" /><path d="M7 9h3M7 13h3M16 14h1M16 17h1M2 21h20" /></>,
   duplicates: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M4 16V4h12" /></>,
   approvals: <><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>,
   courses: <><path d="M4 5.5A2 2 0 0 1 6 4h12v14H6a2 2 0 0 0-2 2z" /><path d="M4 5.5V20" /><path d="M18 4v14" /></>,
