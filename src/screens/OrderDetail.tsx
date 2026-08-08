@@ -10,6 +10,7 @@ import { noteEvents, taskEvents, notificationEvents, auditEvents, mergeActivity 
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
 import BlockerBar from '../components/BlockerBar'
+import ReceivablePanel from '../components/ReceivablePanel'
 import { useToast } from '../components/Toast'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
@@ -221,6 +222,10 @@ export default function OrderDetail() {
               )}
             </div>
           ))}
+        </RecordSection>
+
+        <RecordSection title="Accounts receivable">
+          <ReceivablePanel orderId={id} totalAmount={Number(o.total_amount || 0)} />
         </RecordSection>
 
         <RecordSection title={`Comments (${notes.data?.length || 0})`}>

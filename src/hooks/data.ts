@@ -489,6 +489,44 @@ export function useOrderFacts() {
   })
 }
 
+// ---- Accounts receivable ----
+const okOr = async (q: any, fallback: any) => {
+  const { data, error } = await q
+  return error ? fallback : data
+}
+
+export function useOrderAr(orderId?: string) {
+  return useQuery({
+    queryKey: ['order_ar', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('v_order_ar').select('*').eq('order_id', orderId).single(), null),
+  })
+}
+
+export function useInvoices(orderId?: string) {
+  return useQuery({
+    queryKey: ['invoices', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('invoice').select('*').eq('order_id', orderId).order('issue_date', { ascending: false }), []),
+  })
+}
+
+export function usePayments(orderId?: string) {
+  return useQuery({
+    queryKey: ['payments', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('payment').select('*').eq('order_id', orderId).order('paid_date', { ascending: false }), []),
+  })
+}
+
+// Open receivables for the aging report: orders with a positive balance.
+export function useReceivables() {
+  return useQuery({
+    queryKey: ['receivables'],
+    queryFn: () => okOr(supabase.from('v_order_ar').select('*').gt('balance', 0).order('due_date', { ascending: true }).limit(2000), []),
+  })
+}
+
 export function useInvalidate() {
   const qc = useQueryClient()
   return (keys: string[]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }))
