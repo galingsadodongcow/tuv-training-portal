@@ -13,7 +13,7 @@ export default function Guard({ roles, children }: { roles?: Role[]; children: R
   const allowed = !roles || (profile ? roles.includes(profile.role as Role) : false)
 
   useEffect(() => {
-    if (!loading && profile && !allowed) router.replace('/dashboard')
+    if (!loading && profile && !allowed) router.replace('/home')
   }, [loading, profile, allowed, router])
 
   if (loading || !profile) return <Spinner label="Loading" />
