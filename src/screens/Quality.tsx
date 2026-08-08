@@ -71,7 +71,7 @@ export default function Quality() {
       </div>
 
       {tab === 'overview' && (
-        nps.isLoading ? <Spinner label="Loading feedback" /> : !nps.data || Number(nps.data.responses) === 0 ? (
+        nps.isLoading ? <Spinner label="Loading feedback" /> : nps.error ? <ErrorNote error={nps.error} /> : !nps.data || Number(nps.data.responses) === 0 ? (
           <div className="card"><div className="empty">No feedback captured yet. Record responses from a session's Feedback tab.</div></div>
         ) : (
           <div className="card card-pad">
@@ -118,11 +118,11 @@ export default function Quality() {
           </div>
           {showNew && (
             <div className="card card-pad" style={{ marginBottom: 14 }}>
-              <div className="stack" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
-                <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input aria-label="Complaint subject" placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+                <textarea aria-label="Complaint description" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
                 <div className="toolbar">
-                  <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+                  <select aria-label="Complaint severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
                     {SEVERITY.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <button className="btn btn-sm" disabled={busy === 'new' || !form.subject.trim()} onClick={addComplaint}>Save</button>
@@ -130,7 +130,7 @@ export default function Quality() {
               </div>
             </div>
           )}
-          {complaints.isLoading ? <Spinner /> : (
+          {complaints.isLoading ? <Spinner /> : complaints.error ? <ErrorNote error={complaints.error} /> : (
             <div className="card">
               {(complaints.data?.length || 0) === 0 ? <div className="empty">No complaints logged.</div> : (
                 <table>
@@ -148,7 +148,7 @@ export default function Quality() {
                         <td className="fill-label">{shortDate(c.opened_at)}</td>
                         <td>
                           {canManage ? (
-                            <select value={c.status} onChange={(e) => setComplaintStatus(c.complaint_id, e.target.value)} style={{ color: statusTone[c.status] }}>
+                            <select aria-label={`Status for ${c.subject}`} value={c.status} onChange={(e) => setComplaintStatus(c.complaint_id, e.target.value)} style={{ color: statusTone[c.status] }}>
                               {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                           ) : <span style={{ color: statusTone[c.status] }}>{c.status}</span>}

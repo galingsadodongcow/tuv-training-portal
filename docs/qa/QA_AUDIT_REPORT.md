@@ -169,12 +169,15 @@ rollback).
 
 ## Summary counts
 
-| Severity | Total | Fixed this pass | Recommendation |
+| Severity | Total | Fixed | Open |
 |----------|:-:|:-:|:-:|
 | 🔴 Critical | 1 | 1 | 0 |
 | 🟠 High | 7 | 7 | 0 |
-| 🟡 Medium | 8 | 0 | 8 |
-| ⚪ Low | 4 | 0 | 4 |
+| 🟡 Medium | 8 | 8 | 0 |
+| ⚪ Low | 4 | 4 | 0 |
 
-All Critical and High findings are fixed and re-validated (build + tsc + harness
-re-run). Medium/Low are left as recommendations per the engagement rules.
+**All findings are now fixed and re-validated** — the customer approved
+"fix everything" after the initial Critical/High pass, so the Medium/Low items
+marked RECOMMENDATION above were subsequently applied (see `FIX_PLAN.md` for the
+per-item validation). Two Postgres harness runs plus `tsc`/`build` back the DB
+and frontend changes respectively.

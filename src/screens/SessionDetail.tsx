@@ -214,7 +214,7 @@ export default function SessionDetail() {
                 <KeyVal label="Venue cost">{php(Number(pnl.data.venue_cost))}</KeyVal>
                 <KeyVal label="Materials">
                   {canOps(role) ? (
-                    <input type="number" min="0" defaultValue={pnl.data.material_cost}
+                    <input aria-label="Material cost" type="number" min="0" defaultValue={pnl.data.material_cost}
                       onBlur={(e) => { if (Number(e.target.value) !== Number(pnl.data.material_cost)) { supabase.from('schedule').update({ material_cost: Number(e.target.value) || 0 }).eq('schedule_id', id).then(() => invalidate(['session_pnl'])) } }}
                       style={{ width: 100 }} />
                   ) : php(Number(pnl.data.material_cost))}
@@ -312,10 +312,12 @@ export default function SessionDetail() {
                       Waitlist ({waiting.length})
                       {seatsLeft != null && seatsLeft > 0 && <span className="fill-label" style={{ fontWeight: 400 }}> · {seatsLeft} seat{seatsLeft === 1 ? '' : 's'} open, promote to fill</span>}
                     </div>
+                    <div className="scroll-x">
                     <table>
                       <thead><tr><th>Client</th><th>Channel</th><th>Seats</th><th>Payment</th><th></th></tr></thead>
                       <tbody>{waiting.map((l: any) => row(l, 'waiting'))}</tbody>
                     </table>
+                    </div>
                   </div>
                 )}
                 {booked.length === 0 && waiting.length === 0 && <div className="empty">No live bookings on this session.</div>}
@@ -330,7 +332,7 @@ export default function SessionDetail() {
       {tab === 'notes' && (
         <div className="card card-pad">
           <div className="toolbar" style={{ marginBottom: 10 }}>
-            <input placeholder="Add a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)}
+            <input aria-label="Add a note" placeholder="Add a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && postNote()} />
             <button className="btn btn-sm" onClick={postNote} disabled={busy === 'note'}>Post</button>
           </div>

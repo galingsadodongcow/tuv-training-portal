@@ -73,6 +73,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
       {(contacts.data?.length || 0) === 0 ? (
         <div className="muted fill-label" style={{ marginBottom: 14 }}>No additional contacts.</div>
       ) : (
+        <div className="scroll-x">
         <table style={{ marginBottom: 14 }}>
           <thead><tr><th>Name</th><th>Title</th><th>Email</th><th>Phone</th>{canEdit && <th></th>}</tr></thead>
           <tbody>
@@ -87,12 +88,13 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="k-label" style={{ marginBottom: 8 }}>Interactions</div>
       {canEdit && (
         <div className="toolbar" style={{ marginBottom: 10 }}>
-          <input placeholder="Log a call, email or meeting…" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && logInteraction()} />
+          <input aria-label="Log an interaction" placeholder="Log a call, email or meeting…" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && logInteraction()} />
           <button className="btn btn-sm" onClick={logInteraction} disabled={busy}>Log</button>
         </div>
       )}

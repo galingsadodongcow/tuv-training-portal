@@ -1,7 +1,9 @@
 # Fix Plan
 
-Ordered by severity. Critical + High were applied in this pass and re-validated;
-Medium + Low are recommendations awaiting approval (per the engagement rules).
+Ordered by severity. **Update:** after the initial pass (Critical + High), the
+customer approved "fix everything" — all Medium and Low findings below have now
+also been applied and re-validated (tsc + build + a second Postgres harness run
+covering the new RLS ownership policies).
 
 ## Applied this pass (Critical + High)
 
@@ -18,27 +20,27 @@ Medium + Low are recommendations awaiting approval (per the engagement rules).
 
 Effort: S ≈ <15 min, M ≈ 15–60 min, L ≈ >1 h.
 
-## Recommended next (Medium) — awaiting approval
+## Applied — Medium (second pass, "fix everything")
 
-| ID | Sev | Fix | Files | Effort |
-|----|-----|-----|-------|:------:|
-| S3 | 🟡 | Owner-scope quote writes (`sales_id = fn_current_sales_id()` or super_admin) | `migrations/20260808200000_quotations.sql` | S |
-| S4 | 🟡 | Add assignment check to `order_line` INSERT `with check` | base schema / new migration | M |
-| S5 | 🟡 | Owner-scope `contact` / `client_interaction` writes | `migrations/20260808210000_crm_depth.sql` | S |
-| X2 | 🟡 | Add `error` states to Reports/Quality/Communications/FeedbackPanel | 4 files | M |
-| X3 | 🟡 | Replace `window.prompt` lost-reason with `confirm({reason})` | `Inquiries.tsx` | S |
-| U1 | 🟡 | Wrap panel tables in `overflow-x:auto` | 4 files | S |
-| A2 | 🟡 | Keyboard-operable quotation rows | `Quotations.tsx` | S |
-| A3 | 🟡 | Dialog semantics + Escape + focus trap on ad-hoc modals | `Communications.tsx`, `TrainerManage.tsx`, `Confirm.tsx` | M |
+| ID | Sev | Fix | Files | Validation |
+|----|-----|-----|-------|-----------|
+| S3 | 🟡 | Owner-scope quote/quote_line writes (`created_by`/`sales_id`) | `migrations/20260808300000_rls_ownership.sql` | harness: own quote UPDATE 1, other rep's UPDATE 0 / DELETE 0 |
+| S4 | 🟡 | `order_line` INSERT `with check` now requires `fn_can_see_order()` | `migrations/20260808300000_rls_ownership.sql` | policy applies clean |
+| S5 | 🟡 | Attribution guard on `client_interaction`; owner/unowned scope on `contact` | `migrations/20260808300000_rls_ownership.sql` | harness: self INSERT ok, forged sales_id → RLS violation |
+| X2 | 🟡 | `error` states in Reports (4 tabs)/Quality/Communications/FeedbackPanel | 4 files | build |
+| X3 | 🟡 | `window.prompt` → `confirm({reason})` for lost reason | `Inquiries.tsx` | build |
+| U1 | 🟡 | `.scroll-x` wrapper on embedded panel tables | globals.css + 4 files | build |
+| A2 | 🟡 | Keyboard-operable quotation rows (`role`/`tabIndex`/Enter-Space) | `Quotations.tsx` | build |
+| A3 | 🟡 | Dialog `role`/`aria-modal`/Escape + initial focus | `Confirm.tsx`, `Communications.tsx`, `TrainerManage.tsx` | build |
 
-## Recommended later (Low) — awaiting approval
+## Applied — Low (second pass)
 
-| ID | Sev | Fix | Files | Effort |
-|----|-----|-----|-------|:------:|
-| S6 | ⚪ | Role-gate `fn_queue_reminders()` | `migrations/20260808190000_communications.sql` | S |
-| A1r | ⚪ | Remaining `aria-label`s (SalesEntry, Resources, Quality, SessionDetail, ContactsPanel) | 5 files | M |
-| A4 | ⚪ | `aria-label` on Inquiries move buttons | `Inquiries.tsx` | S |
-| U2 | ⚪ | Remove dead `.stack`, standardize `label.field` | 3 files | S |
+| ID | Sev | Fix | Files | Validation |
+|----|-----|-----|-------|-----------|
+| S6 | ⚪ | Role-gate `fn_queue_reminders()` (ops+) | `migrations/20260808300000_rls_ownership.sql` | harness: sales → exception, ops → returns count |
+| A1r | ⚪ | Remaining `aria-label`s | SalesEntry, Resources, Quality, SessionDetail, ContactsPanel | build |
+| A4 | ⚪ | `aria-label` on Inquiries move buttons | `Inquiries.tsx` | build |
+| U2 | ⚪ | Removed dead `.stack` class | `Quality.tsx` | build |
 
 ## Deployment note
 

@@ -180,6 +180,9 @@ h1, h2, h3 { letter-spacing: -0.02em; }
 .card-pad { padding: 20px; }
 /* Wide tables scroll horizontally inside their card instead of overflowing */
 .card:has(> table) { overflow-x: auto; }
+/* Horizontal-scroll wrapper for tables that are not a direct child of .card
+   (embedded panels: receivables, contacts, attachments, session waitlist). */
+.scroll-x { overflow-x: auto; }
 .kpi { transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease); }
 .kpi:hover { border-color: var(--border-strong); }
 a .kpi:hover { box-shadow: var(--shadow-md); }

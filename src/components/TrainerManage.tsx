@@ -52,7 +52,9 @@ export default function TrainerManage({ trainer, onClose }: { trainer: any; onCl
 
   return (
     <div className="cmdk-scrim" onClick={onClose}>
-      <div className="card card-pad" style={{ maxWidth: 640, width: '100%', margin: '6vh auto', maxHeight: '86vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div className="card card-pad" role="dialog" aria-modal="true" aria-label={`Manage ${trainer.name}`}
+        style={{ maxWidth: 640, width: '100%', margin: '6vh auto', maxHeight: '86vh', overflowY: 'auto' }}
+        onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
         <div className="page-head" style={{ marginBottom: 8 }}>
           <div><h2 style={{ fontSize: 17 }}>{trainer.name}</h2><p>Competencies and availability</p></div>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>

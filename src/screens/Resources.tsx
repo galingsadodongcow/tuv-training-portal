@@ -146,13 +146,13 @@ export default function Resources() {
             <div className="card card-pad" style={{ maxWidth: 620 }}>
               <div className="k-label" style={{ marginBottom: 10 }}>Add trainer</div>
               <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
-                <input placeholder="Full name" value={tForm.name} onChange={(e) => setTForm({ ...tForm, name: e.target.value })} />
-                <input placeholder="Code" value={tForm.code} onChange={(e) => setTForm({ ...tForm, code: e.target.value })} />
-                <input placeholder="Email" value={tForm.email} onChange={(e) => setTForm({ ...tForm, email: e.target.value })} />
-                <select value={tForm.trainer_type} onChange={(e) => setTForm({ ...tForm, trainer_type: e.target.value })}>
+                <input aria-label="Trainer full name" placeholder="Full name" value={tForm.name} onChange={(e) => setTForm({ ...tForm, name: e.target.value })} />
+                <input aria-label="Trainer code" placeholder="Code" value={tForm.code} onChange={(e) => setTForm({ ...tForm, code: e.target.value })} />
+                <input aria-label="Trainer email" placeholder="Email" value={tForm.email} onChange={(e) => setTForm({ ...tForm, email: e.target.value })} />
+                <select aria-label="Trainer type" value={tForm.trainer_type} onChange={(e) => setTForm({ ...tForm, trainer_type: e.target.value })}>
                   {T_TYPES.map((x) => (<option key={x}>{x}</option>))}
                 </select>
-                <input type="number" min="0" placeholder="Daily rate PHP" value={tForm.daily_rate} onChange={(e) => setTForm({ ...tForm, daily_rate: e.target.value })} />
+                <input aria-label="Daily rate PHP" type="number" min="0" placeholder="Daily rate PHP" value={tForm.daily_rate} onChange={(e) => setTForm({ ...tForm, daily_rate: e.target.value })} />
               </div>
               <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={addTrainer} disabled={busy}>Add trainer</button>
             </div>
@@ -190,13 +190,13 @@ export default function Resources() {
             <div className="card card-pad" style={{ maxWidth: 620 }}>
               <div className="k-label" style={{ marginBottom: 10 }}>Add venue</div>
               <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
-                <input placeholder="Venue name" value={vForm.name} onChange={(e) => setVForm({ ...vForm, name: e.target.value })} />
-                <select value={vForm.venue_type} onChange={(e) => setVForm({ ...vForm, venue_type: e.target.value })}>
+                <input aria-label="Venue name" placeholder="Venue name" value={vForm.name} onChange={(e) => setVForm({ ...vForm, name: e.target.value })} />
+                <select aria-label="Venue type" value={vForm.venue_type} onChange={(e) => setVForm({ ...vForm, venue_type: e.target.value })}>
                   {V_TYPES.map((x) => (<option key={x}>{x}</option>))}
                 </select>
-                <input placeholder="City" value={vForm.city} onChange={(e) => setVForm({ ...vForm, city: e.target.value })} />
-                <input type="number" min="0" placeholder="Capacity" value={vForm.capacity} onChange={(e) => setVForm({ ...vForm, capacity: e.target.value })} />
-                <input type="number" min="0" placeholder="Day rate PHP" value={vForm.day_rate} onChange={(e) => setVForm({ ...vForm, day_rate: e.target.value })} />
+                <input aria-label="Venue city" placeholder="City" value={vForm.city} onChange={(e) => setVForm({ ...vForm, city: e.target.value })} />
+                <input aria-label="Venue capacity" type="number" min="0" placeholder="Capacity" value={vForm.capacity} onChange={(e) => setVForm({ ...vForm, capacity: e.target.value })} />
+                <input aria-label="Day rate PHP" type="number" min="0" placeholder="Day rate PHP" value={vForm.day_rate} onChange={(e) => setVForm({ ...vForm, day_rate: e.target.value })} />
               </div>
               <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={addVenue} disabled={busy}>Add venue</button>
             </div>

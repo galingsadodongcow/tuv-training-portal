@@ -236,7 +236,7 @@ export default function Reports() {
       )}
 
       {tab === 'receivables' && (
-        receivables.isLoading ? <Spinner label="Loading receivables" /> : (
+        receivables.isLoading ? <Spinner label="Loading receivables" /> : receivables.error ? <ErrorNote error={receivables.error} /> : (
           <>
             <div className="card card-pad" style={{ marginBottom: 16 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
@@ -291,7 +291,7 @@ export default function Reports() {
 
           <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Expiring within four months</h2></div></div>
           <div className="card">
-            {certs.isLoading ? <Spinner /> : (certs.data?.length || 0) === 0 ? (
+            {certs.isLoading ? <Spinner /> : certs.error ? <ErrorNote error={certs.error} /> : (certs.data?.length || 0) === 0 ? (
               <div className="empty">No certificates are expiring soon.</div>
             ) : (
               <table>
@@ -314,7 +314,7 @@ export default function Reports() {
       )}
 
       {tab === 'margin' && (
-        pnl.isLoading ? <Spinner label="Loading profitability" /> : (
+        pnl.isLoading ? <Spinner label="Loading profitability" /> : pnl.error ? <ErrorNote error={pnl.error} /> : (
           <>
             <div className="card card-pad" style={{ marginBottom: 16 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
@@ -370,7 +370,7 @@ export default function Reports() {
             <div>
               <h2 style={{ fontSize: 16, marginBottom: 8 }}>Trainer utilization</h2>
               <div className="card">
-                {trainerLoad.isLoading ? <Spinner /> : (trainerLoad.data?.length || 0) === 0 ? (
+                {trainerLoad.isLoading ? <Spinner /> : trainerLoad.error ? <ErrorNote error={trainerLoad.error} /> : (trainerLoad.data?.length || 0) === 0 ? (
                   <div className="empty">No active trainers.</div>
                 ) : (
                   <table>
@@ -393,7 +393,7 @@ export default function Reports() {
             <div>
               <h2 style={{ fontSize: 16, marginBottom: 8 }}>Forecast against actual</h2>
               <div className="card">
-                {forecast.isLoading ? <Spinner /> : (forecast.data?.length || 0) === 0 ? (
+                {forecast.isLoading ? <Spinner /> : forecast.error ? <ErrorNote error={forecast.error} /> : (forecast.data?.length || 0) === 0 ? (
                   <div className="empty">No sessions to forecast.</div>
                 ) : (
                   <table>
