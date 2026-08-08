@@ -18,7 +18,7 @@ export default function CourseForm() {
   const invalidate = useInvalidate()
   const router = useRouter()
   const toast = useToast()
-  const [f, setF] = useState({ course_name: '', category: '', training_type: 'Professional', url: '', is_certification: false, max_pax: '' })
+  const [f, setF] = useState({ course_name: '', category: '', training_type: 'Professional', url: '', is_certification: false, max_pax: '', has_assessment: false, pass_mark: '', cert_validity_months: '' })
   const [mods, setMods] = useState<ModState>({ 'Live Online Training': { on: true, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -33,7 +33,7 @@ export default function CourseForm() {
     ]).then(([c, fe]: [any, any]) => {
       if (c.error || !c.data) { setLoadError(c.error?.message || 'Course not found'); setLoaded(true); return }
       if (fe.error) { setLoadError(fe.error.message); setLoaded(true); return }
-      setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '', is_certification: !!c.data.is_certification, max_pax: c.data.max_pax != null ? String(c.data.max_pax) : '' })
+      setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '', is_certification: !!c.data.is_certification, max_pax: c.data.max_pax != null ? String(c.data.max_pax) : '', has_assessment: !!c.data.has_assessment, pass_mark: c.data.pass_mark != null ? String(c.data.pass_mark) : '', cert_validity_months: c.data.cert_validity_months != null ? String(c.data.cert_validity_months) : '' })
       const next: ModState = { 'Live Online Training': { on: false, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } }
       for (const row of fe.data || []) next[row.modality] = { on: true, price: String(row.fee_php) }
       setMods(next)
@@ -57,11 +57,13 @@ export default function CourseForm() {
       const body: any = {
         course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null,
         is_certification: f.is_certification, max_pax: f.max_pax === '' ? null : Number(f.max_pax),
+        has_assessment: f.has_assessment, pass_mark: f.pass_mark === '' ? null : Number(f.pass_mark),
+        cert_validity_months: f.cert_validity_months === '' ? null : Number(f.cert_validity_months),
       }
-      // Retry without the policy columns if the migration that adds them is not
-      // applied yet, so course editing never breaks.
+      // Retry without the newer policy columns if the migrations that add them
+      // are not applied yet, so course editing never breaks.
       const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
-      const stripped = (o: any) => { const { is_certification, max_pax, ...rest } = o; return rest }
+      const stripped = (o: any) => { const { is_certification, max_pax, has_assessment, pass_mark, cert_validity_months, ...rest } = o; return rest }
       let courseId: any = id
       if (editing) {
         let { error } = await supabase.from('course').update(body).eq('course_id', id)
@@ -137,6 +139,22 @@ export default function CourseForm() {
           </div>
           <div className="fill-label" style={{ marginTop: -4, marginBottom: 6 }}>
             Minimum is 8 for every course. The cap is 10 for a certification course and 20 otherwise, unless you set an override.
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', alignItems: 'end' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={f.has_assessment} style={{ width: 'auto' }}
+                onChange={(e) => setF((s) => ({ ...s, has_assessment: e.target.checked }))} />
+              Has an assessment
+            </label>
+            <label className="field"><span>Pass mark</span>
+              <input type="number" value={f.pass_mark} onChange={set('pass_mark')} disabled={!f.has_assessment} placeholder="e.g. 70" />
+            </label>
+            <label className="field"><span>Cert valid (months)</span>
+              <input type="number" min="1" value={f.cert_validity_months} onChange={set('cert_validity_months')} placeholder="e.g. 36" />
+            </label>
+          </div>
+          <div className="fill-label" style={{ marginTop: -4, marginBottom: 6 }}>
+            When a course has an assessment, a certificate needs a Pass result. Validity sets the certificate expiry.
           </div>
           <label className="field"><span>Webshop URL</span>
             <input type="url" value={f.url} onChange={set('url')} placeholder="https://academy-ph.tuv.com/product/…" />
