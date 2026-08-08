@@ -6,13 +6,15 @@ import { useInquiries, useCourses, useSalespeople, useInvalidate } from '../hook
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
-import { shortDate } from '../lib/format'
+import { shortDate, php } from '../lib/format'
 
 // The lead pipeline, left to right. Matches the inquiry_status enum.
-const STAGES = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback', 'Closed Won']
+const STAGES = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback', 'Closed Won', 'Closed Lost']
+const OPEN_STAGES = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback']
 const OFFERINGS = ['Public', 'In-house']
+const SOURCES = ['Website', 'Referral', 'Event', 'Repeat client', 'Cold outreach', 'Other']
 
-const emptyForm = { company: '', contact: '', email: '', phone: '', course_id: '', pax: '', offering_type: 'Public', sales_id: '' }
+const emptyForm = { company: '', contact: '', email: '', phone: '', course_id: '', pax: '', offering_type: 'Public', sales_id: '', est_value: '', probability: '', expected_close: '', source: '' }
 
 export default function Inquiries() {
   const { profile } = useAuth()
@@ -40,7 +42,7 @@ export default function Inquiries() {
     if (!salesId) { toast.error('Pick a salesperson for this inquiry.'); return }
     if (!form.company.trim()) { toast.error('Company is required.'); return }
     setBusy(true)
-    const { error } = await supabase.from('inquiry').insert({
+    const body: any = {
       sales_id: salesId,
       company: form.company.trim(),
       contact: form.contact.trim() || null,
@@ -49,8 +51,18 @@ export default function Inquiries() {
       course_id: form.course_id || null,
       pax: form.pax === '' ? null : Number(form.pax),
       offering_type: form.offering_type,
+      est_value: form.est_value === '' ? null : Number(form.est_value),
+      probability: form.probability === '' ? null : Number(form.probability),
+      expected_close: form.expected_close || null,
+      source: form.source || null,
       status: 'Received',
-    })
+    }
+    const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
+    let { error } = await supabase.from('inquiry').insert(body)
+    if (error && missingColumn(error)) {
+      const { est_value, probability, expected_close, source, ...base } = body
+      ;({ error } = await supabase.from('inquiry').insert(base))
+    }
     if (error) toast.error(error.message)
     else { toast.success('Inquiry added.'); setForm(emptyForm); setCreating(false); invalidate(['inquiries']) }
     setBusy(false)
@@ -61,6 +73,17 @@ export default function Inquiries() {
     if (error) toast.error(error.message)
     else invalidate(['inquiries'])
   }
+
+  const markLost = async (id: string) => {
+    const reason = window.prompt('Reason this lead was lost?') ?? ''
+    const { error } = await supabase.from('inquiry').update({ status: 'Closed Lost', lost_reason: reason.trim() || null }).eq('inquiry_id', id)
+    if (error) toast.error(error.message)
+    else invalidate(['inquiries'])
+  }
+
+  const weighted = (inquiries.data || [])
+    .filter((q: any) => OPEN_STAGES.includes(q.status))
+    .reduce((n: number, q: any) => n + (Number(q.est_value) || 0) * ((Number(q.probability) || 0) / 100), 0)
 
   if (inquiries.isLoading) return <TableSkeleton rows={6} cols={5} />
   if (inquiries.error) return <ErrorNote error={inquiries.error} />
@@ -73,7 +96,7 @@ export default function Inquiries() {
       <div className="page-head">
         <div>
           <h1>Inquiry pipeline</h1>
-          <p>{total} inquir{total === 1 ? 'y' : 'ies'}, {won} closed won. Move a lead left to right as it progresses. {isAdmin ? 'You see the whole team.' : 'You see your own.'}</p>
+          <p>{total} inquir{total === 1 ? 'y' : 'ies'}, {won} closed won. Weighted open pipeline {php(weighted)}. {isAdmin ? 'You see the whole team.' : 'You see your own.'}</p>
         </div>
         <div className="toolbar">
           <button className="btn" onClick={() => setCreating((c) => !c)}>{creating ? 'Close' : '+ New inquiry'}</button>
@@ -99,6 +122,15 @@ export default function Inquiries() {
               </select>
             </label>
             <label className="field"><span>Estimated pax</span><input type="number" min="1" value={form.pax} onChange={set('pax')} /></label>
+            <label className="field"><span>Estimated value (PHP)</span><input type="number" min="0" value={form.est_value} onChange={set('est_value')} /></label>
+            <label className="field"><span>Win probability %</span><input type="number" min="0" max="100" value={form.probability} onChange={set('probability')} /></label>
+            <label className="field"><span>Expected close</span><input type="date" value={form.expected_close} onChange={set('expected_close')} /></label>
+            <label className="field"><span>Source</span>
+              <select value={form.source} onChange={set('source')}>
+                <option value="">Not specified</option>
+                {SOURCES.map((s) => (<option key={s}>{s}</option>))}
+              </select>
+            </label>
             {isAdmin && (
               <label className="field"><span>Salesperson</span>
                 <select value={form.sales_id} onChange={set('sales_id')}>
@@ -131,10 +163,21 @@ export default function Inquiries() {
                     <div className="fill-label">
                       {q.contact || '—'}{q.pax ? ` · ${q.pax} pax` : ''} · {q.offering_type}
                     </div>
-                    <div className="fill-label">{q.salesperson?.name || '—'} · {shortDate(q.inquiry_date)}</div>
+                    {(q.est_value || q.probability) && (
+                      <div className="fill-label">{q.est_value ? php(q.est_value) : '—'}{q.probability != null ? ` · ${q.probability}%` : ''}{q.expected_close ? ` · ${shortDate(q.expected_close)}` : ''}</div>
+                    )}
+                    {stage === 'Closed Lost' && q.lost_reason && <div className="fill-label" style={{ color: 'var(--danger)' }}>Lost: {q.lost_reason}</div>}
+                    <div className="fill-label">{q.salesperson?.name || '—'} · {shortDate(q.inquiry_date)}{q.source ? ` · ${q.source}` : ''}</div>
                     <div className="toolbar" style={{ gap: 4, marginTop: 6 }}>
-                      {i > 0 && <button className="btn btn-ghost btn-sm" title="Move back" onClick={() => move(q.inquiry_id, STAGES[i - 1])}>‹</button>}
-                      {i < STAGES.length - 1 && <button className="btn btn-sm" title="Advance" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
+                      {stage === 'Closed Lost' ? (
+                        <button className="btn btn-ghost btn-sm" title="Reopen" onClick={() => move(q.inquiry_id, 'Received')}>Reopen</button>
+                      ) : (
+                        <>
+                          {i > 0 && <button className="btn btn-ghost btn-sm" title="Move back" onClick={() => move(q.inquiry_id, STAGES[i - 1])}>‹</button>}
+                          {i < 4 && <button className="btn btn-sm" title="Advance" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
+                          {OPEN_STAGES.includes(stage) && <button className="btn btn-ghost btn-sm" title="Mark lost" onClick={() => markLost(q.inquiry_id)}>Lost</button>}
+                        </>
+                      )}
                     </div>
                   </div>
                 )

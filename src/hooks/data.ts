@@ -137,7 +137,7 @@ export function useInquiries() {
       sel(
         supabase
           .from('inquiry')
-          .select('inquiry_id, inquiry_date, sales_id, course_id, company, contact, email, phone, offering_type, pax, status, converted_order_id, course:course_id(course_name), salesperson:sales_id(name, code)')
+          .select('*, course:course_id(course_name), salesperson:sales_id(name, code)')
           .order('inquiry_date', { ascending: false })
       ),
   })
@@ -516,6 +516,23 @@ export function usePayments(orderId?: string) {
     queryKey: ['payments', orderId],
     enabled: !!orderId,
     queryFn: () => okOr(supabase.from('payment').select('*').eq('order_id', orderId).order('paid_date', { ascending: false }), []),
+  })
+}
+
+// ---- CRM: contacts and interactions ----
+export function useContacts(clientId?: string) {
+  return useQuery({
+    queryKey: ['contacts', clientId],
+    enabled: !!clientId,
+    queryFn: () => okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), []),
+  })
+}
+
+export function useClientInteractions(clientId?: string) {
+  return useQuery({
+    queryKey: ['interactions', clientId],
+    enabled: !!clientId,
+    queryFn: () => okOr(supabase.from('client_interaction').select('*, salesperson:sales_id(name)').eq('client_id', clientId).order('date', { ascending: false }), []),
   })
 }
 
