@@ -343,6 +343,30 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .dialog-title { font-weight: 700; font-size: 16px; }
 .dialog-body { margin-top: 8px; color: var(--text-muted); font-size: 14px; }
 
+/* --------------------------------------------- Segmented toggle */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-btn { background: none; border: none; padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 550; color: var(--text-muted); cursor: pointer; }
+.seg-btn.on { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.seg-btn:not(.on):hover { color: var(--text); }
+
+/* --------------------------------------------- Calendar month grid */
+.cal-grid-wrap { overflow-x: auto; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 760px; }
+.cal-grid-head { background: var(--bg-subtle); padding: 7px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-muted); text-align: center; }
+.cal-grid-cell { background: var(--bg); min-height: 104px; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px; }
+.cal-grid-empty { background: var(--bg-subtle); }
+.cal-grid-today { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-grid-daynum { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.cal-grid-today .cal-grid-daynum { color: var(--accent); }
+.cal-event { text-align: left; border: none; border-radius: 5px; padding: 3px 7px; font-family: inherit; cursor: pointer; display: flex; flex-direction: column; overflow: hidden; }
+.cal-event-name { font-size: 11.5px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-event-meta { font-size: 10px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-event-confirmed { background: color-mix(in srgb, var(--success) 16%, var(--bg)); color: var(--text); box-shadow: inset 3px 0 0 var(--success); }
+.cal-event-tentative { background: color-mix(in srgb, var(--warning) 16%, var(--bg)); color: var(--text); box-shadow: inset 3px 0 0 var(--warning); }
+.cal-event-running { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+.cal-event-completed { background: var(--bg-subtle); color: var(--text-muted); box-shadow: inset 3px 0 0 var(--text-muted); }
+.cal-event-cancelled { background: var(--bg-subtle); color: var(--text-muted); text-decoration: line-through; box-shadow: inset 3px 0 0 var(--danger); }
+
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }

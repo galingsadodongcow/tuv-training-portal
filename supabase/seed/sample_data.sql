@@ -150,6 +150,25 @@ begin
   insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id)
     values (v_isms, v_year, to_char(current_date + 110,'FMMonth'), current_date + 110, current_date + 112, 'Live Online Training', 36000, 'Confirmed', 'Go', 8, 10, 8, v_t6, v_v3) returning schedule_id into v_s20;
 
+  -- Year-round fill: fixed-date 2026 sessions in the months the relative-dated
+  -- sessions above do not reach, so the calendar has a roster in every month.
+  -- Past months are Completed with actuals; December is upcoming. Trainer and
+  -- venue windows are unique per month, so no double booking.
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, actual_participants, actual_revenue, trainer_id, venue_id) values
+    (v_qms,      v_year, 'January',  make_date(2026,1,14),  make_date(2026,1,16),  'Face-to-face',         45000, 'Completed', 'Go',    8, 10,  9,  9, 405000, v_t1, v_v1),
+    (v_firstaid, v_year, 'January',  make_date(2026,1,26),  make_date(2026,1,26),  'Face-to-face',          6500, 'Completed', 'Go',    8, 20, 16, 16, 104000, v_t2, v_v2),
+    (v_ems,      v_year, 'February', make_date(2026,2,11),  make_date(2026,2,13),  'Live Online Training', 38000, 'Completed', 'Go',    8, 10,  8,  8, 304000, v_t3, v_v3),
+    (v_iso27,    v_year, 'February', make_date(2026,2,24),  make_date(2026,2,25),  'Face-to-face',         18000, 'Completed', 'Go',    8, 20, 15, 15, 270000, v_t4, v_v4),
+    (v_ohsms,    v_year, 'March',    make_date(2026,3,10),  make_date(2026,3,12),  'Face-to-face',         45000, 'Completed', 'Go',    8, 10, 10, 10, 450000, v_t5, v_v5),
+    (v_bosh,     v_year, 'March',    make_date(2026,3,24),  make_date(2026,3,24),  'Face-to-face',         12000, 'Completed', 'Go',    8, 20, 18, 18, 216000, v_t6, v_v1),
+    (v_isms,     v_year, 'April',    make_date(2026,4,14),  make_date(2026,4,16),  'Live Online Training', 36000, 'Completed', 'No-Go', 8, 10,  7,  7, 252000, v_t1, v_v3),
+    (v_enms,     v_year, 'April',    make_date(2026,4,28),  make_date(2026,4,29),  'Live Online Training', 14000, 'Completed', 'Go',    8, 20, 12, 12, 168000, v_t2, v_v2),
+    (v_fsms,     v_year, 'May',      make_date(2026,5,12),  make_date(2026,5,14),  'Face-to-face',         48000, 'Completed', 'Go',    8, 10,  9,  9, 432000, v_t3, v_v4),
+    (v_ia,       v_year, 'May',      make_date(2026,5,26),  make_date(2026,5,26),  'Face-to-face',         10000, 'Completed', 'Go',    8, 20, 14, 14, 140000, v_t4, v_v1);
+  insert into schedule(course_id, year_id, month, start_date, end_date, modality, price, status, go_status, min_participants, max_participants, booked_participants, trainer_id, venue_id) values
+    (v_qms, v_year, 'December', make_date(2026,12,8),  make_date(2026,12,10), 'Face-to-face', 45000, 'Confirmed', 'Go',    8, 10, 8, v_t5, v_v5),
+    (v_dpo, v_year, 'December', make_date(2026,12,15), make_date(2026,12,16), 'Face-to-face', 11000, 'Tentative', 'No-Go', 8, 20, 5, v_t6, v_v3);
+
   -- Forecasts (business owner).
   update schedule set forecast_revenue = 405000, forecast_participants = 9, forecast_by = v_u_bo where schedule_id = v_s1;
   update schedule set forecast_revenue = 216000, forecast_participants = 18, forecast_by = v_u_bo where schedule_id = v_s3;
