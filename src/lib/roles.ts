@@ -36,5 +36,6 @@ export const NAV: NavItem[] = [
   { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations'], icon: 'elearning' },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'], icon: 'rollover' },
   { path: '/dashboard', label: 'Dashboard', roles: ALL, icon: 'dashboard' },
+  { path: '/reports', label: 'Reports', roles: ['super_admin', 'operations', 'business_owner'], icon: 'reports' },
   { path: '/data-quality', label: 'Data quality', roles: ['super_admin'], icon: 'quality' },
 ]

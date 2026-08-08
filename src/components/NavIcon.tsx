@@ -16,6 +16,7 @@ const PATHS: Record<string, JSX.Element> = {
   elearning: <><rect x="3" y="4.5" width="18" height="12" rx="2" /><path d="M8 20h8M12 16.5V20" /></>,
   rollover: <><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v4h-4" /></>,
   dashboard: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
+  reports: <><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5M9 13h6M9 17h6M9 9h2" /></>,
   quality: <><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /><path d="M12 8v4M12 15h.01" /></>,
 }
 
