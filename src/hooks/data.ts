@@ -419,7 +419,7 @@ export function useOrganization(orgId?: string) {
   return useQuery({
     queryKey: ['organization', orgId],
     enabled: !!orgId,
-    queryFn: () => sel(supabase.from('organization').select('org_id, name, industry, country, notes, created_at').eq('org_id', orgId).single()),
+    queryFn: () => sel(supabase.from('organization').select('org_id, name, industry, country, notes').eq('org_id', orgId).single()),
   })
 }
 
