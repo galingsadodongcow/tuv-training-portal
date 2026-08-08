@@ -28,9 +28,11 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
   const [msg, setMsg] = useState(null)
 
   const canEdit = ['operations', 'super_admin', 'sales'].includes(profile?.role)
+  const canCert = ['operations', 'super_admin'].includes(profile?.role)
   const live = (orders.data || []).filter((l) => l.line_status !== 'Cancelled')
   const seatsSold = live.reduce((n, l) => n + (Number(l.seats) || 0), 0)
   const names = roster.data?.length || 0
+  const pending = (roster.data || []).filter((r) => r.attendance_status === 'Attended' && !r.cert_number).length
 
   const add = async () => {
     if (!form.line_id || !form.full_name.trim()) { setMsg('Pick the booking and enter a name.'); return }
@@ -68,10 +70,25 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
     else { invalidate(['roster']); toast.success('Participant removed.') }
   }
 
+  const issueOne = async (pid) => {
+    setMsg(null)
+    const { error } = await supabase.rpc('fn_issue_certificate', { p_participant: pid })
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { invalidate(['roster']); toast.success('Certificate issued.') }
+  }
+
+  const issueAll = async () => {
+    setMsg(null); setBusy(true)
+    const { data, error } = await supabase.rpc('fn_issue_certificates_for_session', { p_schedule: schedule.schedule_id })
+    if (error) { setMsg(error.message); toast.error(error.message) }
+    else { invalidate(['roster']); toast.success(`${data || 0} certificate${data === 1 ? '' : 's'} issued.`) }
+    setBusy(false)
+  }
+
   const exportCsv = () => {
-    const head = ['Name', 'Email', 'Position', 'Company', 'Order', 'Payment', 'Attendance']
+    const head = ['Name', 'Email', 'Position', 'Company', 'Order', 'Payment', 'Attendance', 'Certificate', 'Issued']
     const lines = (roster.data || []).map((r) =>
-      [r.full_name, r.email, r.position_title, r.company, r.order_id, r.payment_status, r.attendance_status]
+      [r.full_name, r.email, r.position_title, r.company, r.order_id, r.payment_status, r.attendance_status, r.cert_number, r.cert_issued_date]
         .map(csvCell).join(',')
     )
     const blob = new Blob([[head.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -92,12 +109,19 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
           {names} of {seatsSold} name{seatsSold === 1 ? '' : 's'} captured
           {names < seatsSold && <span style={{ color: 'var(--tr-amber)', fontWeight: 600 }}> · {seatsSold - names} missing</span>}
         </div>
-        {names > 0 && <button className="btn btn-ghost btn-sm" onClick={exportCsv}>Export CSV</button>}
+        <div className="toolbar" style={{ gap: 6 }}>
+          {canCert && pending > 0 && (
+            <button className="btn btn-sm" onClick={issueAll} disabled={busy}>
+              {busy ? 'Issuing…' : `Issue ${pending} certificate${pending === 1 ? '' : 's'}`}
+            </button>
+          )}
+          {names > 0 && <button className="btn btn-ghost btn-sm" onClick={exportCsv}>Export CSV</button>}
+        </div>
       </div>
 
       {roster.data?.length > 0 && (
         <table style={{ marginBottom: 14 }}>
-          <thead><tr><th>Name</th><th>Company</th><th>Attendance</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Company</th><th>Attendance</th><th>Certificate</th><th></th></tr></thead>
           <tbody>
             {roster.data.map((r) => (
               <tr key={r.participant_id}>
@@ -112,6 +136,18 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
                       {ATT.map((a) => (<option key={a}>{a}</option>))}
                     </select>
                   ) : r.attendance_status}
+                </td>
+                <td>
+                  {r.cert_number ? (
+                    <div>
+                      <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono, monospace)' }}>{r.cert_number}</div>
+                      {r.cert_issued_date && <div className="fill-label">{r.cert_issued_date}</div>}
+                    </div>
+                  ) : canCert && r.attendance_status === 'Attended' ? (
+                    <button className="btn btn-ghost btn-sm" onClick={() => issueOne(r.participant_id)}>Issue</button>
+                  ) : (
+                    <span className="fill-label">—</span>
+                  )}
                 </td>
                 <td className="right">
                   {canEdit && <button className="linkbtn" onClick={() => remove(r.participant_id)}>Remove</button>}
