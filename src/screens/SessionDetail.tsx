@@ -9,6 +9,7 @@ import ActivityTimeline from '../components/ActivityTimeline'
 import { noteEvents, approvalEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import RosterPanel from '../components/RosterPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
+import FeedbackPanel from '../components/FeedbackPanel'
 import TransferOrder from '../components/TransferOrder'
 import CloseSession from '../components/CloseSession'
 import CancelSession from '../components/CancelSession'
@@ -152,6 +153,7 @@ export default function SessionDetail() {
     { key: 'participants', label: 'Participants' },
     { key: 'notes', label: 'Notes' },
     { key: 'files', label: 'Files' },
+    { key: 'feedback', label: 'Feedback' },
     { key: 'history', label: 'History' },
   ]
 
@@ -353,6 +355,8 @@ export default function SessionDetail() {
       {tab === 'files' && (
         <div className="card card-pad"><AttachmentsPanel entityType="session" entityId={schedule.schedule_id} /></div>
       )}
+
+      {tab === 'feedback' && <FeedbackPanel scheduleId={schedule.schedule_id} />}
 
       {tab === 'history' && (
         <div className="card card-pad">
