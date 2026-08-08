@@ -3,16 +3,16 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useInvalidate } from '../hooks/data'
+import { useInvalidate, useOpenExceptions } from '../hooks/data'
 import { useToast } from '../components/Toast'
-import { php } from '../lib/format'
+import { php, shortDate } from '../lib/format'
 
 // Accepts a SAP export pasted or uploaded as CSV.
 // Needs two columns: the webshop order reference and the SAP order number.
 // Optional third column sets payment status.
-function parseCsv(text) {
+function parseCsv(text: string) {
   const rows = text.trim().split(/\r?\n/).map((line) => {
-    const out = []
+    const out: string[] = []
     let cur = '', inQ = false
     for (let i = 0; i < line.length; i++) {
       const ch = line[i]
@@ -26,17 +26,38 @@ function parseCsv(text) {
   return rows.filter((r) => r.some((c) => c))
 }
 
+const SAP_FORMAT = /^\d{6,12}$/
+
+// One place that decides what state a staged row is in, so the review table,
+// the counts, and the commit all agree.
+type RowState = 'ready' | 'unchanged' | 'not_found' | 'invalid'
+const STATE_LABEL: Record<RowState, string> = {
+  ready: 'Ready to apply',
+  unchanged: 'Already set',
+  not_found: 'Not in portal',
+  invalid: 'Invalid SAP number',
+}
+const STATE_PILL: Record<RowState, string> = {
+  ready: 'pill-go',
+  unchanged: 'pill-cancelled',
+  not_found: 'pill-nogo',
+  invalid: 'pill-nogo',
+}
+
 export default function SapImport() {
   const { profile } = useAuth()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const exceptions = useOpenExceptions()
   const [raw, setRaw] = useState('')
-  const [preview, setPreview] = useState(null)
+  const [preview, setPreview] = useState<any[] | null>(null)
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(null)
-  const [msg, setMsg] = useState(null)
+  const [done, setDone] = useState<any>(null)
+  const [msg, setMsg] = useState<string | null>(null)
 
-  const allowed = ['operations', 'super_admin'].includes(profile?.role)
+  const role = profile?.role
+  const allowed = ['operations', 'super_admin'].includes(role as string)
+  const isAdmin = role === 'super_admin'
 
   const build = async () => {
     setMsg(null); setDone(null)
@@ -65,48 +86,88 @@ export default function SapImport() {
 
     setPreview(parsed.map((p) => {
       const o = map.get(p.order_id)
+      let state: RowState
+      if (!o) state = 'not_found'
+      else if (!SAP_FORMAT.test(p.sap)) state = 'invalid'
+      else if (o.sap_order_no === p.sap) state = 'unchanged'
+      else state = 'ready'
       return {
         ...p,
+        state,
         exists: !!o,
         company: o?.client?.company || o?.client?.name || '',
         amount: o?.total_amount,
         current: o?.sap_order_no || '',
-        changed: !!o && o.sap_order_no !== p.sap,
       }
     }))
   }
 
+  // Record a bad or unmatched row so it survives the import for follow-up.
+  // Only the super admin can write exceptions (RLS), so operations sees the
+  // reconciliation but the persisted worklist is the admin's.
+  const logExceptions = async (rows: any[]) => {
+    if (!isAdmin || rows.length === 0) return 0
+    const payload = rows.map((p) => ({
+      source: 'sap_import',
+      reason: p.state === 'not_found' ? `Order ${p.order_id} not in portal` : p.state === 'invalid' ? `Invalid SAP number "${p.sap}"` : `Update failed for ${p.order_id}`,
+      raw: { order_id: p.order_id, sap: p.sap, pay: p.pay, state: p.state },
+    }))
+    const { error } = await supabase.from('import_exception').insert(payload)
+    if (error) { toast.error(`Could not log exceptions: ${error.message}`); return 0 }
+    return payload.length
+  }
+
   const apply = async () => {
+    if (!preview) return
     setBusy(true); setMsg(null)
-    const toApply = preview.filter((p) => p.exists && p.changed)
-    let ok = 0, fail = 0
-    for (const p of toApply) {
+    const ready = preview.filter((p) => p.state === 'ready')
+    const problems = preview.filter((p) => p.state === 'not_found' || p.state === 'invalid')
+    const failed: any[] = []
+    let ok = 0
+    for (const p of ready) {
       const patch: any = { sap_order_no: p.sap }
       const pay = p.pay.toLowerCase()
       if (pay.includes('collect') || pay === 'paid') patch.payment_status = 'Paid'
       else if (pay.includes('partial')) patch.payment_status = 'Partial'
       const { error } = await supabase.from('orders').update(patch).eq('order_id', p.order_id)
-      if (error) fail++; else ok++
+      if (error) failed.push(p); else ok++
     }
-    invalidate(['orders', 'fulfillment_queue'])
-    toast.success(`${ok} order(s) updated.`)
-    if (fail > 0) toast.error(`${fail} failed.`)
-    setDone({ ok, fail, skipped: preview.length - toApply.length })
+    const logged = await logExceptions([...problems, ...failed])
+    invalidate(['orders', 'fulfillment_queue', 'open_exceptions'])
+    if (ok > 0) toast.success(`${ok} order(s) updated.`)
+    if (failed.length > 0) toast.error(`${failed.length} failed.`)
+    setDone({
+      ok,
+      failed: failed.length,
+      unchanged: preview.filter((p) => p.state === 'unchanged').length,
+      problems: problems.length,
+      logged,
+    })
     setBusy(false)
+  }
+
+  const resolve = async (id: string) => {
+    const { error } = await supabase.from('import_exception').update({ resolved: true }).eq('exception_id', id)
+    if (error) toast.error(error.message)
+    else { toast.success('Exception resolved.'); invalidate(['open_exceptions']) }
   }
 
   if (!allowed) return <div className="notice notice-error">Operations or the super admin only.</div>
 
-  const matched = preview?.filter((p) => p.exists).length || 0
-  const missing = preview?.filter((p) => !p.exists) || []
-  const changed = preview?.filter((p) => p.exists && p.changed).length || 0
+  const counts = {
+    read: preview?.length || 0,
+    ready: preview?.filter((p) => p.state === 'ready').length || 0,
+    unchanged: preview?.filter((p) => p.state === 'unchanged').length || 0,
+    problems: preview?.filter((p) => p.state === 'not_found' || p.state === 'invalid').length || 0,
+  }
+  const openEx = exceptions.data || []
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>SAP import</h1>
-          <p>Drop a SAP export and the portal fills in order numbers in bulk. Entering a SAP number moves the order to SAP Created on its own.</p>
+          <p>Stage a SAP export, review every row, then apply. Rows that do not match or do not validate are held as exceptions for follow-up.</p>
         </div>
       </div>
 
@@ -118,7 +179,7 @@ export default function SapImport() {
           rows={8}
           placeholder={'Order Reference,SAP Order No,Status\n60806000000950,176152681,Collected'}
           style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 13, padding: 10,
-                   border: '1px solid var(--tr-line)', borderRadius: 8 }}
+                   border: '1px solid var(--border)', borderRadius: 8 }}
         />
         <div className="toolbar" style={{ marginTop: 10 }}>
           <input type="file" accept=".csv,.txt,.tsv" onChange={(e) => {
@@ -128,7 +189,7 @@ export default function SapImport() {
             rd.onload = () => setRaw(String(rd.result || ''))
             rd.readAsText(f)
           }} />
-          <button className="btn btn-sm" onClick={build} disabled={!raw.trim()}>Preview</button>
+          <button className="btn btn-sm" onClick={build} disabled={!raw.trim()}>Stage &amp; review</button>
         </div>
         <div className="fill-label" style={{ marginTop: 8 }}>
           The header row needs a column naming the order reference and one naming SAP. A payment or status column is optional.
@@ -140,49 +201,84 @@ export default function SapImport() {
       {done && (
         <div className="notice notice-info" style={{ marginBottom: 16 }}>
           {done.ok} order{done.ok === 1 ? '' : 's'} updated
-          {done.fail > 0 && `, ${done.fail} failed`}
-          {done.skipped > 0 && `, ${done.skipped} skipped as already correct or not found`}.
+          {done.unchanged > 0 && `, ${done.unchanged} already set`}
+          {done.problems > 0 && `, ${done.problems} held as exceptions`}
+          {done.failed > 0 && `, ${done.failed} failed`}
+          {done.logged > 0 && ` · ${done.logged} written to the exceptions worklist`}
+          {done.problems > 0 && !isAdmin && ' · ask the super admin to review exceptions'}.
         </div>
       )}
 
       {preview && (
         <>
           <div className="grid kpis" style={{ marginBottom: 16 }}>
-            <div className="card card-pad kpi"><div className="k-label">Rows read</div><div className="k-value">{preview.length}</div></div>
-            <div className="card card-pad kpi"><div className="k-label">Matched orders</div><div className="k-value">{matched}</div></div>
-            <div className="card card-pad kpi"><div className="k-label">Will update</div><div className="k-value">{changed}</div></div>
-            <div className="card card-pad kpi"><div className="k-label">Not found</div>
-              <div className="k-value" style={{ color: missing.length ? 'var(--tr-amber)' : 'inherit' }}>{missing.length}</div></div>
+            <div className="card card-pad kpi"><div className="k-label">Rows read</div><div className="k-value">{counts.read}</div></div>
+            <div className="card card-pad kpi"><div className="k-label">Ready to apply</div><div className="k-value">{counts.ready}</div></div>
+            <div className="card card-pad kpi"><div className="k-label">Already set</div><div className="k-value">{counts.unchanged}</div></div>
+            <div className="card card-pad kpi"><div className="k-label">Problems</div>
+              <div className="k-value" style={{ color: counts.problems ? 'var(--tr-amber)' : 'inherit' }}>{counts.problems}</div></div>
           </div>
 
           <div className="card" style={{ marginBottom: 16 }}>
             <table>
-              <thead><tr><th>Order</th><th>Customer</th><th>Current SAP</th><th>New SAP</th><th className="right">Amount</th><th></th></tr></thead>
+              <thead><tr><th>Order</th><th>Customer</th><th>Current SAP</th><th>New SAP</th><th className="right">Amount</th><th>State</th></tr></thead>
               <tbody>
-                {preview.slice(0, 200).map((p, i) => (
-                  <tr key={i} className={!p.exists ? 'risk-amber' : ''}>
+                {preview.slice(0, 300).map((p, i) => (
+                  <tr key={i} className={p.state === 'not_found' || p.state === 'invalid' ? 'risk-amber' : ''}>
                     <td style={{ fontVariantNumeric: 'tabular-nums' }}>{p.order_id}</td>
                     <td>{p.company || <span className="muted">—</span>}</td>
                     <td className="fill-label">{p.current || '—'}</td>
                     <td style={{ fontWeight: 600 }}>{p.sap}</td>
                     <td className="right">{p.amount != null ? php(p.amount) : '—'}</td>
-                    <td className="fill-label">
-                      {!p.exists ? 'not in portal' : p.changed ? 'will update' : 'already set'}
-                    </td>
+                    <td><span className={`pill ${STATE_PILL[p.state as RowState]}`}>{STATE_LABEL[p.state as RowState]}</span></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div className="toolbar">
-            <button className="btn" onClick={apply} disabled={busy || changed === 0}>
-              {busy ? 'Applying…' : `Apply ${changed} update${changed === 1 ? '' : 's'}`}
+          <div className="toolbar" style={{ marginBottom: 24 }}>
+            <button className="btn" onClick={apply} disabled={busy || (counts.ready === 0 && counts.problems === 0)}>
+              {busy ? 'Applying…' : `Apply ${counts.ready} update${counts.ready === 1 ? '' : 's'}${counts.problems ? ` · hold ${counts.problems}` : ''}`}
             </button>
             <button className="btn btn-ghost" onClick={() => { setPreview(null); setRaw(''); setDone(null) }}>Clear</button>
           </div>
         </>
       )}
+
+      <div className="page-head" style={{ marginBottom: 12 }}>
+        <div><h1 style={{ fontSize: 18 }}>Open exceptions{openEx.length ? ` (${openEx.length})` : ''}</h1></div>
+      </div>
+      <div className="card">
+        {exceptions.isLoading ? (
+          <div className="empty">Loading…</div>
+        ) : openEx.length === 0 ? (
+          <div className="empty">No open exceptions. Imports that do not match or validate land here.</div>
+        ) : (
+          <table>
+            <thead><tr><th>Reason</th><th>Source</th><th>Details</th><th>Age</th><th></th></tr></thead>
+            <tbody>
+              {openEx.map((e: any) => (
+                <tr key={e.exception_id}>
+                  <td style={{ fontWeight: 600 }}>{e.reason}</td>
+                  <td className="fill-label">{e.source}</td>
+                  <td className="fill-label" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                    {e.raw ? JSON.stringify(e.raw) : '—'}
+                  </td>
+                  <td className="fill-label">{shortDate(e.created_at)}</td>
+                  <td className="right">
+                    {isAdmin ? (
+                      <button className="btn btn-ghost btn-sm" onClick={() => resolve(e.exception_id)}>Resolve</button>
+                    ) : (
+                      <span className="fill-label">super admin resolves</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </>
   )
 }
