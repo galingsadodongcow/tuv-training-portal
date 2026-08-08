@@ -25,7 +25,10 @@ language sql stable security definer set search_path to 'public'
 as $$ select region from salesperson where sales_id = fn_current_sales_id() $$;
 grant execute on function public.fn_current_region() to authenticated;
 
--- Replace the blanket order read policy with a scoped one.
+-- Replace the blanket order read policy with a scoped one. Ensure RLS is
+-- actually enabled on orders first — a policy has no effect on a table whose
+-- row security is off, which would leave the scoping silently inert.
+alter table public.orders enable row level security;
 drop policy if exists p_orders_r on public.orders;
 create policy p_orders_r on public.orders for select to authenticated
 using (

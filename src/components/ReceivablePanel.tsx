@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useOrderAr, useInvoices, usePayments, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
+import { useConfirm } from './Confirm'
 import { php, shortDate } from '../lib/format'
 
 const METHODS = ['Bank transfer', 'Credit card', 'Cheque', 'Cash']
@@ -14,6 +15,7 @@ const METHODS = ['Bank transfer', 'Credit card', 'Cheque', 'Cash']
 export default function ReceivablePanel({ orderId, totalAmount }: { orderId: string; totalAmount: number }) {
   const { profile } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const invalidate = useInvalidate()
   const ar = useOrderAr(orderId)
   const invoices = useInvoices(orderId)
@@ -61,6 +63,8 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
   }
 
   const removePayment = async (pid: string) => {
+    const res = await confirm({ title: 'Remove this payment?', body: 'The balance and payment status will be recalculated.', confirmLabel: 'Remove', tone: 'danger' })
+    if (!res.ok) return
     const { error } = await supabase.from('payment').delete().eq('payment_id', pid)
     if (error) toast.error(error.message)
     else { toast.success('Payment removed.'); invalidate(['payments', 'order_ar', 'order', 'orders', 'fulfillment_queue']) }

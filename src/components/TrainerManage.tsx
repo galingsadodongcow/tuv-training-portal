@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTrainerCourses, useTrainerAvailability, useCourses, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
+import { useConfirm } from './Confirm'
 import { shortDate } from '../lib/format'
 
 // Operations manages a trainer's competencies (which courses they teach) and
@@ -10,6 +11,7 @@ import { shortDate } from '../lib/format'
 // sessions through a database guard.
 export default function TrainerManage({ trainer, onClose }: { trainer: any; onClose: () => void }) {
   const toast = useToast()
+  const confirm = useConfirm()
   const invalidate = useInvalidate()
   const competencies = useTrainerCourses(trainer.trainer_id)
   const availability = useTrainerAvailability(trainer.trainer_id)
@@ -42,6 +44,8 @@ export default function TrainerManage({ trainer, onClose }: { trainer: any; onCl
   }
 
   const removeBlackout = async (id: string) => {
+    const res = await confirm({ title: 'Remove this blackout?', confirmLabel: 'Remove', tone: 'danger' })
+    if (!res.ok) return
     const { error } = await supabase.from('trainer_availability').delete().eq('avail_id', id)
     if (error) toast.error(error.message); else invalidate(['trainer_availability'])
   }

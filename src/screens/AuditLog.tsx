@@ -58,16 +58,16 @@ export default function AuditLog() {
 
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div className="toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
-          <input placeholder="Table (e.g. orders)" value={draft.table} onChange={(e) => setDraft({ ...draft, table: e.target.value })} style={{ maxWidth: 160 }} />
-          <select value={draft.action} onChange={(e) => setDraft({ ...draft, action: e.target.value })}>
+          <input aria-label="Filter by table" placeholder="Table (e.g. orders)" value={draft.table} onChange={(e) => setDraft({ ...draft, table: e.target.value })} style={{ maxWidth: 160 }} />
+          <select aria-label="Filter by action" value={draft.action} onChange={(e) => setDraft({ ...draft, action: e.target.value })}>
             {ACTIONS.map((a) => <option key={a} value={a}>{a || 'Any action'}</option>)}
           </select>
-          <select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })}>
+          <select aria-label="Filter by role" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })}>
             {ROLES.map((r) => <option key={r} value={r}>{r || 'Any role'}</option>)}
           </select>
           <label className="fill-label">From <input type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} style={{ marginLeft: 4 }} /></label>
           <label className="fill-label">To <input type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} style={{ marginLeft: 4 }} /></label>
-          <input placeholder="Search row or fields" value={draft.search} onChange={(e) => setDraft({ ...draft, search: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && apply()} style={{ minWidth: 200 }} />
+          <input aria-label="Search row id or changed fields" placeholder="Search row or fields" value={draft.search} onChange={(e) => setDraft({ ...draft, search: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && apply()} style={{ minWidth: 200 }} />
           <button className="btn btn-sm" onClick={apply}>Search</button>
           <button className="btn btn-ghost btn-sm" onClick={reset}>Reset</button>
         </div>
