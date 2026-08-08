@@ -8,6 +8,7 @@ import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInval
 import ActivityTimeline from '../components/ActivityTimeline'
 import { noteEvents, approvalEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import RosterPanel from '../components/RosterPanel'
+import AttachmentsPanel from '../components/AttachmentsPanel'
 import TransferOrder from '../components/TransferOrder'
 import CloseSession from '../components/CloseSession'
 import CancelSession from '../components/CancelSession'
@@ -149,6 +150,7 @@ export default function SessionDetail() {
     { key: 'orders', label: `Orders (${bookedCount})${waitCount ? ` · ${waitCount} waitlisted` : ''}` },
     { key: 'participants', label: 'Participants' },
     { key: 'notes', label: 'Notes' },
+    { key: 'files', label: 'Files' },
     { key: 'history', label: 'History' },
   ]
 
@@ -322,6 +324,10 @@ export default function SessionDetail() {
             </div>
           )}
         </div>
+      )}
+
+      {tab === 'files' && (
+        <div className="card card-pad"><AttachmentsPanel entityType="session" entityId={schedule.schedule_id} /></div>
       )}
 
       {tab === 'history' && (
