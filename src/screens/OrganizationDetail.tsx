@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useOrganization, useOrgClients, useClients, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
+import AttachmentsPanel from '../components/AttachmentsPanel'
 import { useToast } from '../components/Toast'
 
 const COUNTRIES = ['PH', 'ID']
@@ -130,6 +131,10 @@ export default function OrganizationDetail() {
           </div>
         </div>
       )}
+
+      <RecordSection title="Files">
+        <div className="card card-pad"><AttachmentsPanel entityType="organization" entityId={id} /></div>
+      </RecordSection>
     </>
   )
 }

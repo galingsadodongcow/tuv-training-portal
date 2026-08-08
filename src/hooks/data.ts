@@ -519,6 +519,18 @@ export function usePayments(orderId?: string) {
   })
 }
 
+// Files attached to a record.
+export function useAttachments(entityType?: string, entityId?: string) {
+  return useQuery({
+    queryKey: ['attachments', entityType, entityId],
+    enabled: !!entityType && !!entityId,
+    queryFn: () => okOr(
+      supabase.from('attachment').select('*').eq('entity_type', entityType).eq('entity_id', String(entityId)).order('created_at', { ascending: false }),
+      []
+    ),
+  })
+}
+
 // Certificates expiring soon (or already expired).
 export function useCertsExpiring() {
   return useQuery({
