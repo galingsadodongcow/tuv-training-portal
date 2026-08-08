@@ -117,6 +117,58 @@ export function useApprovals() {
   })
 }
 
+// ---- Step 3: My Work streams ----
+// Open tasks assigned to the signed-in user. RLS also lets admins read wider,
+// so scope to assigned_to explicitly for the personal queue.
+export function useMyTasks(userId?: string) {
+  return useQuery({
+    queryKey: ['my_tasks', userId],
+    enabled: !!userId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('task')
+          .select('task_id, title, detail, entity_type, entity_id, status, priority, due_date, reason, source, created_at')
+          .eq('assigned_to', userId)
+          .in('status', ['open', 'in_progress', 'blocked'])
+          .order('due_date', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: false })
+      ),
+  })
+}
+
+// Unread notifications for the signed-in user.
+export function useMyNotifications(userId?: string) {
+  return useQuery({
+    queryKey: ['my_notifications', userId],
+    enabled: !!userId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('notification')
+          .select('notif_id, kind, title, body, entity_type, entity_id, actor_id, is_read, created_at')
+          .eq('recipient_id', userId)
+          .eq('is_read', false)
+          .order('created_at', { ascending: false })
+      ),
+  })
+}
+
+// Unresolved import exceptions (super admin stream).
+export function useOpenExceptions() {
+  return useQuery({
+    queryKey: ['open_exceptions'],
+    queryFn: () =>
+      sel(
+        supabase
+          .from('import_exception')
+          .select('exception_id, source, reason, raw, resolved, created_at')
+          .eq('resolved', false)
+          .order('created_at', { ascending: false })
+      ),
+  })
+}
+
 export function useElearningPending() {
   return useQuery({
     queryKey: ['elearning_pending'],
