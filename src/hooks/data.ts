@@ -325,7 +325,7 @@ export function useClients() {
     queryKey: ['clients'],
     queryFn: async () => {
       const base = 'client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)'
-      const full = await supabase.from('client').select(base + ', deleted_at').order('company').limit(1000)
+      const full = await supabase.from('client').select(base + ', deleted_at, org_id').order('company').limit(1000)
       if (!full.error) return full.data
       if (!isMissingColumn(full.error)) throw full.error
       const b = await supabase.from('client').select(base).order('company').limit(1000)
@@ -345,7 +345,7 @@ export function useClient(clientId?: string) {
     queryKey: ['client', clientId],
     enabled: !!clientId,
     queryFn: async () => {
-      const full = await supabase.from('client').select(CLIENT_DETAIL_SELECT + ', updated_at, deleted_at').eq('client_id', clientId).single()
+      const full = await supabase.from('client').select(CLIENT_DETAIL_SELECT + ', updated_at, deleted_at, org_id').eq('client_id', clientId).single()
       if (!full.error) return full.data
       if (!isMissingColumn(full.error)) throw full.error
       const base = await supabase.from('client').select(CLIENT_DETAIL_SELECT).eq('client_id', clientId).single()
@@ -364,6 +364,60 @@ export function useAttribution() {
           .from('attribution')
           .select('attribution_id, clients_brought, date_recorded, sales_id, schedule_id, salesperson:sales_id(name, code), schedule:schedule_id(start_date, course:course_id(course_name))')
           .order('date_recorded', { ascending: false })
+      ),
+  })
+}
+
+// ---- Phase 6: organizations ----
+// Every organization with its rolled-up counts. Returns [] before the migration
+// so the screen renders an empty state instead of an error.
+export function useOrgSummary() {
+  return useQuery({
+    queryKey: ['org_summary'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_org_summary')
+      if (error) {
+        if (/function .*fn_org_summary/i.test(error.message || '')) return []
+        throw error
+      }
+      return data || []
+    },
+  })
+}
+
+// Plain id + name list for the organization pickers. Tolerant of the table not
+// existing yet.
+export function useOrgOptions() {
+  return useQuery({
+    queryKey: ['org_options'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('organization').select('org_id, name').order('name')
+      if (error) return []
+      return data || []
+    },
+  })
+}
+
+export function useOrganization(orgId?: string) {
+  return useQuery({
+    queryKey: ['organization', orgId],
+    enabled: !!orgId,
+    queryFn: () => sel(supabase.from('organization').select('org_id, name, industry, country, notes, created_at').eq('org_id', orgId).single()),
+  })
+}
+
+// Clients that belong to one organization.
+export function useOrgClients(orgId?: string) {
+  return useQuery({
+    queryKey: ['org_clients', orgId],
+    enabled: !!orgId,
+    queryFn: () =>
+      sel(
+        supabase
+          .from('client')
+          .select('client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)')
+          .eq('org_id', orgId)
+          .order('company')
       ),
   })
 }

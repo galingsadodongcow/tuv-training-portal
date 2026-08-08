@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useClient, useClientHistory, useEntityActivity, useAuditTrail, useInvalidate } from '../hooks/data'
+import { useClient, useClientHistory, useEntityActivity, useAuditTrail, useInvalidate, useOrgOptions } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
 import ActivityTimeline from '../components/ActivityTimeline'
@@ -25,6 +25,7 @@ export default function ClientDetail() {
   const confirm = useConfirm()
   const invalidate = useInvalidate()
   const client = useClient(id)
+  const orgOptions = useOrgOptions()
   const hist = useClientHistory(id)
   const activity = useEntityActivity('client', id)
   const audit = useAuditTrail('client', id)
@@ -50,6 +51,18 @@ export default function ClientDetail() {
   // who owns this client may archive it.
   const isOwnerSales = profile?.role === 'sales' && !!profile?.sales_id && c.owner_sales_id === profile?.sales_id
   const canArchive = softDeleteReady && (['super_admin', 'business_owner'].includes(profile?.role as string) || isOwnerSales)
+  // The database lets the super admin or the owning salesperson edit a client,
+  // so the same two may set its organization. The org_id field only exists once
+  // the migration is applied; hide the control until then.
+  const orgReady = c.org_id !== undefined
+  const canSetOrg = orgReady && (profile?.role === 'super_admin' || isOwnerSales)
+  const orgName = (orgOptions.data || []).find((o: any) => o.org_id === c.org_id)?.name
+
+  const setOrg = async (orgId: string | null) => {
+    const { error } = await supabase.from('client').update({ org_id: orgId }).eq('client_id', id)
+    if (error) toast.error(error.message)
+    else { toast.success(orgId ? 'Organization set.' : 'Organization cleared.'); invalidate(['client', 'clients', 'org_summary', 'org_clients']) }
+  }
 
   const setDeleted = async (value: string | null) => {
     const { error } = await supabase.from('client').update({ deleted_at: value }).eq('client_id', id)
@@ -125,6 +138,18 @@ export default function ClientDetail() {
           <KeyVal label="Email">{c.email || '—'}</KeyVal>
           <KeyVal label="Phone">{c.phone || '—'}</KeyVal>
           <KeyVal label="Industry">{c.industry || '—'}</KeyVal>
+          {orgReady && (
+            <KeyVal label="Organization">
+              {canSetOrg ? (
+                <select value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} style={{ maxWidth: 220 }}>
+                  <option value="">None</option>
+                  {(orgOptions.data || []).map((o: any) => (<option key={o.org_id} value={o.org_id}>{o.name}</option>))}
+                </select>
+              ) : c.org_id ? (
+                <Link href={`/organizations/${c.org_id}`}>{orgName || 'Organization'}</Link>
+              ) : '—'}
+            </KeyVal>
+          )}
         </div>
       </div>
 

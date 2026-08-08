@@ -28,6 +28,7 @@ export const NAV: NavItem[] = [
   { path: '/inquiries', label: 'Inquiries', roles: ['super_admin', 'sales'], icon: 'inquiries' },
   { path: '/sales-entry', label: 'New sales order', roles: ['super_admin', 'sales'], icon: 'plus' },
   { path: '/clients', label: 'Clients', roles: ALL, icon: 'clients' },
+  { path: '/organizations', label: 'Organizations', roles: ALL, icon: 'organizations' },
   { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'sales'], icon: 'duplicates' },
   { path: '/approvals', label: 'Approvals', roles: ['super_admin', 'operations', 'business_owner'], icon: 'approvals' },
   { path: '/courses', label: 'Courses and pricing', roles: ['super_admin', 'operations'], icon: 'courses' },
