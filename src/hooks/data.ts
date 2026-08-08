@@ -181,6 +181,58 @@ export function useAllProfiles() {
   })
 }
 
+// ---- Pricing, country, and audit (Phase N) ----
+export function useDiscountRules() {
+  return useQuery({
+    queryKey: ['discount_rules'],
+    queryFn: () =>
+      okOr(
+        supabase.from('discount_rule').select('*, course:course_id(course_name)').order('created_at', { ascending: false }),
+        []
+      ),
+  })
+}
+
+// Rules applicable to a specific booking, richest first. Advisory only.
+export function useApplicableDiscounts(courseId?: string, type?: string, country?: string, seats?: number) {
+  return useQuery({
+    queryKey: ['applicable_discounts', courseId, type, country, seats],
+    enabled: !!courseId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_applicable_discounts', {
+        p_course: courseId, p_type: type ?? null, p_country: country ?? null, p_seats: seats ?? 1,
+      })
+      return error ? [] : (data || [])
+    },
+  })
+}
+
+export function useCountryRevenue() {
+  return useQuery({
+    queryKey: ['country_revenue'],
+    queryFn: () => okOr(supabase.from('v_country_revenue').select('*'), []),
+  })
+}
+
+export function useAuditSearch(filters: Record<string, any>) {
+  return useQuery({
+    queryKey: ['audit_search', filters],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_audit_search', {
+        p_table: filters.table || null,
+        p_action: filters.action || null,
+        p_role: filters.role || null,
+        p_from: filters.from || null,
+        p_to: filters.to || null,
+        p_search: filters.search || null,
+        p_limit: filters.limit || 200,
+      })
+      if (error) return { error, rows: [] as any[] }
+      return { error: null, rows: (data || []) as any[] }
+    },
+  })
+}
+
 // ---- Feedback and quality ----
 export function useNpsSummary() {
   return useQuery({
