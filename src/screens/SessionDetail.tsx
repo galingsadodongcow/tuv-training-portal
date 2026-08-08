@@ -15,6 +15,7 @@ import GoNoGoPanel from '../components/GoNoGoPanel'
 import { StatusPill, GoPill, ChannelPill, FillBar, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordTabs, RecordSection, KeyVal, RecordNotice } from '../components/record'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { php, shortDate } from '../lib/format'
 import { lt, formatSegments } from '../lib/labels'
 
@@ -36,6 +37,7 @@ export default function SessionDetail() {
   }
 
   const toast = useToast()
+  const confirm = useConfirm()
   const { profile } = useAuth()
   const role = profile?.role
   const sched = useSchedule(id)
@@ -104,6 +106,16 @@ export default function SessionDetail() {
   }
 
   const setStatus = async (status: string) => {
+    // Completing a session affects its bookings and roster: confirm first.
+    if (status === 'Completed') {
+      const res = await confirm({
+        title: 'Mark this session Completed?',
+        body: 'This affects its bookings and roster and cannot be undone from here.',
+        confirmLabel: 'Mark completed',
+        reason: 'optional',
+      })
+      if (!res.ok) return
+    }
     setBusy('status'); setMsg(null)
     const { error } = await supabase.from('schedule').update({ status }).eq('schedule_id', schedule.schedule_id)
     if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }

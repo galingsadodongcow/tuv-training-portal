@@ -332,6 +332,12 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .timeline-when { margin-left: auto; }
 .timeline-detail { font-size: 13.5px; margin-top: 3px; word-break: break-word; }
 
+/* --------------------------------------------- Confirm dialog */
+.dialog-scrim { position: fixed; inset: 0; background: color-mix(in srgb, #000 45%, transparent); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 60; }
+.dialog { width: 100%; max-width: 420px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,0.28); padding: 20px 22px; }
+.dialog-title { font-weight: 700; font-size: 16px; }
+.dialog-body { margin-top: 8px; color: var(--text-muted); font-size: 14px; }
+
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
