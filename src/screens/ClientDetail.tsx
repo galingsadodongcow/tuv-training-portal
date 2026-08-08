@@ -1,10 +1,14 @@
 'use client'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useClient, useClientHistory, useEntityActivity, useAuditTrail } from '../hooks/data'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
+import { useClient, useClientHistory, useEntityActivity, useAuditTrail, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
 import ActivityTimeline from '../components/ActivityTimeline'
+import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
@@ -16,6 +20,10 @@ import { collectionState, collectionTone } from '../lib/orderState'
 export default function ClientDetail() {
   const params = useParams()
   const id = String(params.id)
+  const { profile } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
+  const invalidate = useInvalidate()
   const client = useClient(id)
   const hist = useClientHistory(id)
   const activity = useEntityActivity('client', id)
@@ -23,7 +31,7 @@ export default function ClientDetail() {
 
   if (client.isLoading) return <Spinner label="Loading customer" />
   if (client.error) return <ErrorNote error={client.error} />
-  const c = client.data
+  const c: any = client.data
   if (!c) {
     return (
       <>
@@ -31,6 +39,27 @@ export default function ClientDetail() {
         <div className="card"><div className="empty">This customer does not exist or you cannot access it.</div></div>
       </>
     )
+  }
+
+  // Soft delete: the Archive control only appears once the deleted_at column
+  // exists (the record carries the field). It hides the customer from lists
+  // without destroying history; Restore clears it.
+  const softDeleteReady = c.deleted_at !== undefined
+  const archived = !!c.deleted_at
+  const canArchive = softDeleteReady && ['super_admin', 'business_owner'].includes(profile?.role as string)
+
+  const setDeleted = async (value: string | null) => {
+    const { error } = await supabase.from('client').update({ deleted_at: value }).eq('client_id', id)
+    if (error) toast.error(error.message)
+    else { toast.success(value ? 'Customer archived.' : 'Customer restored.'); invalidate(['client', 'clients']) }
+  }
+  const archive = async () => {
+    const res = await confirm({
+      title: 'Archive this customer?',
+      body: 'The customer is hidden from lists but not deleted. History is preserved and it can be restored.',
+      confirmLabel: 'Archive', tone: 'danger', reason: 'optional',
+    })
+    if (res.ok) setDeleted(new Date().toISOString())
   }
 
   const orders = hist.data || []
@@ -65,7 +94,13 @@ export default function ClientDetail() {
           <>
             {c.salesperson?.name ? <Badge tone="info">{c.salesperson.name}</Badge> : <Badge tone="neutral">No owner</Badge>}
             {overdueAmt > 0 && <Badge tone="danger">Overdue {php(overdueAmt)}</Badge>}
+            {archived && <Badge tone="neutral">Archived</Badge>}
           </>
+        }
+        actions={
+          canArchive && (archived
+            ? <button className="btn btn-ghost btn-sm" onClick={() => setDeleted(null)}>Restore</button>
+            : <button className="btn btn-danger btn-sm" onClick={archive}>Archive</button>)
         }
       />
 
