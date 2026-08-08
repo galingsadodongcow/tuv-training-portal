@@ -57,6 +57,18 @@ export default function SalesEntry() {
   const feeFor = (courseId: string, modality: string) =>
     fees.data?.find((f: any) => f.course_id === courseId && f.modality === modality)?.fee_php ?? null
 
+  // Seats left on a line's chosen session, or null when there is no cap.
+  const seatsLeftFor = (l: any) => {
+    const s = l.sessions?.find((x: any) => x.schedule_id === l.schedule_id)
+    if (!s || s.max_participants == null) return null
+    return s.max_participants - s.booked_participants
+  }
+  const isWaitlisted = (l: any) => {
+    if (l.modality === 'E-learning' || !l.schedule_id) return false
+    const left = seatsLeftFor(l)
+    return left != null && left < Number(l.seats || 1)
+  }
+
   const setLine = (idx: number, patch: any) => {
     setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)))
   }
@@ -135,6 +147,7 @@ export default function SalesEntry() {
         seats: Number(l.seats),
         amount_php: Number(l.amount) * Number(l.seats),
         access_status: l.modality === 'E-learning' ? 'Pending' : null,
+        line_status: isWaitlisted(l) ? 'Waitlist' : 'New',
       }))
       const { error: lErr } = await supabase.from('order_line').insert(payload)
       if (lErr) {
@@ -153,7 +166,8 @@ export default function SalesEntry() {
       invalidate(['orders', 'schedules', 'channel_pax', 'fulfillment_queue', 'clients'])
       const goodSeats = good.reduce((n, l) => n + (Number(l.seats) || 0), 0)
       const goodTotal = payload.reduce((n, p) => n + (Number(p.amount_php) || 0), 0)
-      setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: goodSeats, total: goodTotal, warning: assignWarning })
+      const waitlisted = payload.filter((p) => p.line_status === 'Waitlist').length
+      setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: goodSeats, total: goodTotal, warning: assignWarning, waitlisted })
       toast.success('Order created.')
     } catch (err: any) {
       setMsg(err.message)
@@ -174,6 +188,12 @@ export default function SalesEntry() {
             Order {result.order_id} saved with {result.lines} line{result.lines > 1 ? 's' : ''},
             {' '}{result.seats} seat{result.seats > 1 ? 's' : ''}, {php(result.total)}. It is assigned to you and sits at stage New.
           </div>
+          {result.waitlisted > 0 && (
+            <div className="notice notice-warn">
+              {result.waitlisted} line{result.waitlisted > 1 ? 's' : ''} went to the waitlist because the session was full.
+              Operations will promote {result.waitlisted > 1 ? 'them' : 'it'} to a seat when one opens.
+            </div>
+          )}
           {result.warning && <div className="notice notice-error">{result.warning}</div>}
           <div className="toolbar">
             <button className="btn" onClick={() => { setResult(null); setLines([blankLine()]); setHead({ ...head, order_id: '' }); setClient({ mode: 'new', client_id: '', name: '', company: '', email: '', phone: '' }) }}>
@@ -285,9 +305,9 @@ export default function SalesEntry() {
                           const left = s.max_participants == null ? null : s.max_participants - s.booked_participants
                           const full = left != null && left < Number(l.seats || 1)
                           return (
-                            <option key={s.schedule_id} value={s.schedule_id} disabled={full}>
+                            <option key={s.schedule_id} value={s.schedule_id}>
                               {formatSegments(s.date_segments, s.start_date, s.end_date)} · {lt(s.modality)} · {s.booked_participants}/{s.min_participants} booked
-                              {left != null ? ` · ${left} left` : ''}{full ? ' — full' : ''}
+                              {left != null ? ` · ${left} left` : ''}{full ? ' — full, joins waitlist' : ''}
                             </option>
                           )
                         })}
@@ -304,6 +324,11 @@ export default function SalesEntry() {
                 {l.course_id && l.modality !== 'E-learning' && l.sessions.length === 0 && (
                   <div className="notice notice-info">
                     This course has no open session yet. Ask operations to schedule one, or sell it as E-learning if it is self-paced.
+                  </div>
+                )}
+                {isWaitlisted(l) && (
+                  <div className="notice notice-warn" style={{ marginTop: 8 }}>
+                    This session is full. This line will be saved to the waitlist and promoted when a seat opens.
                   </div>
                 )}
               </div>
