@@ -3,7 +3,7 @@ import { ReactNode, Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { NAV, ROLE_LABEL, Role } from '@/lib/roles'
+import { NAV_GROUPS, ROLE_LABEL, Role } from '@/lib/roles'
 import { Spinner } from './ui'
 import ThemeToggle from './ThemeToggle'
 
@@ -11,8 +11,13 @@ export default function Shell({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
   const role = profile?.role as Role | undefined
   const pathname = usePathname()
-  const items = NAV.filter((n) => role && n.roles.includes(role))
+  // Groups the current role can see, with their visible items.
+  const groups = NAV_GROUPS
+    .map((g) => ({ label: g.label, items: g.items.filter((n) => role && n.roles.includes(role)) }))
+    .filter((g) => g.items.length > 0)
   const [navOpen, setNavOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const toggleGroup = (label: string) => setCollapsed((c) => ({ ...c, [label]: !c[label] }))
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -35,14 +40,27 @@ export default function Shell({ children }: { children: ReactNode }) {
           <span className="brand-mark">Academy</span>
           <span className="brand-sub">Portal</span>
         </div>
-        {items.map((n) => {
-          const active = pathname === n.path || pathname.startsWith(n.path + '/')
-          return (
-            <Link key={n.path} href={n.path} className={`nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
-              {n.label}
-            </Link>
-          )
-        })}
+        <nav className="nav-groups">
+          {groups.map((g) => {
+            const isCollapsed = !!collapsed[g.label]
+            return (
+              <div key={g.label} className="nav-group">
+                <button className="nav-group-head" aria-expanded={!isCollapsed} onClick={() => toggleGroup(g.label)}>
+                  <span>{g.label}</span>
+                  <span className="nav-group-caret">{isCollapsed ? '▸' : '▾'}</span>
+                </button>
+                {!isCollapsed && g.items.map((n) => {
+                  const active = pathname === n.path || pathname.startsWith(n.path + '/')
+                  return (
+                    <Link key={n.path} href={n.path} className={`nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
+                      {n.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </nav>
         <div className="sidebar-foot">
           <ThemeToggle />
           <div style={{ fontWeight: 600, marginTop: 12 }}>{profile?.full_name}</div>
