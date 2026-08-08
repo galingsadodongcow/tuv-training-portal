@@ -109,7 +109,7 @@ as $$
    where fn_current_role() = 'super_admin'
      and (p_table is null or a.table_name = p_table)
      and (p_action is null or a.action = p_action)
-     and (p_role is null or a.actor_role = p_role)
+     and (p_role is null or a.actor_role::text = p_role)
      and (p_from is null or a.changed_at >= p_from)
      and (p_to is null or a.changed_at <= p_to)
      and (p_search is null or a.row_pk ilike '%' || p_search || '%' or a.changed_fields::text ilike '%' || p_search || '%')
