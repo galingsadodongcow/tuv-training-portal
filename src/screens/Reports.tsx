@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
-import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability } from '../hooks/data'
+import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { php, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
@@ -47,12 +47,15 @@ const AGING = [
 ]
 
 export default function Reports() {
-  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin'>('digest')
+  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'>('digest')
   const digest = useDigest()
   const facts = useOrderFacts()
   const receivables = useReceivables()
   const certs = useCertsExpiring()
   const pnl = useProfitability()
+  const funnel = useFunnel()
+  const forecast = useForecastVsActual()
+  const trainerLoad = useTrainerLoad()
 
   const margins = useMemo(() => {
     const rows = (pnl.data || []).filter((r: any) => Number(r.revenue) > 0 || Number(r.total_cost) > 0)
@@ -126,6 +129,7 @@ export default function Reports() {
           <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
           <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
           <button className={`seg-btn ${tab === 'margin' ? 'on' : ''}`} onClick={() => setTab('margin')}>Profitability</button>
+          <button className={`seg-btn ${tab === 'analytics' ? 'on' : ''}`} onClick={() => setTab('analytics')}>Analytics</button>
         </div>
       </div>
 
@@ -320,6 +324,74 @@ export default function Reports() {
             </div>
           </>
         )
+      )}
+
+      {tab === 'analytics' && (
+        <>
+          <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Conversion funnel</h2></div></div>
+          {funnel.isLoading ? <Spinner label="Loading funnel" /> : !funnel.data ? (
+            <div className="card"><div className="empty">Funnel data is unavailable. Run the analytics migration to enable it.</div></div>
+          ) : (
+            <div className="card card-pad" style={{ marginBottom: 20 }}>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
+                <div><div className="k-label">Inquiries</div><div className="k-value">{num(funnel.data.inquiries)}</div><div className="fill-label">{num(funnel.data.open_inq)} still open</div></div>
+                <div><div className="k-label">Won</div><div className="k-value">{num(funnel.data.won)}</div><div className="fill-label">{num(funnel.data.lost)} lost</div></div>
+                <div><div className="k-label">Win rate</div><div className="k-value">{Number(funnel.data.won) + Number(funnel.data.lost) > 0 ? Math.round(Number(funnel.data.won) / (Number(funnel.data.won) + Number(funnel.data.lost)) * 100) : 0}%</div><div className="fill-label">of closed inquiries</div></div>
+                <div><div className="k-label">Quotes</div><div className="k-value">{num(funnel.data.quotes)}</div><div className="fill-label">{num(funnel.data.quotes_accepted)} accepted</div></div>
+                <div><div className="k-label">Orders</div><div className="k-value">{num(funnel.data.orders_total)}</div><div className="fill-label">active</div></div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
+            <div>
+              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Trainer utilization</h2>
+              <div className="card">
+                {trainerLoad.isLoading ? <Spinner /> : (trainerLoad.data?.length || 0) === 0 ? (
+                  <div className="empty">No active trainers.</div>
+                ) : (
+                  <table>
+                    <thead><tr><th>Trainer</th><th className="right">Sessions</th><th className="right">Days</th><th className="right">Delivered</th></tr></thead>
+                    <tbody>
+                      {(trainerLoad.data || []).map((t: any) => (
+                        <tr key={t.trainer_id}>
+                          <td style={{ fontWeight: 600 }}>{t.name} <span className="fill-label">{t.code}</span></td>
+                          <td className="right">{num(t.sessions)}</td>
+                          <td className="right">{num(t.training_days)}</td>
+                          <td className="right">{num(t.delivered)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Forecast against actual</h2>
+              <div className="card">
+                {forecast.isLoading ? <Spinner /> : (forecast.data?.length || 0) === 0 ? (
+                  <div className="empty">No sessions to forecast.</div>
+                ) : (
+                  <table>
+                    <thead><tr><th>Course</th><th>Date</th><th className="right">Forecast</th><th className="right">Actual</th><th className="right">Fill</th></tr></thead>
+                    <tbody>
+                      {(forecast.data || []).slice(0, 40).map((r: any) => (
+                        <tr key={r.schedule_id}>
+                          <td><Link href={`/session/${r.schedule_id}`} style={{ fontWeight: 600 }}>{r.course_name}</Link></td>
+                          <td className="fill-label">{shortDate(r.start_date)}</td>
+                          <td className="right fill-label">{php(Number(r.forecast_revenue))}</td>
+                          <td className="right">{php(Number(r.actual_revenue))}</td>
+                          <td className="right">{Number(r.capacity) > 0 ? Math.round(Number(r.booked) / Number(r.capacity) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </>
   )
