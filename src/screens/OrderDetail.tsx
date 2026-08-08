@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useOrder, useInvalidate, useTransferTargets } from '../hooks/data'
+import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAuditTrail } from '../hooks/data'
+import ActivityTimeline from '../components/ActivityTimeline'
+import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
 import BlockerBar from '../components/BlockerBar'
@@ -61,6 +63,8 @@ export default function OrderDetail() {
   const invalidate = useInvalidate()
   const toast = useToast()
   const order = useOrder(id)
+  const activity = useEntityActivity('order', id)
+  const audit = useAuditTrail('orders', id)
 
   const [stage, setStage] = useState('')
   const [sap, setSap] = useState('')
@@ -178,6 +182,17 @@ export default function OrderDetail() {
               )}
             </div>
           ))}
+        </RecordSection>
+
+        <RecordSection title="Activity">
+          <ActivityTimeline
+            events={mergeActivity(
+              taskEvents(activity.data?.tasks),
+              notificationEvents(activity.data?.notifs),
+              auditEvents(audit.data)
+            )}
+            loading={activity.isLoading}
+          />
         </RecordSection>
       </div>
     </>

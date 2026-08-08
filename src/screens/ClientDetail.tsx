@@ -1,9 +1,11 @@
 'use client'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useClient, useClientHistory } from '../hooks/data'
+import { useClient, useClientHistory, useEntityActivity, useAuditTrail } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
+import ActivityTimeline from '../components/ActivityTimeline'
+import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { collectionState, collectionTone } from '../lib/orderState'
@@ -16,6 +18,8 @@ export default function ClientDetail() {
   const id = String(params.id)
   const client = useClient(id)
   const hist = useClientHistory(id)
+  const activity = useEntityActivity('client', id)
+  const audit = useAuditTrail('client', id)
 
   if (client.isLoading) return <Spinner label="Loading customer" />
   if (client.error) return <ErrorNote error={client.error} />
@@ -138,6 +142,17 @@ export default function ClientDetail() {
             </table>
           </div>
         )}
+      </RecordSection>
+
+      <RecordSection title="Activity">
+        <ActivityTimeline
+          events={mergeActivity(
+            taskEvents(activity.data?.tasks),
+            notificationEvents(activity.data?.notifs),
+            auditEvents(audit.data)
+          )}
+          loading={activity.isLoading}
+        />
       </RecordSection>
     </>
   )
