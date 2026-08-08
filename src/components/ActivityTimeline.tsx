@@ -12,6 +12,17 @@ const KIND_TONE: Record<ActivityEvent['kind'], string> = {
 const when = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
 
+// Never hand React an object as a child. Coerce anything non-primitive to a
+// readable string so one odd event can't blank the whole record page.
+const text = (v: any): string => {
+  if (v == null) return ''
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  if (Array.isArray(v)) return v.map(text).filter(Boolean).join(', ')
+  if (typeof v === 'object') return Object.keys(v).join(', ')
+  return String(v)
+}
+
 // One chronological rail for a record. Fed normalized events from any mix of
 // notes, decisions, tasks, notifications, and audit rows.
 export default function ActivityTimeline({ events, loading }: { events: ActivityEvent[]; loading?: boolean }) {
@@ -25,11 +36,11 @@ export default function ActivityTimeline({ events, loading }: { events: Activity
           <div className="timeline-body">
             <div className="timeline-head">
               <span className={`pill ${KIND_TONE[e.kind]}`}>{KIND_LABEL[e.kind]}</span>
-              <span className="timeline-title">{e.title}</span>
+              <span className="timeline-title">{text(e.title)}</span>
               <span className="fill-label timeline-when">{when(e.at)}</span>
             </div>
-            {e.detail && <div className="timeline-detail">{e.detail}</div>}
-            {e.meta && <div className="fill-label">{e.meta}</div>}
+            {e.detail && <div className="timeline-detail">{text(e.detail)}</div>}
+            {e.meta && <div className="fill-label">{text(e.meta)}</div>}
           </div>
         </div>
       ))}
