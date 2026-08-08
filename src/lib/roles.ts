@@ -33,6 +33,7 @@ export const NAV: NavItem[] = [
   { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'sales'], icon: 'duplicates' },
   { path: '/approvals', label: 'Approvals', roles: ['super_admin', 'operations', 'business_owner'], icon: 'approvals' },
   { path: '/courses', label: 'Courses and pricing', roles: ['super_admin', 'operations'], icon: 'courses' },
+  { path: '/pricing', label: 'Pricing rules', roles: ['super_admin', 'operations', 'business_owner'], icon: 'pricing' },
   { path: '/resources', label: 'Trainers and venues', roles: ['super_admin', 'operations', 'business_owner'], icon: 'resources' },
   { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations'], icon: 'elearning' },
   { path: '/communications', label: 'Communications', roles: ['super_admin', 'operations'], icon: 'comms' },
@@ -42,4 +43,5 @@ export const NAV: NavItem[] = [
   { path: '/quality', label: 'Feedback and quality', roles: ['super_admin', 'operations', 'business_owner'], icon: 'quality-star' },
   { path: '/data-quality', label: 'Data quality', roles: ['super_admin'], icon: 'quality' },
   { path: '/admin', label: 'Users and access', roles: ['super_admin'], icon: 'admin' },
+  { path: '/audit', label: 'Audit log', roles: ['super_admin'], icon: 'audit' },
 ]

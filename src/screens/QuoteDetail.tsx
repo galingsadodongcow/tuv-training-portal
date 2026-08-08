@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useQuote, useQuoteLines, useQuoteTotal, useCourses, useCourseFees, useInvalidate } from '../hooks/data'
+import { useQuote, useQuoteLines, useQuoteTotal, useCourses, useCourseFees, useInvalidate, useApplicableDiscounts } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
 import { useToast } from '../components/Toast'
@@ -141,9 +141,40 @@ export default function QuoteDetail() {
               <label className="field"><span>Unit price</span><input type="number" min="0" value={row.unit_price} onChange={(e) => setRow({ ...row, unit_price: e.target.value })} /></label>
               <button className="btn btn-sm" onClick={addLine} disabled={busy}>Add</button>
             </div>
+            <DiscountHint
+              course={courses.data?.find((c: any) => c.course_id === row.course_id)}
+              country={q.country}
+              seats={Number(row.seats) || 1}
+              unitPrice={row.unit_price === '' ? null : Number(row.unit_price)}
+              onApply={(p) => setRow((r: any) => ({ ...r, unit_price: p }))}
+            />
           </div>
         )}
       </RecordSection>
     </>
+  )
+}
+
+// Advisory: shows the best applicable discount rule for the line being added and
+// offers to apply it to the unit price. Never changes anything on its own.
+function DiscountHint({ course, country, seats, unitPrice, onApply }: {
+  course: any; country?: string | null; seats: number; unitPrice: number | null; onApply: (p: number) => void
+}) {
+  const discounts = useApplicableDiscounts(course?.course_id, course?.training_type, country, seats)
+  if (!course?.course_id) return null
+  const best = (discounts.data || [])[0]
+  if (!best) return null
+  const pct = best.discount_pct != null ? Number(best.discount_pct) : null
+  const amt = best.discount_amount != null ? Number(best.discount_amount) : null
+  const discounted = unitPrice != null
+    ? pct != null ? Math.round(unitPrice * (1 - pct / 100)) : amt != null ? Math.max(0, unitPrice - amt) : null
+    : null
+  return (
+    <div className="notice notice-info" style={{ marginTop: 10 }}>
+      <strong>{best.label}</strong> applies at {seats} seat{seats === 1 ? '' : 's'} — {pct != null ? `${pct}% off` : `${php(amt)} off`}.
+      {discounted != null && unitPrice != null && (
+        <> Suggested unit price {php(discounted)} (from {php(unitPrice)}). <button className="btn btn-ghost btn-sm" onClick={() => onApply(discounted)}>Apply</button></>
+      )}
+    </div>
   )
 }

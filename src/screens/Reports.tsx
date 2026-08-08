@@ -2,9 +2,9 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
-import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad } from '../hooks/data'
+import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad, useCountryRevenue } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
-import { php, num, shortDate } from '../lib/format'
+import { php, money, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
 
 const monthLabel = (d: string) => {
@@ -56,6 +56,7 @@ export default function Reports() {
   const funnel = useFunnel()
   const forecast = useForecastVsActual()
   const trainerLoad = useTrainerLoad()
+  const countryRev = useCountryRevenue()
 
   const margins = useMemo(() => {
     const rows = (pnl.data || []).filter((r: any) => Number(r.revenue) > 0 || Number(r.total_cost) > 0)
@@ -208,6 +209,28 @@ export default function Reports() {
                 </div>
               </div>
             </div>
+
+            {(countryRev.data?.length || 0) > 1 && (
+              <div style={{ marginTop: 16 }}>
+                <h2 style={{ fontSize: 16, marginBottom: 8 }}>By country</h2>
+                <div className="card">
+                  <table>
+                    <thead><tr><th>Country</th><th>Currency</th><th className="right">Orders</th><th className="right">Seats</th><th className="right">Booked</th></tr></thead>
+                    <tbody>
+                      {(countryRev.data || []).map((c: any) => (
+                        <tr key={`${c.country}-${c.currency}`}>
+                          <td style={{ fontWeight: 600 }}>{c.country}</td>
+                          <td className="fill-label">{c.currency}</td>
+                          <td className="right">{num(c.orders)}</td>
+                          <td className="right">{num(c.seats)}</td>
+                          <td className="right">{money(Number(c.booked), c.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )
       )}

@@ -22,6 +22,8 @@ const PATHS: Record<string, JSX.Element> = {
   quality: <><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /><path d="M12 8v4M12 15h.01" /></>,
   admin: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0 1 14 0" /><path d="M18.5 3.5l1.2 1.2-3 3-1.2-1.2z" /></>,
   'quality-star': <><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" /></>,
+  pricing: <><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2.5 0 0 0-2.5-1.6c-1.6 0-2.5.9-2.5 2 0 2.8 5 1.4 5 4.2 0 1.2-1 2-2.5 2A2.6 2.6 0 0 1 9 15.8M12 6v1.4M12 16.6V18" /></>,
+  audit: <><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5" /><circle cx="11" cy="14" r="2.4" /><path d="M13 16l2 2" /></>,
 }
 
 export default function NavIcon({ name }: { name: string }) {
