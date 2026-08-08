@@ -1,31 +1,45 @@
 'use client'
-import { useEffect, useMemo, useState, KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV, Role } from '@/lib/roles'
 
-// ⌘K / Ctrl+K jump-to menu over the role-filtered navigation.
+// What each record kind is called, where it links, and which roles may open it.
+const KIND: Record<string, { label: string; href: (id: string) => string; roles: Role[] }> = {
+  order: { label: 'Order', href: (id) => `/orders/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
+  client: { label: 'Client', href: (id) => `/clients/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
+  session: { label: 'Session', href: (id) => `/session/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
+  organization: { label: 'Organization', href: (id) => `/organizations/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
+  course: { label: 'Course', href: () => `/courses`, roles: ['super_admin', 'operations'] },
+  inquiry: { label: 'Inquiry', href: () => `/inquiries`, roles: ['super_admin', 'sales'] },
+}
+
+type Entry = { key: string; label: string; sub: string; group: string; go: () => void }
+
+// ⌘K / Ctrl+K jump menu. Filters the navigation, and once you type two letters
+// it also searches records by name across the portal.
 export default function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
+  const [results, setResults] = useState<any[]>([])
   const router = useRouter()
   const { profile } = useAuth()
   const role = profile?.role as Role | undefined
 
-  const items = useMemo(() => NAV.filter((n) => role && n.roles.includes(role)), [role])
-  const filtered = useMemo(() => {
+  const navItems = useMemo(() => NAV.filter((n) => role && n.roles.includes(role)), [role])
+  const navMatches = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return t ? items.filter((i) => i.label.toLowerCase().includes(t)) : items
-  }, [items, q])
+    return t ? navItems.filter((i) => i.label.toLowerCase().includes(t)) : navItems
+  }, [navItems, q])
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setOpen((o) => !o)
-        setQ('')
-        setActive(0)
+        setQ(''); setActive(0); setResults([])
       } else if (e.key === 'Escape') {
         setOpen(false)
       }
@@ -36,25 +50,45 @@ export default function CommandPalette() {
 
   useEffect(() => setActive(0), [q])
 
+  // Debounced record search. Two characters minimum. Tolerant of the function
+  // not existing yet, in which case it simply returns no records.
+  const timer = useRef<any>(null)
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current)
+    const t = q.trim()
+    if (!open || t.length < 2) { setResults([]); return }
+    timer.current = setTimeout(async () => {
+      const { data, error } = await supabase.rpc('fn_global_search', { p_q: t })
+      if (error) setResults([])
+      else setResults((data || []).filter((r: any) => KIND[r.kind]?.roles.includes(role as Role)))
+    }, 200)
+    return () => timer.current && clearTimeout(timer.current)
+  }, [q, open, role])
+
+  const go = (path: string) => { setOpen(false); router.push(path) }
+
+  const entries: Entry[] = useMemo(() => {
+    const nav: Entry[] = navMatches.map((it) => ({ key: 'nav:' + it.path, label: it.label, sub: it.path, group: 'Go to', go: () => go(it.path) }))
+    const recs: Entry[] = results.map((r: any) => ({
+      key: r.kind + ':' + r.id,
+      label: r.title || '(untitled)',
+      sub: [KIND[r.kind]?.label, r.subtitle].filter(Boolean).join(' · '),
+      group: 'Records',
+      go: () => go(KIND[r.kind].href(r.id)),
+    }))
+    return [...nav, ...recs]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navMatches, results])
+
   if (!open) return null
 
-  const go = (path: string) => {
-    setOpen(false)
-    router.push(path)
-  }
   const onInputKey = (e: KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setActive((a) => Math.min(a + 1, filtered.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setActive((a) => Math.max(a - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      const it = filtered[active]
-      if (it) go(it.path)
-    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, entries.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); entries[active]?.go() }
   }
+
+  let lastGroup = ''
 
   return (
     <div className="cmdk-scrim" onClick={() => setOpen(false)}>
@@ -62,24 +96,30 @@ export default function CommandPalette() {
         <input
           autoFocus
           className="cmdk-input"
-          placeholder="Jump to…"
+          placeholder="Jump to a page, or search records…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onInputKey}
         />
         <div className="cmdk-list">
-          {filtered.length === 0 && <div className="cmdk-empty">No matches</div>}
-          {filtered.map((it, i) => (
-            <button
-              key={it.path}
-              className={`cmdk-item ${i === active ? 'on' : ''}`}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => go(it.path)}
-            >
-              <span>{it.label}</span>
-              <span className="cmdk-path">{it.path}</span>
-            </button>
-          ))}
+          {entries.length === 0 && <div className="cmdk-empty">{q.trim().length >= 2 ? 'No matches' : 'No matches'}</div>}
+          {entries.map((it, i) => {
+            const header = it.group !== lastGroup ? it.group : null
+            lastGroup = it.group
+            return (
+              <div key={it.key}>
+                {header && <div className="cmdk-group">{header}</div>}
+                <button
+                  className={`cmdk-item ${i === active ? 'on' : ''}`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={it.go}
+                >
+                  <span>{it.label}</span>
+                  <span className="cmdk-path">{it.sub}</span>
+                </button>
+              </div>
+            )
+          })}
         </div>
         <div className="cmdk-foot">
           <kbd>↑</kbd><kbd>↓</kbd> navigate&nbsp;&nbsp;<kbd>↵</kbd> open&nbsp;&nbsp;<kbd>esc</kbd> close
