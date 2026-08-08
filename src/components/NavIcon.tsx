@@ -18,6 +18,7 @@ const PATHS: Record<string, JSX.Element> = {
   dashboard: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
   reports: <><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5M9 13h6M9 17h6M9 9h2" /></>,
   comms: <><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8l-4 4V6a1 1 0 0 1 1-1z" /><path d="M8 10h8M8 13h5" /></>,
+  quotes: <><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v4h4M9 12h6M9 16h4M9 8h2" /></>,
   quality: <><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /><path d="M12 8v4M12 15h.01" /></>,
 }
 

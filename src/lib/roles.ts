@@ -26,6 +26,7 @@ export const NAV: NavItem[] = [
   { path: '/orders', label: 'Orders', roles: ALL, icon: 'orders' },
   { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'operations', 'business_owner', 'sales'], icon: 'fulfillment' },
   { path: '/inquiries', label: 'Inquiries', roles: ['super_admin', 'sales'], icon: 'inquiries' },
+  { path: '/quotations', label: 'Quotations', roles: ['super_admin', 'operations', 'business_owner', 'sales'], icon: 'quotes' },
   { path: '/sales-entry', label: 'New sales order', roles: ['super_admin', 'sales'], icon: 'plus' },
   { path: '/clients', label: 'Clients', roles: ALL, icon: 'clients' },
   { path: '/organizations', label: 'Organizations', roles: ALL, icon: 'organizations' },

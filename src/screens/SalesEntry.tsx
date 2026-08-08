@@ -42,6 +42,12 @@ export default function SalesEntry() {
       })
   }, [sp])
 
+  // preselected existing client, e.g. when starting an order from a quote
+  useEffect(() => {
+    const cid = sp.get('client')
+    if (cid) setClient((c) => ({ ...c, mode: 'existing', client_id: cid }))
+  }, [sp])
+
   // load sessions whenever a line's course changes
   const loadSessions = async (idx: number, courseId: string) => {
     if (!courseId) return
@@ -167,6 +173,9 @@ export default function SalesEntry() {
       const goodSeats = good.reduce((n, l) => n + (Number(l.seats) || 0), 0)
       const goodTotal = payload.reduce((n, p) => n + (Number(p.amount_php) || 0), 0)
       const waitlisted = payload.filter((p) => p.line_status === 'Waitlist').length
+      // If this order started from a quote, mark that quote accepted and linked.
+      const quoteId = sp.get('quote')
+      if (quoteId) await supabase.from('quote').update({ converted_order_id: head.order_id.trim(), status: 'Accepted' }).eq('quote_id', quoteId)
       setResult({ order_id: head.order_id.trim(), lines: payload.length, seats: goodSeats, total: goodTotal, warning: assignWarning, waitlisted })
       toast.success('Order created.')
     } catch (err: any) {
