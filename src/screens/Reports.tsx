@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useDigest, useOrderFacts } from '../hooks/data'
+import { useDigest, useOrderFacts, useReceivables } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { php, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
@@ -31,10 +31,36 @@ function DigestCard({ title, rows, empty, render }: { title: string; rows: any[]
   )
 }
 
+// Days a receivable is overdue. Uses the invoice due date, or falls back to the
+// order date plus 30 days when no invoice due date is set.
+const overdueDaysOf = (r: any) => {
+  const base = r.due_date || (r.order_date ? new Date(+new Date(r.order_date) + 30 * 86400000).toISOString().slice(0, 10) : null)
+  if (!base) return 0
+  return Math.floor((Date.now() - +new Date(base)) / 86400000)
+}
+const AGING = [
+  { key: 'current', label: 'Not due', test: (d: number) => d <= 0 },
+  { key: '1-30', label: '1 to 30 days', test: (d: number) => d >= 1 && d <= 30 },
+  { key: '31-60', label: '31 to 60 days', test: (d: number) => d >= 31 && d <= 60 },
+  { key: '60+', label: 'Over 60 days', test: (d: number) => d > 60 },
+]
+
 export default function Reports() {
-  const [tab, setTab] = useState<'digest' | 'revenue'>('digest')
+  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables'>('digest')
   const digest = useDigest()
   const facts = useOrderFacts()
+  const receivables = useReceivables()
+
+  const aging = useMemo(() => {
+    const rows = (receivables.data || []).map((r: any) => ({ ...r, od: overdueDaysOf(r) }))
+    const buckets = AGING.map((b) => {
+      const items = rows.filter((r: any) => b.test(r.od))
+      return { ...b, count: items.length, total: items.reduce((n: number, r: any) => n + Number(r.balance || 0), 0) }
+    })
+    const total = rows.reduce((n: number, r: any) => n + Number(r.balance || 0), 0)
+    const overdue = rows.filter((r: any) => r.od > 0).sort((a: any, b: any) => b.od - a.od)
+    return { buckets, total, overdue, count: rows.length }
+  }, [receivables.data])
 
   const revenue = useMemo(() => {
     const rows = (facts.data || []).filter((f: any) => f.order_status !== 'Cancelled')
@@ -81,6 +107,7 @@ export default function Reports() {
         <div className="seg">
           <button className={`seg-btn ${tab === 'digest' ? 'on' : ''}`} onClick={() => setTab('digest')}>Digest</button>
           <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
+          <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
         </div>
       </div>
 
@@ -158,6 +185,42 @@ export default function Reports() {
                   </table>
                 </div>
               </div>
+            </div>
+          </>
+        )
+      )}
+
+      {tab === 'receivables' && (
+        receivables.isLoading ? <Spinner label="Loading receivables" /> : (
+          <>
+            <div className="card card-pad" style={{ marginBottom: 16 }}>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                <div><div className="k-label">Open balance</div><div className="k-value">{php(aging.total)}</div></div>
+                {aging.buckets.map((b) => (
+                  <div key={b.key}><div className="k-label">{b.label}</div><div className="k-value">{php(b.total)}</div><div className="fill-label">{b.count} order{b.count === 1 ? '' : 's'}</div></div>
+                ))}
+              </div>
+            </div>
+
+            <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Overdue</h2></div></div>
+            <div className="card">
+              {aging.overdue.length === 0 ? (
+                <div className="empty">Nothing overdue. {aging.count === 0 ? 'No open balances.' : 'All open balances are within terms.'}</div>
+              ) : (
+                <table>
+                  <thead><tr><th>Order</th><th>Customer</th><th className="right">Balance</th><th className="right">Days overdue</th></tr></thead>
+                  <tbody>
+                    {aging.overdue.map((r: any) => (
+                      <tr key={r.order_id}>
+                        <td><Link href={`/orders/${r.order_id}`} style={{ fontWeight: 600 }}>{r.order_id}</Link></td>
+                        <td className="fill-label">{r.company || r.client_name || '—'}</td>
+                        <td className="right">{php(r.balance)}</td>
+                        <td className="right" style={{ color: 'var(--warning)' }}>{r.od}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </>
         )
