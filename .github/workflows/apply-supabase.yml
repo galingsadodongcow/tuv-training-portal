@@ -1,0 +1,80 @@
+name: Apply Supabase SQL
+
+# Applies the migration bundle and/or the sample seed to a Supabase database.
+# Runs only when started by hand (Actions tab -> Run workflow), using a database
+# connection string stored as the repository secret SUPABASE_DB_URL.
+#
+#   migrations : safe + idempotent (schema/policy changes). Default ON.
+#   seed       : DESTRUCTIVE — truncates the transactional tables and repopulates
+#                the 2026 sample data. Default OFF; tick the box to include it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      migrations:
+        description: "Apply the migration bundle (safe, idempotent)"
+        type: boolean
+        default: true
+      seed:
+        description: "Apply the sample seed (DESTRUCTIVE: replaces transactional data)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: apply-supabase
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client >/dev/null
+          psql --version
+
+      - name: Verify secret is present
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Repository secret SUPABASE_DB_URL is not set. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "Secret found."
+
+      - name: Apply migration bundle
+        if: ${{ inputs.migrations }}
+        env:
+          PGPASSWORD_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "== Applying supabase/bundles/2026_program_all_migrations.sql =="
+          psql "$PGPASSWORD_URL" -v ON_ERROR_STOP=1 -f supabase/bundles/2026_program_all_migrations.sql
+          echo "Migrations applied."
+
+      - name: Apply sample seed (destructive)
+        if: ${{ inputs.seed }}
+        env:
+          PGPASSWORD_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "== Applying supabase/seed/rebuild_2026_full.sql (replaces transactional data) =="
+          psql "$PGPASSWORD_URL" -v ON_ERROR_STOP=1 -f supabase/seed/rebuild_2026_full.sql
+          echo "Seed applied."
+
+      - name: Row-count summary
+        env:
+          PGPASSWORD_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$PGPASSWORD_URL" -P pager=off -c "
+            select 'courses' t, count(*) n from course
+            union all select 'schedules', count(*) from schedule
+            union all select 'orders', count(*) from orders
+            union all select 'participants', count(*) from participant
+            union all select 'invoices', count(*) from invoice
+            union all select 'feedback', count(*) from feedback
+            union all select 'quotes', count(*) from quote
+            order by t;" || echo "(summary skipped)"
