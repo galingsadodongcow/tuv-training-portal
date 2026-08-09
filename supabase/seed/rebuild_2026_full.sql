@@ -217,9 +217,13 @@ begin
 
     -- back the session with one real order so the fill count is genuine
     if f > 0 then
-      seq := seq + 1; oid := 'CAL-' || lpad(seq::text, 4, '0');
+      seq := seq + 1;
       v_cl := v_clients[(j % array_length(v_clients,1)) + 1];
       v_ch := (array['Webshop','Inside Sales','Field Sales','In-house Request'])[(j % 4) + 1];
+      -- Webshop orders arrive with a webshop order number (the order_id IS that
+      -- number); direct-sales orders use an internal reference.
+      if v_ch = 'Webshop' then oid := '6080600' || lpad(seq::text, 6, '0');
+      else oid := 'CAL-' || lpad(seq::text, 4, '0'); end if;
       v_odate := case when v_status = 'Completed' then v_start - 25
                       when v_status = 'Confirmed' and (j % 5) = 0 then current_date - 33  -- overdue
                       else current_date - (3 + (j % 20)) end;
