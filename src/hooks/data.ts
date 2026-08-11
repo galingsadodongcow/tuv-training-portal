@@ -613,10 +613,28 @@ export function useOrderFacts() {
   })
 }
 
+// True when a PostgREST error means the table/view/column/function isn't there
+// yet — i.e. a migration hasn't been applied. Those degrade to a fallback so the
+// UI survives ahead of a migration. Any OTHER error is a real failure and must
+// surface (so a panel's error state can render instead of showing empty data).
+const isMissingObject = (error: any) =>
+  !!error && (
+    error.code === '42P01' || // undefined_table / view
+    error.code === '42703' || // undefined_column
+    error.code === '42883' || // undefined_function
+    error.code === 'PGRST202' || error.code === 'PGRST205' || // PostgREST: not in schema cache
+    /does not exist|could not find the (table|function)|not found in the schema cache/i.test(error.message || '')
+  )
+
 // ---- Accounts receivable ----
+// Degrade to `fallback` only when the object is missing (migration not yet
+// applied); re-throw real errors so React Query sets `.error` and the caller's
+// error branch renders rather than silently showing the fallback.
 const okOr = async (q: any, fallback: any) => {
   const { data, error } = await q
-  return error ? fallback : data
+  if (!error) return data
+  if (isMissingObject(error)) return fallback
+  throw error
 }
 
 export function useOrderAr(orderId?: string) {
