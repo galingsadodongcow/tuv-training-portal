@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, ReactNode } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { useSchedules, useOrders } from '../hooks/data'
+import { useSchedules, useOrders, useActiveYear } from '../hooks/data'
 import Link from 'next/link'
 import { Spinner, ErrorNote } from '../components/ui'
 import { KpiSkeleton } from '../components/Skeleton'
@@ -20,16 +20,19 @@ function Kpi({ label, value, sub }: { label: string; value: ReactNode; sub?: Rea
   )
 }
 
-const YEAR = 2026
-
 export default function Dashboard() {
+  // Derive the dashboard year from the active calendar year (highest, if more
+  // than one is active), falling back to the current calendar year. Avoids a
+  // hardcoded 2026 that goes stale on 1 Jan.
+  const activeYear = useActiveYear()
+  const YEAR = activeYear.data?.at(-1)?.year ?? new Date().getFullYear()
   const sched = useSchedules(YEAR)
   const orders = useOrders()
 
   const model = useMemo(() => {
     if (!sched.data || !orders.data) return null
     // Scope booked revenue / monthly / channel mix to the dashboard's year so a
-    // prior- or next-year order can't leak into the "for 2026" figures.
+    // prior- or next-year order can't leak into the year's figures.
     const live = orders.data.filter(
       (o: any) =>
         ['New', 'Confirmed', 'Completed'].includes(o.order_status) &&
@@ -67,7 +70,7 @@ export default function Dashboard() {
     const cancelRate = orders.data.length ? Math.round((cancelled / orders.data.length) * 100) : 0
 
     return { revenue, forecast, delivered, deliveredPax, atRisk, pending, byMonth, channelData, cancelRate }
-  }, [sched.data, orders.data])
+  }, [sched.data, orders.data, YEAR])
 
   if (sched.isLoading || orders.isLoading)
     return (
@@ -87,7 +90,7 @@ export default function Dashboard() {
       <div className="page-head">
         <div>
           <h1>Dashboard</h1>
-          <p>Booked revenue against forecast, session risk, and channel mix for 2026.</p>
+          <p>Booked revenue against forecast, session risk, and channel mix for {YEAR}.</p>
         </div>
       </div>
 

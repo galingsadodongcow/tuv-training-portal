@@ -95,6 +95,14 @@ export default function CancelSession({ schedule, onDone, onClose }: { schedule:
               Every live booking needs a disposition before the session closes. Nothing is cancelled until then.
             </p>
 
+            {!ready.isLoading && rows.length > 0 && (
+              <div className={`notice ${pending > 0 ? 'notice-warn' : 'notice-info'}`} style={{ marginBottom: 12 }}>
+                {pending > 0
+                  ? `${pending} of ${rows.length} booking${rows.length > 1 ? 's' : ''} still need a disposition before this session can be cancelled.`
+                  : `All ${rows.length} booking${rows.length > 1 ? 's' : ''} have a disposition — ready to cancel.`}
+              </div>
+            )}
+
             {ready.isLoading ? <Spinner /> : rows.length === 0 ? (
               <div className="notice notice-info">No live bookings. This session cancels cleanly.</div>
             ) : (

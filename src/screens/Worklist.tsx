@@ -41,7 +41,10 @@ export default function Worklist() {
   const stage = params.get('stage') || 'all'
   // Salespeople land on their own queue; operations and other non-selling roles
   // land on everyone, since they do not own orders.
-  const who = params.get('who') || (profile?.salesperson?.code ? 'mine' : 'all')
+  // Default a selling rep to their own queue, but supervisors (and non-sellers)
+  // default to the whole team's queue — a supervisor's job is the team view.
+  const who = params.get('who')
+    || ((profile?.salesperson?.code && !profile?.salesperson?.is_supervisor) ? 'mine' : 'all')
   const view = params.get('view') || 'all'
   const setParam = (k: string, v: string) => {
     const n = new URLSearchParams(params.toString())

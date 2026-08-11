@@ -1432,3 +1432,250 @@ begin
   end loop;
 end $$;
 
+
+
+-- ############################################################################
+-- ## 20260809030000_pax_option_b_per_session.sql
+-- ############################################################################
+
+-- fn_enforce_pax — PER-SESSION CAPS (chosen path; supersedes the course-derived
+-- draft, which has been removed). The earlier Option A draft is gone; this file
+-- is the single source of truth for the trigger.
+--
+--   The trigger stops overwriting max_participants on every write. It fills a
+--   default ONLY when the value is not supplied, so operations can set a
+--   per-session cap (e.g. a smaller room, a pilot cohort) and it sticks. The
+--   physical ceiling is enforced by the venue capacity guard, not by this
+--   trigger. min_participants keeps an 8 default when unset but no longer forces
+--   8 onto an explicit value.
+--
+--   Trade-off: the "max is always the course max" invariant is gone; a session
+--   can carry its own cap. The venue guard remains the hard ceiling. The
+--   max/min fields in src/screens/SessionForm.tsx stay editable (they already
+--   are), which matches this behaviour — no frontend change required.
+--
+--   Idempotent (create or replace + drop/create trigger); safe to re-apply.
+
+create or replace function public.fn_enforce_pax()
+returns trigger
+language plpgsql
+set search_path to 'public'
+as $$
+declare v_cert boolean; v_max int;
+begin
+  select c.is_certification, c.max_pax into v_cert, v_max from course c where c.course_id = new.course_id;
+  -- Default only when the caller did not supply a value; never overwrite an
+  -- explicit per-session cap.
+  if new.max_participants is null or new.max_participants = 0 then
+    new.max_participants := coalesce(v_max, case when coalesce(v_cert, false) then 10 else 20 end);
+  end if;
+  if new.min_participants is null or new.min_participants = 0 then
+    new.min_participants := 8;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_enforce_pax on public.schedule;
+create trigger trg_enforce_pax before insert or update on public.schedule
+  for each row execute function public.fn_enforce_pax();
+
+
+-- ############################################################################
+-- ## 20260811000000_lock_search_rpcs.sql
+-- ############################################################################
+
+-- Lock down the two SECURITY DEFINER read RPCs (fn_global_search, fn_org_summary).
+--
+-- Both were `language sql ... security definer` with NO internal role check —
+-- their only guard was the EXECUTE grant. That is brittle: a stray
+-- `grant execute ... to public` (or the default PUBLIC execute that Postgres
+-- gives every new function) re-opens them to anon, and because they bypass RLS
+-- (definer rights) an anonymous caller could read order/client/session/org names
+-- across the whole tenant. This migration closes that in depth:
+--
+--   1. Convert each to plpgsql with an internal gate: a caller with no role
+--      (`fn_current_role() is null`, i.e. anon / no JWT) is rejected before any
+--      row is read. Defense that does not depend on grants staying correct.
+--   2. REVOKE EXECUTE from anon and PUBLIC, then GRANT only to authenticated.
+--      Belt and suspenders with (1).
+--
+-- Behaviour for a signed-in user is unchanged (same columns, same order, same
+-- caps). Idempotent; safe to re-apply.
+
+-- 1. Global record search — gate + revoke/grant ------------------------------
+create or replace function public.fn_global_search(p_q text)
+returns table(kind text, id text, title text, subtitle text)
+language plpgsql
+stable security definer
+set search_path to 'public'
+as $$
+begin
+  -- Internal guard: only a signed-in user with a role may search.
+  if fn_current_role() is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  return query
+  with q as (select '%' || btrim(p_q) || '%' as pat)
+  select * from (
+    (select 'order'::text, o.order_id, coalesce(c.company, c.name, o.order_id),
+            o.fulfillment_stage::text
+       from orders o left join client c on c.client_id = o.client_id, q
+      where o.order_id ilike q.pat or c.company ilike q.pat or c.name ilike q.pat
+      order by o.order_date desc limit 6)
+    union all
+    (select 'client'::text, c.client_id::text, coalesce(c.company, c.name), c.email
+       from client c, q
+      where c.company ilike q.pat or c.name ilike q.pat or c.email ilike q.pat
+      order by c.company nulls last limit 6)
+    union all
+    (select 'session'::text, s.schedule_id::text, co.course_name,
+            to_char(s.start_date, 'YYYY-MM-DD') || ' · ' || s.status::text
+       from schedule s join course co on co.course_id = s.course_id, q
+      where co.course_name ilike q.pat
+      order by s.start_date desc limit 6)
+    union all
+    (select 'organization'::text, og.org_id::text, og.name, og.industry
+       from organization og, q
+      where og.name ilike q.pat
+      order by og.name limit 6)
+    union all
+    (select 'course'::text, co.course_id::text, co.course_name, co.training_type::text
+       from course co, q
+      where co.course_name ilike q.pat and co.active
+      order by co.course_name limit 6)
+    union all
+    (select 'inquiry'::text, iq.inquiry_id::text, iq.company, iq.status::text
+       from inquiry iq, q
+      where iq.company ilike q.pat
+      order by iq.inquiry_date desc limit 6)
+  ) hits;
+end;
+$$;
+
+revoke execute on function public.fn_global_search(text) from public, anon;
+grant execute on function public.fn_global_search(text) to authenticated;
+
+-- 2. Organization roll-up — gate + revoke/grant -----------------------------
+create or replace function public.fn_org_summary()
+returns table(org_id uuid, name text, industry text, country country_t,
+              client_count bigint, order_count bigint, seat_count bigint)
+language plpgsql
+stable security definer
+set search_path to 'public'
+as $$
+begin
+  if fn_current_role() is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  -- NOTE: this is plpgsql, so the RETURNS TABLE columns (org_id, name, …) are
+  -- in-scope variables. Every reference to client.org_id in the sub-selects is
+  -- table-qualified (alias `cl`) so it can never bind to the OUT variable.
+  return query
+  select o.org_id, o.name, o.industry, o.country,
+    (select count(*) from client c where c.org_id = o.org_id),
+    (select count(*) from orders ord
+       where ord.client_id in (select cl.client_id from client cl where cl.org_id = o.org_id)),
+    (select coalesce(sum(ord.total_seats), 0) from orders ord
+       where ord.client_id in (select cl.client_id from client cl where cl.org_id = o.org_id))
+  from organization o
+  order by o.name;
+end;
+$$;
+
+revoke execute on function public.fn_org_summary() from public, anon;
+grant execute on function public.fn_org_summary() to authenticated;
+
+
+-- ############################################################################
+-- ## 20260811010000_security_invoker_views.sql
+-- ############################################################################
+
+-- Supabase Security Advisor 0010_security_definer_view (ERROR).
+--
+-- Four program-era reporting views were created WITHOUT security_invoker, so
+-- Postgres runs their underlying queries with the view OWNER's rights and the
+-- OWNER's RLS — bypassing the querying user's row-level security. On a portal
+-- where RLS is the only real access control, that is a data-exposure hole: a
+-- sales user selecting from these views could see rows their own RLS would deny.
+--
+--   flagged: v_cert_expiring, v_quote_total, v_session_feedback, v_trainer_quality
+--
+-- The earlier hardening passes (20260805000000, 20260808290000) already flipped
+-- the pre-program views and four other program views (v_order_ar, v_session_pnl,
+-- v_session_forecast, v_country_revenue); these four were added afterwards and
+-- were missed. Flip them — and defensively re-assert the rest of the program
+-- views — to security_invoker so each view enforces the CALLER's RLS. These are
+-- read-only aggregates over the same tables the app already reads directly, so
+-- invoker-scoping simply makes view access consistent with direct access.
+--
+-- Idempotent (IF EXISTS + setting an already-set option is a no-op); safe to
+-- re-apply and safe if a view is not present on a given database.
+
+-- The four the advisor flagged.
+alter view if exists public.v_cert_expiring    set (security_invoker = true);
+alter view if exists public.v_quote_total      set (security_invoker = true);
+alter view if exists public.v_session_feedback set (security_invoker = true);
+alter view if exists public.v_trainer_quality  set (security_invoker = true);
+
+-- Defensive re-assertion for the remaining program views (no-ops where already
+-- set) so the whole class stays closed against future drift.
+alter view if exists public.v_sla_breach       set (security_invoker = true);
+alter view if exists public.v_order_ar         set (security_invoker = true);
+alter view if exists public.v_session_pnl      set (security_invoker = true);
+alter view if exists public.v_session_forecast set (security_invoker = true);
+alter view if exists public.v_country_revenue  set (security_invoker = true);
+
+
+-- ############################################################################
+-- ## 20260811020000_search_path_and_roster_grants.sql
+-- ############################################################################
+
+-- Supabase advisors: 0011 function_search_path_mutable + 0028 anon can execute
+-- a SECURITY DEFINER function (fn_session_roster).
+--
+-- 1) Pin search_path on the three functions flagged by 0011:
+--    fn_stage_stamp, fn_touch_updated_at, fn_norm_org. The first two HAD it set
+--    in 20260805000000, but a later `create or replace` reset the attribute
+--    (create-or-replace drops options not restated); fn_norm_org exists only on
+--    the live DB (repo/live drift) and never had it. A mutable search_path lets
+--    the caller's role resolve unqualified names against a schema they control,
+--    which for a SECURITY DEFINER / trigger function is a privilege-escalation
+--    vector. We pin whatever signature actually exists (loop over pg_proc) so a
+--    missing function or an unexpected signature is simply skipped, never an
+--    error that aborts the bundle.
+--
+-- 2) Re-revoke EXECUTE on fn_session_roster(uuid) from anon/PUBLIC. It was
+--    revoked in 20260805000000, but the function is dropped+recreated in
+--    20260808170000 (which the bundle re-runs) and a newly created function
+--    grants EXECUTE to PUBLIC by default — re-opening roster data to the anon
+--    key. This migration is ordered AFTER that section, so the revoke sticks.
+--    Signed-in users keep access (the session-detail screen calls it).
+--
+-- Idempotent; safe to re-apply.
+
+-- 1) search_path -------------------------------------------------------------
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in ('fn_stage_stamp', 'fn_touch_updated_at', 'fn_norm_org')
+  loop
+    execute format('alter function %s set search_path to ''public''', r.sig);
+    raise notice 'pinned search_path on %', r.sig;
+  end loop;
+end $$;
+
+-- 2) fn_session_roster: re-close to anon, keep authenticated ------------------
+do $$
+begin
+  execute 'revoke execute on function public.fn_session_roster(uuid) from public, anon';
+  execute 'grant execute on function public.fn_session_roster(uuid) to authenticated';
+exception
+  when undefined_function then raise notice 'fn_session_roster(uuid) not present, skipping';
+end $$;

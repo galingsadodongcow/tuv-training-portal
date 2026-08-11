@@ -1,0 +1,49 @@
+name: RLS regression
+
+# Regression guard for the row-level-security policy logic and the SECURITY
+# DEFINER read RPCs. It does NOT touch the live database — it stands up a
+# throwaway Postgres, builds a self-contained fixture (skeleton base tables +
+# the real repo policy/RPC migrations), and asserts the ownership + RPC-lock
+# behaviour. See supabase/tests/rls_fixture.sql for why the schema is
+# synthesized rather than applied wholesale.
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/rls-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Build fixture (skeleton base + real repo policies/RPCs)
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/rls_fixture.sql
+
+      - name: Run RLS regression assertions
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/rls_assertions.sql
