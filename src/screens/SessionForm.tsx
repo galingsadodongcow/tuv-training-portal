@@ -30,7 +30,7 @@ export default function SessionForm() {
 
   const [f, setF] = useState<any>({
     course_id: '', modality: 'Live Online Training',
-    min_participants: 1, max_participants: '', sales_owner: '', private_run: false, status: 'Tentative', price: '', trainer_id: '', venue_id: '',
+    min_participants: MIN_PAX, max_participants: '', sales_owner: '', private_run: false, status: 'Tentative', price: '', trainer_id: '', venue_id: '',
   })
   const [segments, setSegments] = useState<any[]>([{ start: '', end: '' }])
   const [busy, setBusy] = useState(false)
@@ -39,6 +39,13 @@ export default function SessionForm() {
   const [checking, setChecking] = useState(false)
   const [loaded, setLoaded] = useState(!editing && !cloneId)
   const set = (k: string) => (e: any) => setF((s: any) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  // Picking a course seeds the per-session pax defaults from that course. The
+  // operator can still override either number in the fields below.
+  const onCourseChange = (e: any) => {
+    const course_id = e.target.value
+    const course = (courses.data || []).find((c: any) => c.course_id === course_id) || null
+    setF((s: any) => ({ ...s, course_id, min_participants: MIN_PAX, max_participants: maxPaxFor(course) }))
+  }
 
   useEffect(() => {
     if (cloneId && !editing) {
@@ -94,9 +101,9 @@ export default function SessionForm() {
     return fees.data.find((x: any) => x.course_id === f.course_id && x.modality === f.modality)?.fee_php ?? null
   }, [fees.data, f.course_id, f.modality])
 
-  // Pax is set by policy, not by hand: minimum 8 for every course, maximum 20
-  // for professional and 10 for IRCA (by course name). The database enforces
-  // the same rule, so these fields are shown locked.
+  // Pax defaults come from the course (minimum 8 for every course, maximum 20
+  // for professional and 10 for IRCA), but each run can override them — the DB
+  // now honours the per-session cap, so we submit the form's values.
   const selectedCourse = useMemo(
     () => (courses.data || []).find((c: any) => c.course_id === f.course_id) || null,
     [courses.data, f.course_id]
@@ -119,9 +126,10 @@ export default function SessionForm() {
       const payload = {
         course_id: f.course_id, month, start_date, end_date,
         date_segments: sorted, modality: f.modality,
-        private_run: f.private_run, min_participants: MIN_PAX,
+        private_run: f.private_run,
+        min_participants: f.min_participants === '' ? MIN_PAX : Number(f.min_participants),
         status: f.status, sales_owner: f.sales_owner || null,
-        max_participants: maxPax,
+        max_participants: f.max_participants === '' ? maxPax : Number(f.max_participants),
         trainer_id: f.trainer_id || null,
         venue_id: f.venue_id || null,
         duration_days: segmentsDays(sorted),
@@ -170,7 +178,7 @@ export default function SessionForm() {
       <div className="card card-pad" style={{ maxWidth: 640 }}>
         <form onSubmit={submit}>
           <label className="field"><span>Course</span>
-            <select value={f.course_id} onChange={set('course_id')} required>
+            <select value={f.course_id} onChange={onCourseChange} required>
               <option value="">Select a course…</option>
               {courses.data.map((c: any) => (
                 <option key={c.course_id} value={c.course_id}>{c.course_name} ({c.training_type})</option>
@@ -197,14 +205,14 @@ export default function SessionForm() {
 
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Minimum pax (Go threshold)</span>
-              <input type="number" value={MIN_PAX} readOnly disabled />
+              <input type="number" min="1" value={f.min_participants} onChange={set('min_participants')} />
             </label>
             <label className="field"><span>Maximum pax</span>
-              <input type="number" value={maxPax} readOnly disabled />
+              <input type="number" min="1" value={f.max_participants} onChange={set('max_participants')} />
             </label>
             <div className="field" style={{ gridColumn: '1 / -1' }}>
               <div className="fill-label">
-                Set by policy: minimum {MIN_PAX} for every course, maximum {maxPax} for {irca ? 'IRCA courses' : 'professional trainings'}.
+                Defaults from the course (min {MIN_PAX}, max {maxPax} for {irca ? 'IRCA courses' : 'professional trainings'}) — override per session if this run differs.
               </div>
             </div>
             <label className="field"><span>Sales owner</span>
@@ -233,9 +241,19 @@ export default function SessionForm() {
               </select>
             </label>
             <label className="field"><span>Status</span>
-              <select value={f.status} onChange={set('status')}>
-                {['Tentative', 'Confirmed', 'Running', 'Completed'].map((s) => (<option key={s}>{s}</option>))}
-              </select>
+              {/* Running / Completed / Cancelled are driven by actions and dates
+                  (Close, Cancel, nightly hygiene) — hand-setting them here would
+                  bypass fn_close_session, so only the planning states are editable. */}
+              {['Running', 'Completed', 'Cancelled'].includes(f.status) ? (
+                <>
+                  <input type="text" value={f.status} readOnly disabled />
+                  <span className="fill-label" style={{ marginTop: 4 }}>Set by session actions (Close, Cancel, hygiene), not editable here.</span>
+                </>
+              ) : (
+                <select value={f.status} onChange={set('status')}>
+                  {['Tentative', 'Confirmed'].map((s) => (<option key={s}>{s}</option>))}
+                </select>
+              )}
             </label>
             <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 22 }}>
               <input type="checkbox" checked={f.private_run} onChange={set('private_run')} style={{ width: 'auto' }} />

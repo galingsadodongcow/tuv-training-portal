@@ -1061,3 +1061,76 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
     },
   })
 }
+
+// ---- Phase 1/2: session health, order merge, notification center ----
+// Computed health per session (v_session_health). Consumers usually build a
+// Map<schedule_id, health> for O(1) lookup on the calendar / lists.
+export function useSessionHealth() {
+  return useQuery({
+    queryKey: ['session_health'],
+    queryFn: () => okOr(supabase.from('v_session_health').select('schedule_id, health'), []),
+  })
+}
+
+// Reconcile a duplicate order into a surviving one (ops/super_admin only).
+export function useMergeOrders() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ keep, dup, reason }: { keep: string; dup: string; reason?: string }) => {
+      const { data, error } = await supabase.rpc('fn_merge_orders', { p_keep: keep, p_dup: dup, p_reason: reason ?? null })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => {
+      ;['duplicates', 'orders', 'orders_paged', 'fulfillment_queue', 'order_facts'].forEach((k) =>
+        qc.invalidateQueries({ queryKey: [k] })
+      )
+    },
+  })
+}
+
+// All notifications (read + unread) for the notification center.
+export function useAllNotifications(userId?: string, limit = 50) {
+  return useQuery({
+    queryKey: ['all_notifications', userId],
+    enabled: !!userId,
+    queryFn: () =>
+      okOr(
+        supabase
+          .from('notification')
+          .select('notif_id, kind, title, body, entity_type, entity_id, actor_id, is_read, created_at')
+          .eq('recipient_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(limit),
+        []
+      ),
+  })
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (notifId: string) => {
+      const { error } = await supabase.from('notification').update({ is_read: true }).eq('notif_id', notifId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['all_notifications'] })
+      qc.invalidateQueries({ queryKey: ['my_notifications'] })
+    },
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase.from('notification').update({ is_read: true }).eq('recipient_id', userId).eq('is_read', false)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['all_notifications'] })
+      qc.invalidateQueries({ queryKey: ['my_notifications'] })
+    },
+  })
+}

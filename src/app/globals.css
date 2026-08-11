@@ -521,3 +521,66 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Phase 2: nav groups, session-health pills, notification center ---- */
+.nav-group {
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 14px 12px 4px;
+}
+.nav-list > .nav-group:first-child { padding-top: 4px; }
+
+/* Computed session-health pills (see src/lib/health.ts) */
+.health-blocked   { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
+.health-risk      { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+.health-attention { background: color-mix(in srgb, var(--warning) 11%, transparent); color: var(--warning); }
+.health-healthy   { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.health-done      { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
+/* small dot form for dense calendars */
+.health-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.health-dot.health-blocked { background: var(--danger); }
+.health-dot.health-risk { background: var(--warning); }
+.health-dot.health-attention { background: color-mix(in srgb, var(--warning) 60%, var(--card)); }
+.health-dot.health-healthy { background: var(--success); }
+.health-dot.health-done { background: var(--text-faint); }
+
+/* Notification center */
+.notif-wrap { position: relative; display: inline-flex; margin-left: 8px; }
+.notif-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 30px; background: var(--bg-subtle); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; color: var(--text-muted);
+}
+.notif-bell:hover { border-color: var(--border-strong); }
+.notif-count {
+  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
+  background: var(--danger); color: #fff; border-radius: 8px; font-size: 10px; font-weight: 700;
+  line-height: 16px; text-align: center; font-family: var(--font-mono);
+}
+.notif-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 90;
+  width: 340px; max-width: 90vw; max-height: 460px; display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0,0,0,.18); overflow: hidden;
+}
+.notif-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.notif-body { overflow-y: auto; }
+.notif-empty { padding: 24px 14px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.notif-row {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: none; border-left: none; border-right: none; border-top: none; cursor: pointer; color: var(--text);
+  text-decoration: none;
+}
+.notif-row:last-child { border-bottom: none; }
+.notif-row:hover { background: var(--bg-subtle); }
+.notif-row.is-read { opacity: .62; }
+.notif-row-top { display: flex; align-items: center; gap: 8px; }
+.notif-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
+.notif-dot.read { background: var(--text-faint); }
+.notif-title { font-weight: 600; font-size: 13px; flex: 1 1 auto; }
+.notif-time { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); flex: 0 0 auto; }
+.notif-text { font-size: 12px; color: var(--text-muted); margin: 3px 0 0 15px; }
+@media (max-width: 860px) { .notif-panel { position: fixed; top: 52px; right: 8px; left: 8px; width: auto; } }

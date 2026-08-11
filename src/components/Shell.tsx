@@ -1,5 +1,5 @@
 'use client'
-import { ReactNode, Suspense, useEffect, useRef, useState, KeyboardEvent } from 'react'
+import { ReactNode, Suspense, useEffect, useRef, useState, KeyboardEvent, Fragment } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
@@ -7,6 +7,7 @@ import { NAV, ROLE_LABEL, Role } from '@/lib/roles'
 import { Spinner } from './ui'
 import NavIcon from './NavIcon'
 import ThemeToggle from './ThemeToggle'
+import NotificationCenter from './NotificationCenter'
 
 export default function Shell({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
@@ -116,6 +117,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         >
           <kbd style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>⌘K</kbd>
         </button>
+        <NotificationCenter />
       </header>
 
       {navOpen && <div className="sidebar-scrim" onClick={() => setNavOpen(false)} />}
@@ -126,13 +128,17 @@ export default function Shell({ children }: { children: ReactNode }) {
           <span className="brand-sub">Portal</span>
         </div>
         <nav className="nav-list">
-          {items.map((n) => {
+          {items.map((n, i) => {
             const active = pathname === n.path || pathname.startsWith(n.path + '/')
+            const showGroup = n.group && n.group !== items[i - 1]?.group
             return (
-              <Link key={n.path} href={n.path} className={`nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
-                <NavIcon name={n.icon} />
-                <span>{n.label}</span>
-              </Link>
+              <Fragment key={n.path}>
+                {showGroup && <div className="nav-group">{n.group}</div>}
+                <Link href={n.path} className={`nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
+                  <NavIcon name={n.icon} />
+                  <span>{n.label}</span>
+                </Link>
+              </Fragment>
             )
           })}
         </nav>

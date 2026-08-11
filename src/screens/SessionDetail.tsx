@@ -1,10 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInvalidate, useScheduleApprovals, useEntityActivity, useAuditTrail, useSessionPnl } from '../hooks/data'
+import { useSchedule, useChannelPax, useSessionNotes, useSessionOrders, useInvalidate, useScheduleApprovals, useEntityActivity, useAuditTrail, useSessionPnl, useSessionHealth } from '../hooks/data'
+import { healthMeta } from '../lib/health'
 import ActivityTimeline from '../components/ActivityTimeline'
 import { noteEvents, approvalEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import RosterPanel from '../components/RosterPanel'
@@ -50,6 +51,11 @@ export default function SessionDetail() {
   const activity = useEntityActivity('schedule', id)
   const audit = useAuditTrail('schedule', id)
   const pnl = useSessionPnl(id)
+  const healthAll = useSessionHealth()
+  const healthMap = useMemo(
+    () => new Map<string, string>((healthAll.data || []).map((h: any) => [h.schedule_id, h.health])),
+    [healthAll.data]
+  )
   const invalidate = useInvalidate()
 
   const [noteText, setNoteText] = useState('')
@@ -169,6 +175,13 @@ export default function SessionDetail() {
           <>
             <StatusPill value={schedule.status} />
             <GoPill value={schedule.go_status} />
+            {(() => {
+              // Health duplicates the status once a session is Completed/Cancelled, so only show it while live.
+              const h = healthMap.get(schedule.schedule_id)
+              return h && h !== 'Completed' && h !== 'Cancelled'
+                ? <span className={`pill ${healthMeta(h).cls}`}>{healthMeta(h).label}</span>
+                : null
+            })()}
             {schedule.private_run && <span className="pill pill-inhouse">Private run</span>}
             {schedule.roster_locked && <span className="pill pill-inside">Roster locked</span>}
           </>
