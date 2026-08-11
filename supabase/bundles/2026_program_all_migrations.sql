@@ -2044,3 +2044,22 @@ select schedule_id, status, go_status, start_date, days_until,
 from sig;
 
 grant select on public.v_session_health to authenticated;
+
+
+-- ############################################################################
+-- ## 20260812010000_lock_trigger_fn_execute.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Revoke EXECUTE on BEFORE-trigger functions from the API roles. New functions
+-- default to EXECUTE for PUBLIC, which PostgREST exposes as anon-callable
+-- /rest/v1/rpc endpoints; for SECURITY DEFINER trigger functions that is pure
+-- attack surface (flagged by the Supabase security advisor, 0028/0029). The
+-- triggers keep firing — trigger execution does not check the invoker's EXECUTE
+-- privilege. Covers this pass's two functions plus the pre-existing
+-- fn_guard_orders_sales_fields. Idempotent: REVOKE is a no-op when absent.
+-- ===========================================================================
+
+revoke execute on function public.fn_orders_stage_guard()        from public, anon, authenticated;
+revoke execute on function public.fn_participant_dedup_guard()   from public, anon, authenticated;
+revoke execute on function public.fn_guard_orders_sales_fields() from public, anon, authenticated;
