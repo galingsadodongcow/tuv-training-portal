@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { useDuplicates } from '../hooks/data'
+import { useDuplicates, useMergeOrders } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
@@ -11,34 +11,48 @@ import { TableSkeleton } from '../components/Skeleton'
 
 export default function Duplicates() {
   const dups = useDuplicates()
+  const merge = useMergeOrders()
   const qc = useQueryClient()
   const toast = useToast()
   const confirm = useConfirm()
   const [msg, setMsg] = useState(null)
 
-  // NOTE: this only records the reviewer's decision on the candidate. It does
-  // NOT reconcile the two orders — cancelling/merging the duplicate order and
-  // moving its lines must happen server-side (an RPC) so seats and revenue stop
-  // being double-counted. Until that exists, "Mark as duplicate" is a triage
-  // flag only.
-  const resolve = async (id, status) => {
+  // Real reconciliation: cancel the DUPLICATE order + its lines (via
+  // fn_merge_orders) so its seats and revenue stop being double-counted, keeping
+  // the other order as the surviving booking. Ops/super_admin only — a sales user
+  // hits the RLS wall and we surface that error. The mutation invalidates the
+  // 'duplicates' and 'orders' keys, so the resolved row drops out of the queue.
+  const doMerge = async (keep, dup) => {
     setMsg(null)
-    if (status === 'Merged') {
-      const res = await confirm({
-        title: 'Mark this pair as a duplicate?',
-        body: 'This flags the candidate as resolved. It does not yet cancel or combine the underlying orders — seats and revenue must still be reconciled on the orders themselves.',
-        confirmLabel: 'Mark as duplicate',
-        tone: 'danger',
-      })
-      if (!res.ok) return
+    const res = await confirm({
+      title: 'Reconcile this duplicate pair?',
+      body: `Order ${dup} and all of its lines will be CANCELLED — freeing its seats and revenue — and order ${keep} will be kept as the surviving booking. This fixes the double-count and cannot be undone here.`,
+      confirmLabel: 'Merge & cancel duplicate',
+      tone: 'danger',
+      reason: 'optional',
+    })
+    if (!res.ok) return
+    try {
+      const survivor = await merge.mutateAsync({ keep, dup, reason: res.reason })
+      toast.success(`Merged into order ${survivor}. Duplicate ${dup} cancelled.`)
+    } catch (err: any) {
+      const m = err?.message || 'Merge failed.'
+      setMsg(m)
+      toast.error(m)
     }
+  }
+
+  // "Not a duplicate" is a triage flag only — it records the reviewer's decision
+  // on the candidate and does not touch either order.
+  const dismiss = async (id) => {
+    setMsg(null)
     const { error } = await supabase
       .from('duplicate_candidate')
-      .update({ status, resolved_date: new Date().toISOString().slice(0, 10) })
+      .update({ status: 'Dismissed', resolved_date: new Date().toISOString().slice(0, 10) })
       .eq('candidate_id', id)
     if (error) { setMsg(error.message); toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['duplicates'] })
-    toast.success(`Marked ${status}.`)
+    toast.success('Marked Dismissed.')
   }
 
   if (dups.isLoading) return <TableSkeleton rows={8} cols={4} />
@@ -78,10 +92,25 @@ export default function Duplicates() {
                   <td>{d.match_basis}</td>
                   <td className="right">
                     <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
-                      <button className="btn btn-sm" onClick={() => resolve(d.candidate_id, 'Merged')}>
-                        Mark as duplicate
+                      <button
+                        className="btn btn-danger btn-sm"
+                        disabled={merge.isPending}
+                        onClick={() => doMerge(d.order_id_a, d.order_id_b)}
+                      >
+                        Keep {d.order_id_a} · cancel {d.order_id_b}
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => resolve(d.candidate_id, 'Dismissed')}>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        disabled={merge.isPending}
+                        onClick={() => doMerge(d.order_id_b, d.order_id_a)}
+                      >
+                        Keep {d.order_id_b} · cancel {d.order_id_a}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={merge.isPending}
+                        onClick={() => dismiss(d.candidate_id)}
+                      >
                         Not a duplicate
                       </button>
                     </div>

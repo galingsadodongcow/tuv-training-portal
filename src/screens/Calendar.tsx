@@ -2,11 +2,12 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { useSchedules, useChannelPax, useYears } from '../hooks/data'
+import { useSchedules, useChannelPax, useYears, useSessionHealth } from '../hooks/data'
 import { useAuth } from '../hooks/useAuth'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
+import { healthMeta, healthNeedsAction } from '../lib/health'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
@@ -22,6 +23,16 @@ function UrgencyPill({ days }: { days: number | null }) {
   if (days <= 7) return <span className="pill pill-thisweek">In {days}d</span>
   if (days <= 30) return <span className="pill pill-soon">In {days}d</span>
   return null
+}
+
+// Small at-a-glance cue for sessions that need operator attention (blocked / at
+// risk / needs attention). Healthy and terminal sessions show nothing, so the
+// calendar stays quiet unless something actually needs eyes. Degrades to null
+// when health data is still loading or absent.
+function HealthChip({ h, style }: { h?: string; style?: React.CSSProperties }) {
+  if (!h || !healthNeedsAction(h)) return null
+  const m = healthMeta(h)
+  return <span className={`pill ${m.cls}`} style={{ fontSize: 10, padding: '1px 6px', ...style }}>{m.label}</span>
 }
 
 function riskClass(r: any) {
@@ -50,7 +61,7 @@ function CopyLink({ url }: { url: string }) {
 
 // Month grid: the roster of trainings for the selected month, placed on their
 // start day. Every role reads this to see what runs when.
-function MonthGrid({ year, monthName, sessions, onOpen }: { year: number; monthName: string; sessions: any[]; onOpen: (r: any) => void }) {
+function MonthGrid({ year, monthName, sessions, onOpen, healthMap }: { year: number; monthName: string; sessions: any[]; onOpen: (r: any) => void; healthMap?: Map<string, string> }) {
   const mIdx = MONTHS.indexOf(monthName)
   const startWeekday = new Date(year, mIdx, 1).getDay()
   const daysInMonth = new Date(year, mIdx + 1, 0).getDate()
@@ -86,6 +97,7 @@ function MonthGrid({ year, monthName, sessions, onOpen }: { year: number; monthN
                 onClick={() => onOpen(s)} title={`${s.course?.course_name} · ${lt(s.modality)} · ${s.status} · ${s.booked_participants}/${s.min_participants} pax`}>
                 <span className="cal-event-name">{s.course?.course_name}</span>
                 <span className="cal-event-meta">{lt(s.modality)}</span>
+                <HealthChip h={healthMap?.get(s.schedule_id)} style={{ marginTop: 2, alignSelf: 'flex-start' }} />
               </button>
             ))}
           </div>
@@ -95,7 +107,7 @@ function MonthGrid({ year, monthName, sessions, onOpen }: { year: number; monthN
   )
 }
 
-function SessionRows({ rows, pax, onOpen, canEdit, canSell }: { rows: any[]; pax: any; onOpen: (r: any) => void; canEdit: boolean; canSell: boolean }) {
+function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows: any[]; pax: any; onOpen: (r: any) => void; canEdit: boolean; canSell: boolean; healthMap?: Map<string, string> }) {
   return rows.map((r) => {
     const ch = pax?.[r.schedule_id] || {}
     const d = daysUntil(r.start_date)
@@ -137,7 +149,12 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell }: { rows: any[]; pax
             ))}
           </div>
         </td>
-        <td data-label="Status"><StatusPill value={r.status} /></td>
+        <td data-label="Status">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <StatusPill value={r.status} />
+            <HealthChip h={healthMap?.get(r.schedule_id)} />
+          </div>
+        </td>
         <td data-label="Go" className="hide-m"><GoPill value={r.go_status} /></td>
         <td data-label="Fee" className="right hide-m">{php(r.price)}</td>
         <td data-label="Links" className="right" onClick={(e) => e.stopPropagation()}>
@@ -186,6 +203,11 @@ export default function Calendar() {
 
   const sched = useSchedules(year)
   const pax = useChannelPax()
+  const health = useSessionHealth()
+  const healthMap = useMemo(
+    () => new Map<string, string>((health.data || []).map((h: any) => [h.schedule_id, h.health])),
+    [health.data]
+  )
   const { profile } = useAuth()
   const openSession = (r: any) => router.push(`/session/${r.schedule_id}`)
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
@@ -321,7 +343,7 @@ export default function Calendar() {
 
       {cal === 'grid' ? (
         <>
-          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={openSession} />
+          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={openSession} healthMap={healthMap} />
           {gridCount === 0 && (
             <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions in {gridMonth} {year}. Use the arrows or switch month.</div></div>
           )}
@@ -332,7 +354,7 @@ export default function Calendar() {
             <>
               <h3 style={{ margin: '4px 0 8px' }}>PersCert ({perscert.length})</h3>
               <div className="card cal-card" style={{ marginBottom: 20 }}>
-                <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} /></tbody></table>
+                <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
               </div>
             </>
           )}
@@ -340,7 +362,7 @@ export default function Calendar() {
             <>
               <h3 style={{ margin: '4px 0 8px' }}>Professional Training ({professional.length})</h3>
               <div className="card cal-card">
-                <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} /></tbody></table>
+                <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
               </div>
             </>
           )}
