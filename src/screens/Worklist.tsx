@@ -54,7 +54,7 @@ export default function Worklist() {
   }
 
   const myCode = profile?.salesperson?.code
-  const canAssignAny = ['super_admin', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
+  const canAssignAny = ['super_admin', 'operations', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
 
   // Owner scope first: mine, unassigned, or everyone.
   const whoScoped = useMemo(() => {
