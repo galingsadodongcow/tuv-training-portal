@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useCallback, useEffect, useRef, useState, ReactNode } from 'react'
+import { createContext, useContext, useCallback, useEffect, useRef, useState, ReactNode, KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 export interface ConfirmOptions {
   title: string
@@ -28,7 +28,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [reason, setReason] = useState('')
   const resolver = useRef<((r: ConfirmResult) => void) | null>(null)
 
+  // The element focused before the dialog opened, so we can restore it on close.
+  const restoreFocus = useRef<HTMLElement | null>(null)
+
   const confirm = useCallback<ConfirmFn>((o) => {
+    restoreFocus.current = document.activeElement as HTMLElement | null
     setReason('')
     setOpts(o)
     return new Promise<ConfirmResult>((resolve) => { resolver.current = resolve })
@@ -38,24 +42,44 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     resolver.current?.({ ok, reason: reason.trim() || undefined })
     resolver.current = null
     setOpts(null)
+    // Return focus to whatever triggered the dialog.
+    const el = restoreFocus.current
+    restoreFocus.current = null
+    if (el && typeof el.focus === 'function') setTimeout(() => el.focus(), 0)
   }
 
   const reasonMissing = opts?.reason === 'required' && !reason.trim()
   const confirmBtn = useRef<HTMLButtonElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
 
   // On open, move focus into the dialog (the reason field autofocuses itself).
   useEffect(() => {
     if (opts && !opts.reason) confirmBtn.current?.focus()
   }, [opts])
 
+  // Keep Tab focus inside the dialog while it is open.
+  const trapFocus = (e: ReactKeyboardEvent) => {
+    if (e.key !== 'Tab' || !dialogRef.current) return
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    const list = Array.from(focusable).filter((el) => !el.hasAttribute('disabled'))
+    if (list.length === 0) return
+    const first = list[0]
+    const last = list[list.length - 1]
+    const activeEl = document.activeElement as HTMLElement | null
+    if (e.shiftKey && activeEl === first) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && activeEl === last) { e.preventDefault(); first.focus() }
+  }
+
   return (
     <Ctx.Provider value={confirm}>
       {children}
       {opts && (
         <div className="dialog-scrim" onClick={() => close(false)}>
-          <div className="dialog" role="dialog" aria-modal="true" aria-label={opts.title}
+          <div className="dialog" role="dialog" aria-modal="true" aria-label={opts.title} ref={dialogRef}
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(false) } }}>
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(false) } else { trapFocus(e) } }}>
             <div className="dialog-title">{opts.title}</div>
             {opts.body && <div className="dialog-body">{opts.body}</div>}
             {opts.reason && (

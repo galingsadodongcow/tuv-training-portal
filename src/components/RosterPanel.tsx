@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useRoster, useSessionOrders, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from './ui'
 import { useToast } from './Toast'
+import { useConfirm } from './Confirm'
 
 // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or
 // tab/CR) is prefixed with a single quote so Excel/Sheets treat it as text.
@@ -21,6 +22,7 @@ const RESULTS = ['Pending', 'Pass', 'Fail']
 export default function RosterPanel({ schedule }: { schedule: any }) {
   const { profile } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const roster = useRoster(schedule.schedule_id)
   const orders = useSessionOrders(schedule.schedule_id)
   const invalidate = useInvalidate()
@@ -66,6 +68,13 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
 
   const remove = async (pid) => {
     setMsg(null)
+    const res = await confirm({
+      title: 'Remove this participant?',
+      body: 'This permanently deletes the participant along with any attendance, assessment, and certificate history captured against them. This cannot be undone.',
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    })
+    if (!res.ok) return
     const { error } = await supabase.from('participant').delete().eq('participant_id', pid)
     if (error) { setMsg(error.message); toast.error(error.message) }
     else { invalidate(['roster']); toast.success('Participant removed.') }
@@ -93,7 +102,15 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
   }
 
   const issueAll = async () => {
-    setMsg(null); setBusy(true)
+    setMsg(null)
+    const res = await confirm({
+      title: `Issue ${pending} certificate${pending === 1 ? '' : 's'}?`,
+      body: `This issues certificates for every attendee still awaiting one on this session. Certificate numbers are assigned on the record and cannot be un-issued from here.`,
+      confirmLabel: 'Issue certificates',
+      tone: 'danger',
+    })
+    if (!res.ok) return
+    setBusy(true)
     const { data, error } = await supabase.rpc('fn_issue_certificates_for_session', { p_schedule: schedule.schedule_id })
     if (error) { setMsg(error.message); toast.error(error.message) }
     else { invalidate(['roster']); toast.success(`${data || 0} certificate${data === 1 ? '' : 's'} issued.`) }
@@ -135,6 +152,7 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
       </div>
 
       {roster.data?.length > 0 && (
+        <div className="scroll-x">
         <table style={{ marginBottom: 14 }}>
           <thead><tr><th>Name</th><th>Company</th><th>Attendance</th><th>Assessment</th><th>Certificate</th><th></th></tr></thead>
           <tbody>
@@ -147,7 +165,7 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
                 <td className="fill-label">{r.company || '—'}</td>
                 <td>
                   {canEdit ? (
-                    <select value={r.attendance_status} onChange={(e) => mark(r.participant_id, e.target.value)}>
+                    <select aria-label={`Attendance for ${r.full_name}`} value={r.attendance_status} onChange={(e) => mark(r.participant_id, e.target.value)}>
                       {ATT.map((a) => (<option key={a}>{a}</option>))}
                     </select>
                   ) : r.attendance_status}
@@ -187,12 +205,13 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       {canEdit && live.length > 0 && (
         <div className="drawer-section" style={{ marginTop: 4 }}>
           <div className="k-label" style={{ marginBottom: 8 }}>Add participant</div>
-          <select value={form.line_id} onChange={(e) => setForm({ ...form, line_id: e.target.value })} style={{ marginBottom: 8 }}>
+          <select aria-label="Booking to add participant against" value={form.line_id} onChange={(e) => setForm({ ...form, line_id: e.target.value })} style={{ marginBottom: 8 }}>
             <option value="">Against which booking…</option>
             {live.map((l) => (
               <option key={l.line_id} value={l.line_id}>
@@ -200,10 +219,10 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
               </option>
             ))}
           </select>
-          <input placeholder="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} style={{ marginBottom: 8 }} />
+          <input aria-label="Participant full name" placeholder="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} style={{ marginBottom: 8 }} />
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <input placeholder="Position" value={form.position_title} onChange={(e) => setForm({ ...form, position_title: e.target.value })} />
+            <input aria-label="Participant email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <input aria-label="Participant position" placeholder="Position" value={form.position_title} onChange={(e) => setForm({ ...form, position_title: e.target.value })} />
           </div>
           <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={add} disabled={busy}>
             {busy ? 'Adding…' : 'Add to roster'}

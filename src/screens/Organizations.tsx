@@ -94,7 +94,10 @@ export default function Organizations() {
             <thead><tr><th>Name</th><th>Industry</th><th>Country</th><th className="right">Contacts</th><th className="right">Orders</th><th className="right">Seats</th></tr></thead>
             <tbody>
               {rows.map((o: any) => (
-                <tr key={o.org_id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/organizations/${o.org_id}`)}>
+                <tr key={o.org_id} style={{ cursor: 'pointer' }} role="button" tabIndex={0}
+                  aria-label={`Open ${o.name}`}
+                  onClick={() => router.push(`/organizations/${o.org_id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/organizations/${o.org_id}`) } }}>
                   <td style={{ fontWeight: 600 }}>{o.name}</td>
                   <td className="fill-label">{o.industry || '—'}</td>
                   <td className="fill-label">{o.country}</td>

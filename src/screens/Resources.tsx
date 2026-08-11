@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useTrainers, useVenues, useTrainerLoad, useUnstaffed, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num } from '../lib/format'
 import Link from 'next/link'
@@ -21,6 +22,7 @@ export default function Resources() {
   const unstaffed = useUnstaffed()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const confirm = useConfirm()
   const [tab, setTab] = useState('trainers')
   const [tForm, setTForm] = useState({ name: '', code: '', email: '', trainer_type: 'Internal', daily_rate: '' })
   const [vForm, setVForm] = useState({ name: '', city: '', capacity: '', venue_type: 'Training Room', day_rate: '' })
@@ -64,6 +66,16 @@ export default function Resources() {
   }
 
   const toggle = async (table: string, idField: string, id: any, active: boolean) => {
+    // Deactivating may hide a resource that still backs an upcoming session, so
+    // confirm it. Reactivating is safe and needs no gate.
+    if (active) {
+      const res = await confirm({
+        title: 'Deactivate this resource?',
+        body: 'It will be hidden from booking pickers. If it already backs an upcoming session, that booking stays but the resource no longer shows as available.',
+        confirmLabel: 'Deactivate', tone: 'danger',
+      })
+      if (!res.ok) return
+    }
     setBusy(true); setMsg(null)
     const { error } = await supabase.from(table).update({ active: !active }).eq(idField, id)
     if (error) { setMsg(error.message); toast.error(error.message) }
@@ -206,6 +218,7 @@ export default function Resources() {
 
       {tab === 'load' && (
         <div className="card">
+          {load.error && <ErrorNote error={load.error} />}
           <table>
             <thead><tr><th>Trainer</th><th>Type</th><th className="right">Sessions</th><th className="right">Training days</th><th className="right">Delivered</th><th className="right">Next</th></tr></thead>
             <tbody>

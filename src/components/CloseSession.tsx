@@ -4,16 +4,27 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useCloseCheck, useInvalidate } from '../hooks/data'
 import { Spinner } from './ui'
+import { useConfirm } from './Confirm'
 import { php } from '../lib/format'
 
 export default function CloseSession({ schedule, onDone, onClose }: { schedule: any; onDone: () => void; onClose: () => void }) {
   const check = useCloseCheck(schedule.schedule_id)
   const invalidate = useInvalidate()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [result, setResult] = useState(null)
 
   const run = async (force) => {
+    const res = await confirm({
+      title: force ? 'Close session with unmarked attendance?' : 'Close this session?',
+      body: force
+        ? 'Attendance is still unmarked for some participants. Closing anyway records actuals counting only those marked Attended, marks orders Completed, and permanently locks the roster. This cannot be undone.'
+        : 'Closing records actuals, marks the orders Completed, and permanently locks the roster so no further attendance or participant changes can be made. This cannot be undone.',
+      confirmLabel: force ? 'Close anyway' : 'Close session',
+      tone: 'danger',
+    })
+    if (!res.ok) return
     setBusy(true); setMsg(null)
     const { data, error } = await supabase.rpc('fn_close_session', {
       p_schedule: schedule.schedule_id,
@@ -29,7 +40,9 @@ export default function CloseSession({ schedule, onDone, onClose }: { schedule: 
 
   return (
     <div className="drawer-scrim" onClick={() => onClose()} style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div className="card card-pad" style={{ width: 500, maxWidth: '94vw' }} onClick={(e) => e.stopPropagation()}>
+      <div className="card card-pad" role="dialog" aria-modal="true" aria-label="Close session"
+        style={{ width: 500, maxWidth: '94vw' }} onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
         <h3 style={{ marginTop: 0 }}>Close session</h3>
 
         {result ? (

@@ -43,6 +43,17 @@ export default function QuoteDetail() {
     else invalidate(['quote', 'quotes', 'quote_total'])
   }
 
+  // Declined/Expired are terminal — confirm before writing so a stray select
+  // change doesn't quietly close the quote. Other statuses write immediately.
+  const changeStatus = async (status: string) => {
+    if (status === q.status) return
+    if (status === 'Declined' || status === 'Expired') {
+      const res = await confirm({ title: `Mark quote as ${status}?`, body: 'This closes the quote.', confirmLabel: status })
+      if (!res.ok) return
+    }
+    patch({ status })
+  }
+
   const addLine = async () => {
     if (!row.course_id) { toast.error('Pick a course.'); return }
     setBusy(true)
@@ -87,20 +98,23 @@ export default function QuoteDetail() {
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
           <KeyVal label="Status">
             {canEdit ? (
-              <select value={q.status} onChange={(e) => patch({ status: e.target.value })}>{STATUSES.map((s) => (<option key={s}>{s}</option>))}</select>
+              <select aria-label="Quote status" value={q.status} onChange={(e) => changeStatus(e.target.value)}>{STATUSES.map((s) => (<option key={s}>{s}</option>))}</select>
             ) : q.status}
           </KeyVal>
           <KeyVal label="Valid until">
-            {canEdit ? <input type="date" defaultValue={q.valid_until || ''} onBlur={(e) => e.target.value !== (q.valid_until || '') && patch({ valid_until: e.target.value || null })} /> : (q.valid_until ? shortDate(q.valid_until) : '—')}
+            {canEdit ? <input type="date" aria-label="Valid until" defaultValue={q.valid_until || ''} onBlur={(e) => e.target.value !== (q.valid_until || '') && patch({ valid_until: e.target.value || null })} /> : (q.valid_until ? shortDate(q.valid_until) : '—')}
           </KeyVal>
           <KeyVal label="Discount %">
-            {canEdit ? <input type="number" min="0" max="100" defaultValue={q.discount_pct} onBlur={(e) => Number(e.target.value) !== Number(q.discount_pct) && patch({ discount_pct: Number(e.target.value) || 0 })} style={{ width: 80 }} /> : `${q.discount_pct}%`}
+            {canEdit ? <input type="number" aria-label="Discount percent" min="0" max="100" defaultValue={q.discount_pct} onBlur={(e) => Number(e.target.value) !== Number(q.discount_pct) && patch({ discount_pct: Number(e.target.value) || 0 })} style={{ width: 80 }} /> : `${q.discount_pct}%`}
           </KeyVal>
           <KeyVal label="Total">{php(grand)}</KeyVal>
         </div>
       </div>
 
       <RecordSection title={`Lines (${lines.data?.length || 0})`}>
+        {(lines.error || total.error) && (
+          <div style={{ marginBottom: 12 }}><ErrorNote error={lines.error || total.error} /></div>
+        )}
         <div className="card">
           <table>
             <thead><tr><th>Course</th><th>Type</th><th className="right">Seats</th><th className="right">Unit price</th><th className="right">Line total</th>{canEdit && <th></th>}</tr></thead>

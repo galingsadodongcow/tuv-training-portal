@@ -13,9 +13,9 @@ export default function Elearning() {
   const orders = useElearningPending()
   const qc = useQueryClient()
   const toast = useToast()
-  const [msg, setMsg] = useState(null)
+  const [msg, setMsg] = useState<string | null>(null)
 
-  const grant = async (lineId) => {
+  const grant = async (lineId: string) => {
     setMsg(null)
     const { error } = await supabase.from('order_line')
       .update({ access_status: 'Granted', access_granted_date: new Date().toISOString().slice(0, 10) })

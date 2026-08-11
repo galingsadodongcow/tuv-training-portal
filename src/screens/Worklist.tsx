@@ -235,7 +235,7 @@ export default function Worklist() {
             {w === 'mine' ? 'Mine' : w === 'unassigned' ? 'Claim queue' : 'Everyone'}
           </button>
         ))}
-        <select value={stage} onChange={(e) => setParam('stage', e.target.value)} style={{ marginLeft: 'auto' }}>
+        <select aria-label="Filter by stage" value={stage} onChange={(e) => setParam('stage', e.target.value)} style={{ marginLeft: 'auto' }}>
           <option value="all">All stages ({Object.values(stageCounts).reduce((a, b) => a + b, 0)})</option>
           {STAGES.map((s) => (<option key={s} value={s}>{s} ({stageCounts[s] || 0})</option>))}
         </select>
@@ -254,7 +254,7 @@ export default function Worklist() {
           <strong>{selectedVisible.length} selected</strong>
           <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={bulkAdvance}>Advance to next stage</button>
           {canAssignAny && (
-            <select value={bulkTo} disabled={busy === 'bulk'} onChange={(e) => bulkAssign(e.target.value)}>
+            <select aria-label="Assign selected orders to" value={bulkTo} disabled={busy === 'bulk'} onChange={(e) => bulkAssign(e.target.value)}>
               <option value="">Assign to…</option>
               {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
             </select>
@@ -308,7 +308,8 @@ export default function Worklist() {
                 </td>
                 <td>
                   {canAssignAny ? (
-                    <select value={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id || ''}
+                    <select aria-label={`Owner for order ${o.order_id}`}
+                      value={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id || ''}
                       disabled={busy === o.order_id}
                       onChange={(e) => reassign(o.order_id, e.target.value)} style={{ minWidth: 120 }}>
                       <option value="">Unassigned</option>

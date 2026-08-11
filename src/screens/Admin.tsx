@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useAllProfiles, useAllSalespeople, useInvalidate } from '../hooks/data'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { ROLE_LABEL, type Role } from '../lib/roles'
 
@@ -15,14 +16,39 @@ export default function Admin() {
   const sales = useAllSalespeople()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const confirm = useConfirm()
   const [tab, setTab] = useState<'users' | 'teams'>('users')
   const [busy, setBusy] = useState<string | null>(null)
 
   const isAdmin = profile?.role === 'super_admin'
 
-  const setRole = async (userId: string, role: string) => {
-    setBusy(userId)
-    const { error } = await supabase.from('profiles').update({ role }).eq('user_id', userId)
+  const setRole = async (u: any, role: string) => {
+    if (role === u.role) return
+    const label = ROLE_LABEL[role as Role] || role
+    const grantsAdmin = role === 'super_admin' && u.role !== 'super_admin'
+    const removesAdmin = u.role === 'super_admin' && role !== 'super_admin'
+    const clearsLink = role !== 'sales' && !!u.sales_id
+    const body =
+      `Change ${u.full_name || 'this user'}'s role to ${label}.` +
+      (grantsAdmin ? ' This grants full super admin access to every part of the portal.' : '') +
+      (removesAdmin ? ' This removes their super admin access.' : '') +
+      (clearsLink ? ' Their salesperson link will be cleared.' : '')
+    const res = await confirm({
+      title: 'Change this user’s role?',
+      body,
+      confirmLabel: 'Change role',
+      tone: 'danger',
+      reason: 'optional',
+    })
+    // The select is bound to u.role, so on cancel React re-renders it back to
+    // the current value on its own — nothing to revert manually.
+    if (!res.ok) return
+    setBusy(u.user_id)
+    // Moving a user off the sales role clears the stale salesperson link in the
+    // same write, so order visibility does not resolve against a dead pointer.
+    const patch: Record<string, any> = { role }
+    if (role !== 'sales') patch.sales_id = null
+    const { error } = await supabase.from('profiles').update(patch).eq('user_id', u.user_id)
     setBusy(null)
     if (error) toast.error(error.message)
     else { invalidate(['profiles_all']); toast.success('Role updated.') }
@@ -96,10 +122,10 @@ export default function Admin() {
                 <tbody>
                   {(profiles.data || []).length === 0 && <tr><td colSpan={4}><div className="empty">No users yet.</div></td></tr>}
                   {(profiles.data || []).map((u: any) => (
-                    <tr key={u.user_id} style={{ opacity: busy === u.user_id ? 0.5 : 1 }}>
+                    <tr key={u.user_id} aria-busy={busy === u.user_id} style={{ opacity: busy === u.user_id ? 0.5 : 1 }}>
                       <td style={{ fontWeight: 600 }}>{u.full_name || '—'}{u.user_id === profile?.user_id && <span className="fill-label"> · you</span>}</td>
                       <td>
-                        <select aria-label={`Role for ${u.full_name || 'user'}`} value={u.role} disabled={u.user_id === profile?.user_id} onChange={(e) => setRole(u.user_id, e.target.value)}>
+                        <select aria-label={`Role for ${u.full_name || 'user'}`} value={u.role} disabled={u.user_id === profile?.user_id || busy === u.user_id} onChange={(e) => setRole(u, e.target.value)}>
                           {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                         </select>
                       </td>
@@ -138,7 +164,7 @@ export default function Admin() {
                 <tbody>
                   {(sales.data || []).length === 0 && <tr><td colSpan={6}><div className="empty">No salespeople yet.</div></td></tr>}
                   {(sales.data || []).map((s: any) => (
-                    <tr key={s.sales_id} style={{ opacity: busy === s.sales_id ? 0.5 : 1 }}>
+                    <tr key={s.sales_id} aria-busy={busy === s.sales_id} style={{ opacity: busy === s.sales_id ? 0.5 : 1 }}>
                       <td style={{ fontWeight: 600 }}>{s.name}</td>
                       <td className="fill-label">{s.code || '—'}</td>
                       <td>

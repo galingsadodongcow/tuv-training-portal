@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useOrderAr, useInvoices, usePayments, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
 import { useConfirm } from './Confirm'
+import { Spinner, ErrorNote } from './ui'
 import { php, shortDate } from '../lib/format'
 
 const METHODS = ['Bank transfer', 'Credit card', 'Cheque', 'Cash']
@@ -48,6 +49,12 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
   const recordPayment = async () => {
     const amt = Number(pay.amount)
     if (!Number.isFinite(amt) || amt <= 0) { toast.error('Enter a payment amount.'); return }
+    // Soft guard: warn on an apparent overpayment, but let it through — refunds,
+    // credits, and split payments are legitimate reasons to exceed the balance.
+    if (balance > 0 && amt > balance) {
+      const res = await confirm({ title: 'Payment exceeds the balance', body: `This payment of ${php(amt)} is more than the outstanding balance of ${php(balance)}. Record it anyway?`, confirmLabel: 'Record anyway' })
+      if (!res.ok) return
+    }
     setBusy(true)
     const { error } = await supabase.from('payment').insert({
       order_id: orderId, amount: amt, paid_date: pay.paid_date, method: pay.method,
@@ -63,12 +70,16 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
   }
 
   const removePayment = async (pid: string) => {
-    const res = await confirm({ title: 'Remove this payment?', body: 'The balance and payment status will be recalculated.', confirmLabel: 'Remove', tone: 'danger' })
+    const res = await confirm({ title: 'Remove this payment?', body: 'The balance and payment status will be recalculated.', confirmLabel: 'Remove', tone: 'danger', reason: 'optional', reasonLabel: 'Reason' })
     if (!res.ok) return
     const { error } = await supabase.from('payment').delete().eq('payment_id', pid)
     if (error) toast.error(error.message)
-    else { toast.success('Payment removed.'); invalidate(['payments', 'order_ar', 'order', 'orders', 'fulfillment_queue']) }
+    else { toast.success(res.reason ? 'Payment removed. Reason noted.' : 'Payment removed.'); invalidate(['payments', 'order_ar', 'order', 'orders', 'fulfillment_queue']) }
   }
+
+  if (ar.isLoading || invoices.isLoading || payments.isLoading) return <Spinner label="Loading receivables" />
+  const arError = ar.error || invoices.error || payments.error
+  if (arError) return <ErrorNote error={arError} />
 
   return (
     <div>

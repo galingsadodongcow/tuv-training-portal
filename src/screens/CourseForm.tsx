@@ -89,7 +89,7 @@ export default function CourseForm() {
       }
       invalidate(['courses', 'course_fees'])
       toast.success(editing ? 'Course saved.' : 'Course created.')
-      router.push('/calendar')
+      router.push(editing ? '/calendar' : '/courses')
     } catch (err: any) {
       setMsg(err.message)
       toast.error(err.message)
@@ -147,7 +147,7 @@ export default function CourseForm() {
               Has an assessment
             </label>
             <label className="field"><span>Pass mark</span>
-              <input type="number" value={f.pass_mark} onChange={set('pass_mark')} disabled={!f.has_assessment} placeholder="e.g. 70" />
+              <input type="number" min={0} max={100} step={1} value={f.pass_mark} onChange={set('pass_mark')} disabled={!f.has_assessment} placeholder="e.g. 70" />
             </label>
             <label className="field"><span>Cert valid (months)</span>
               <input type="number" min="1" value={f.cert_validity_months} onChange={set('cert_validity_months')} placeholder="e.g. 36" />

@@ -15,6 +15,7 @@ import {
   useInvalidate,
 } from '../hooks/data'
 import { KpiSkeleton, TableSkeleton } from '../components/Skeleton'
+import { ErrorNote } from '../components/ui'
 import { shortDate } from '../lib/format'
 import { lt } from '../lib/labels'
 
@@ -131,9 +132,12 @@ export default function Home() {
       { label: 'Pending approvals', value: pending.length, sub: 'Across the team', href: '/approvals' },
     ],
   }
-  const cards = cardsByRole[role || ''] || cardsByRole.operations
+  // Never fall back to the ops card set while the role is still unknown — a
+  // sales user must not flash ops metrics. Empty until role resolves.
+  const cards = role ? (cardsByRole[role] || cardsByRole.operations) : []
 
   const cardsLoading = queue.isLoading || sched.isLoading || approvals.isLoading
+  const cardsError = queue.error || sched.error || approvals.error || unstaffed.error || dups.error
 
   const completeTask = async (taskId: string) => {
     const { error } = await supabase.from('task').update({ status: 'done', completed_at: new Date().toISOString(), completed_by: userId }).eq('task_id', taskId)
@@ -157,7 +161,9 @@ export default function Home() {
       </div>
 
       <Section title="Needs your attention">
-        {cardsLoading ? (
+        {cardsError ? (
+          <ErrorNote error={cardsError} />
+        ) : !role || cardsLoading ? (
           <KpiSkeleton count={4} />
         ) : (
           <div className="grid kpis" style={{ marginBottom: 0 }}>
@@ -172,7 +178,9 @@ export default function Home() {
 
       {/* Stream 1: Tasks. Someone must act. */}
       <Section title="Tasks assigned to me" count={tasks.data?.length}>
-        {tasks.isLoading ? (
+        {tasks.error ? (
+          <ErrorNote error={tasks.error} />
+        ) : tasks.isLoading ? (
           <TableSkeleton rows={3} cols={3} />
         ) : (tasks.data?.length || 0) === 0 ? (
           <div className="card"><div className="empty">No tasks assigned to you.</div></div>
@@ -213,7 +221,9 @@ export default function Home() {
 
       {/* Stream 2: Notifications. Something happened. */}
       <Section title="Unread notifications" count={notifs.data?.length}>
-        {notifs.isLoading ? (
+        {notifs.error ? (
+          <ErrorNote error={notifs.error} />
+        ) : notifs.isLoading ? (
           <TableSkeleton rows={2} cols={2} />
         ) : (notifs.data?.length || 0) === 0 ? (
           <div className="card"><div className="empty">No unread notifications.</div></div>
@@ -248,7 +258,9 @@ export default function Home() {
       {/* Stream 3: Approvals. A named person must decide. */}
       {canDecide && (
         <Section title="Pending approvals" count={pending.length}>
-          {approvals.isLoading ? (
+          {approvals.error ? (
+            <ErrorNote error={approvals.error} />
+          ) : approvals.isLoading ? (
             <TableSkeleton rows={2} cols={2} />
           ) : pending.length === 0 ? (
             <div className="card"><div className="empty">No pending approvals.</div></div>

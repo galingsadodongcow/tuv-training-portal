@@ -27,9 +27,11 @@ export default function ThemeToggle() {
       <button
         className="seg-btn density"
         onClick={() => setDensity(density === 'compact' ? 'comfortable' : 'compact')}
+        aria-pressed={density === 'compact'}
+        aria-label={`Row density: ${density === 'compact' ? 'Compact' : 'Cozy'}. Activate to switch.`}
         title="Toggle row density"
       >
-        {density === 'compact' ? 'Compact' : 'Cozy'}
+        Density: {density === 'compact' ? 'Compact' : 'Cozy'}
       </button>
     </div>
   )

@@ -56,7 +56,9 @@ export default function SessionForm() {
     }
     if (!editing) return
     supabase.from('schedule').select('*').eq('schedule_id', id).single().then(({ data, error }) => {
-      if (error || !data) { setMsg(error?.message || 'Session not found'); return }
+      // On load failure, still clear the loading gate so the form renders and can
+      // show the error — otherwise the Spinner stays up forever and msg is hidden.
+      if (error || !data) { setMsg(error?.message || 'Session not found'); setLoaded(true); return }
       setF({
         course_id: data.course_id, modality: data.modality,
         min_participants: data.min_participants, max_participants: data.max_participants ?? '', sales_owner: data.sales_owner || '',
@@ -146,8 +148,10 @@ export default function SessionForm() {
 
   const assistantIds = new Set((sessionTrainers.data || []).map((s: any) => s.trainer_id))
   const toggleAssistant = async (trainerId: string, on: boolean) => {
-    if (on) await supabase.from('session_trainer').insert({ schedule_id: id, trainer_id: trainerId, role: 'Assistant' })
-    else await supabase.from('session_trainer').delete().eq('schedule_id', id).eq('trainer_id', trainerId)
+    const { error } = on
+      ? await supabase.from('session_trainer').insert({ schedule_id: id, trainer_id: trainerId, role: 'Assistant' })
+      : await supabase.from('session_trainer').delete().eq('schedule_id', id).eq('trainer_id', trainerId)
+    if (error) { toast.error(error.message); return }
     invalidate(['session_trainers'])
   }
 
@@ -176,8 +180,9 @@ export default function SessionForm() {
 
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Learning type</span>
+              {/* E-learning has no scheduled session (submit rejects it), so keep it out of the picker. */}
               <select value={f.modality} onChange={set('modality')}>
-                {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
+                {LEARNING_TYPES.filter((m) => m !== 'E-learning').map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
               </select>
             </label>
             <label className="field"><span>Fee (blank uses catalog: {feeForPick != null ? php(feeForPick) : 'no fee set'})</span>

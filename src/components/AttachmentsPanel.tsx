@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useAttachments, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
 import { useConfirm } from './Confirm'
+import { Spinner, ErrorNote } from './ui'
 import { shortDate } from '../lib/format'
 
 const BUCKET = 'attachments'
@@ -64,10 +65,14 @@ export default function AttachmentsPanel({ entityType, entityId }: { entityType:
   return (
     <div>
       <div className="toolbar" style={{ marginBottom: 10 }}>
-        <input ref={inputRef} type="file" onChange={onPick} disabled={busy} style={{ maxWidth: 320 }} />
+        <input ref={inputRef} type="file" aria-label="Attach a file" onChange={onPick} disabled={busy} style={{ maxWidth: 320 }} />
         {busy && <span className="fill-label">Uploading…</span>}
       </div>
-      {(files.data?.length || 0) === 0 ? (
+      {files.isLoading ? (
+        <Spinner label="Loading files" />
+      ) : files.error ? (
+        <ErrorNote error={files.error} />
+      ) : (files.data?.length || 0) === 0 ? (
         <div className="muted fill-label">No files attached yet.</div>
       ) : (
         <div className="scroll-x">

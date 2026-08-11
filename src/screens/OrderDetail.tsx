@@ -25,13 +25,14 @@ function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => voi
   const invalidate = useInvalidate()
   const toast = useToast()
   const [target, setTarget] = useState('')
+  const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const go = async () => {
     setBusy(true); setErr(null)
     const { error } = await supabase.rpc('fn_transfer_line', {
-      p_line: line.line_id, p_new_schedule: target, p_reason: 'Moved from the order screen',
+      p_line: line.line_id, p_new_schedule: target, p_reason: reason.trim() || 'Moved from the order screen',
     })
     if (error) { setErr(error.message); toast.error(error.message); setBusy(false); return }
     invalidate(['order', 'orders', 'schedules', 'channel_pax', 'session_orders'])
@@ -49,6 +50,8 @@ function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => voi
           </option>
         ))}
       </select>
+      <input aria-label="Transfer reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (optional)" style={{ marginTop: 8 }} />
       {err && <div className="notice notice-error" style={{ margin: '8px 0' }}>{err}</div>}
       <div className="toolbar" style={{ marginTop: 8 }}>
         <button className="btn btn-sm" disabled={!target || busy} onClick={go}>Transfer</button>
@@ -117,6 +120,9 @@ export default function OrderDetail() {
   }
 
   const canEdit = ['operations', 'super_admin', 'sales', 'business_owner'].includes(profile?.role as string)
+  // Sales may not touch payment status or the SAP number — a DB trigger blocks
+  // it, so the UI shows them read-only rather than as editable controls.
+  const isSales = profile?.role === 'sales'
   const lines = o.lines || []
   const assignee = o.assignment?.[0]?.salesperson?.name
   const collection = collectionState(o)
@@ -173,13 +179,21 @@ export default function OrderDetail() {
               </select>
             </label>
             <label className="field"><span>Payment</span>
-              <select value={pay} onChange={(e) => setPay(e.target.value)}>
-                {PAYMENTS.map((p) => (<option key={p}>{p}</option>))}
-              </select>
+              {isSales ? (
+                <input value={pay} readOnly disabled aria-label="Payment status (read-only)" />
+              ) : (
+                <select value={pay} onChange={(e) => setPay(e.target.value)}>
+                  {PAYMENTS.map((p) => (<option key={p}>{p}</option>))}
+                </select>
+              )}
             </label>
           </div>
-          <label className="field"><span>SAP reference (optional)</span>
-            <input value={sap} onChange={(e) => setSap(e.target.value)} placeholder="176152681" />
+          <label className="field"><span>SAP reference{isSales ? '' : ' (optional)'}</span>
+            {isSales ? (
+              <input value={sap || '—'} readOnly disabled aria-label="SAP order number (read-only)" />
+            ) : (
+              <input value={sap} onChange={(e) => setSap(e.target.value)} placeholder="176152681" />
+            )}
           </label>
           <div className="fill-label" style={{ marginBottom: 10 }}>
             A note for reference only. It does not change the order's stage.
@@ -235,7 +249,7 @@ export default function OrderDetail() {
 
         <RecordSection title={`Comments (${notes.data?.length || 0})`}>
           <div className="toolbar" style={{ marginBottom: 10 }}>
-            <input placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
+            <input aria-label="Add a comment" placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && postComment()} />
             <button className="btn btn-sm" onClick={postComment} disabled={posting}>{posting ? 'Posting…' : 'Post'}</button>
           </div>

@@ -58,7 +58,8 @@ export default function Orders() {
           <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines.</p>
         </div>
         <div className="toolbar">
-          <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}>Export CSV</button>
+          <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}
+            title="Exports only the orders on the current page, not all matches.">Export this page</button>
         </div>
       </div>
 
@@ -91,7 +92,10 @@ export default function Orders() {
               <tbody>
                 {rows.map((o) => (
                   <Fragment key={o.order_id}>
-                    <tr className="clickable" onClick={() => router.push(`/orders/${o.order_id}`)}>
+                    <tr className="clickable" role="button" tabIndex={0}
+                      aria-label={`Open order ${o.order_id}`}
+                      onClick={() => router.push(`/orders/${o.order_id}`)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/orders/${o.order_id}`) } }}>
                       <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {o.order_id}
                         <div className="fill-label">{shortDate(o.order_date)}</div>

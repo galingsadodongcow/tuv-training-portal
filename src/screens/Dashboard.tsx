@@ -8,7 +8,9 @@ import { KpiSkeleton } from '../components/Skeleton'
 import { php, num } from '../lib/format'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const CH_COLORS: Record<string, string> = { Webshop: '#0070f3', 'Inside Sales': '#8b5cf6', 'Field Sales': '#ec4899', 'In-house Request': '#f5a623' }
+// Webshop reads the theme accent token so it tracks light/dark; the rest are a
+// fixed palette chosen to stay legible on both backgrounds.
+const CH_COLORS: Record<string, string> = { Webshop: 'var(--accent)', 'Inside Sales': '#8b5cf6', 'Field Sales': '#ec4899', 'In-house Request': '#f5a623' }
 
 function Kpi({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
@@ -84,6 +86,9 @@ export default function Dashboard() {
   if (!model) return <Spinner label="Loading dashboard" />
 
   const attain = model.forecast ? Math.round((model.revenue / model.forecast) * 100) : 0
+  const monthlyEmpty = model.byMonth.every((m) => m.revenue === 0)
+  const channelEmpty = model.channelData.length === 0
+  const channelSummary = model.channelData.map((e) => `${e.name} ${php(e.value)}`).join(', ')
 
   return (
     <>
@@ -108,36 +113,50 @@ export default function Dashboard() {
       <div className="grid" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
         <div className="card card-pad">
           <div className="k-label" style={{ marginBottom: 10 }}>Booked revenue by month</div>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={model.byMonth} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v: any) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v: any) => php(v)} cursor={{ fill: 'rgba(128,128,128,0.12)' }} />
-              <Bar dataKey="revenue" fill="#0070f3" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {monthlyEmpty ? (
+            <div className="empty" style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No booked revenue yet for {YEAR}.</div>
+          ) : (
+            <div role="img" aria-label={`Booked revenue by month for ${YEAR}, total ${php(model.revenue)}`}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={model.byMonth} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={(v: any) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip formatter={(v: any) => php(v)} cursor={{ fill: 'rgba(128,128,128,0.12)' }} />
+                  <Bar dataKey="revenue" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         <div className="card card-pad">
           <div className="k-label" style={{ marginBottom: 10 }}>Revenue by channel</div>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={model.channelData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={92} paddingAngle={2}>
+          {channelEmpty ? (
+            <div className="empty" style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No data yet.</div>
+          ) : (
+            <>
+              <div role="img" aria-label={`Revenue by channel for ${YEAR}: ${channelSummary}`}>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={model.channelData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={92} paddingAngle={2}>
+                      {model.channelData.map((e) => (
+                        <Cell key={e.name} fill={CH_COLORS[e.name] || 'var(--text-faint)'} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: any) => php(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chip-row" style={{ justifyContent: 'center', marginTop: 8 }}>
                 {model.channelData.map((e) => (
-                  <Cell key={e.name} fill={CH_COLORS[e.name] || '#a1a1a1'} />
+                  <span key={e.name} className="fill-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 2, background: CH_COLORS[e.name] || 'var(--text-faint)', display: 'inline-block' }} />
+                    {e.name}
+                  </span>
                 ))}
-              </Pie>
-              <Tooltip formatter={(v: any) => php(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="chip-row" style={{ justifyContent: 'center', marginTop: 8 }}>
-            {model.channelData.map((e) => (
-              <span key={e.name} className="fill-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: CH_COLORS[e.name] || '#a1a1a1', display: 'inline-block' }} />
-                {e.name}
-              </span>
-            ))}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>

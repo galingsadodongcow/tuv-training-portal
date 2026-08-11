@@ -241,15 +241,21 @@ export default function Calendar() {
     setParam('month', MONTHS[(i + dir + 12) % 12])
   }
 
-  const sortBtn = (key: string, label: string, align?: string) => (
-    <th className={align} style={{ cursor: 'pointer', userSelect: 'none' }}
-      onClick={() => {
-        if (sortKey === key) setParam('dir', sortDir === 'asc' ? 'desc' : 'asc')
-        else { setParam('sort', key); setParam('dir', 'asc') }
-      }}>
-      {label}{sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-    </th>
-  )
+  const sortBtn = (key: string, label: string, align?: string) => {
+    const toggleSort = () => {
+      if (sortKey === key) setParam('dir', sortDir === 'asc' ? 'desc' : 'asc')
+      else { setParam('sort', key); setParam('dir', 'asc') }
+    }
+    const ariaSort = sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+    return (
+      <th className={align} style={{ cursor: 'pointer', userSelect: 'none' }}
+        role="button" tabIndex={0} aria-sort={ariaSort as any}
+        onClick={toggleSort}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort() } }}>
+        {label}{sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+      </th>
+    )
+  }
 
   const head = (
     <thead>
@@ -294,19 +300,20 @@ export default function Calendar() {
           <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(1)} title="Next month">›</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setParam('month', CURRENT_MONTH)}>Today</button>
         </div>
-        <input placeholder="Search course…" value={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 160 }} />
-        <select value={year} onChange={(e) => setParam('year', e.target.value)}>
-          {(years.data || []).map((y: any) => (<option key={y.year_id} value={y.year}>{y.year}</option>))}
+        <input placeholder="Search course…" aria-label="Search sessions by course name" value={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 160 }} />
+        <select value={year} aria-label="Filter by year" onChange={(e) => setParam('year', e.target.value)}>
+          {/* Degrade quietly if the year list fails to load — keep the current year selectable. */}
+          {(years.data?.length ? years.data : [{ year_id: year, year }]).map((y: any) => (<option key={y.year_id} value={y.year}>{y.year}</option>))}
         </select>
-        <select value={status} onChange={(e) => setParam('status', e.target.value)}>
+        <select value={status} aria-label="Filter by status" onChange={(e) => setParam('status', e.target.value)}>
           <option value="all">All statuses</option>
           {['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => (<option key={s}>{s}</option>))}
         </select>
-        <select value={category} onChange={(e) => setParam('category', e.target.value)}>
+        <select value={category} aria-label="Filter by category" onChange={(e) => setParam('category', e.target.value)}>
           <option value="all">All categories</option>
           {categories.map((c: any) => (<option key={c}>{c}</option>))}
         </select>
-        <select value={ltype} onChange={(e) => setParam('lt', e.target.value)}>
+        <select value={ltype} aria-label="Filter by learning type" onChange={(e) => setParam('lt', e.target.value)}>
           <option value="all">All learning types</option>
           {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
         </select>
