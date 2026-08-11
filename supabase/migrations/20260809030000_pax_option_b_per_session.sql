@@ -1,7 +1,7 @@
--- DRAFT — DECISION PENDING (fn_enforce_pax). Do NOT apply until Alan picks a
--- path. This is Option B of two mutually-exclusive drafts; apply exactly one.
+-- fn_enforce_pax — PER-SESSION CAPS (chosen path; supersedes the course-derived
+-- draft, which has been removed). The earlier Option A draft is gone; this file
+-- is the single source of truth for the trigger.
 --
--- OPTION B — Per-session caps (course provides a default only).
 --   The trigger stops overwriting max_participants on every write. It fills a
 --   default ONLY when the value is not supplied, so operations can set a
 --   per-session cap (e.g. a smaller room, a pilot cohort) and it sticks. The
@@ -10,9 +10,11 @@
 --   8 onto an explicit value.
 --
 --   Trade-off: the "max is always the course max" invariant is gone; a session
---   can carry its own cap. The venue guard remains the hard ceiling. If Option B
---   is chosen, the max/min fields in src/screens/SessionForm.tsx should stay
---   editable (they already are).
+--   can carry its own cap. The venue guard remains the hard ceiling. The
+--   max/min fields in src/screens/SessionForm.tsx stay editable (they already
+--   are), which matches this behaviour — no frontend change required.
+--
+--   Idempotent (create or replace + drop/create trigger); safe to re-apply.
 
 create or replace function public.fn_enforce_pax()
 returns trigger
