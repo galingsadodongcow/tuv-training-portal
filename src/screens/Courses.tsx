@@ -6,6 +6,7 @@ import { useCourses, useCourseFees, useInvalidate } from '../hooks/data'
 import { ErrorNote } from '../components/ui'
 import { TableSkeleton } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { php } from '../lib/format'
 import { lt } from '../lib/labels'
 
@@ -19,6 +20,7 @@ export default function Courses() {
   const fees = useCourseFees()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [draft, setDraft] = useState<Record<string, Record<string, string>>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -54,10 +56,9 @@ export default function Courses() {
   }
 
   const saveRow = async (cid: string) => {
-    setBusy(cid)
+    const upserts: any[] = []
+    const removeMods: string[] = []
     try {
-      const upserts: any[] = []
-      const removeMods: string[] = []
       for (const m of MODS) {
         const raw = cellValue(cid, m).trim()
         if (raw === '') {
@@ -68,6 +69,22 @@ export default function Courses() {
         if (!Number.isFinite(n) || n < 0) throw new Error(`Set a valid price for ${lt(m)}.`)
         upserts.push({ course_id: cid, modality: m, fee_php: n })
       }
+    } catch (err: any) {
+      toast.error(err.message)
+      return
+    }
+    // Blanking a cell deletes a previously-set fee — confirm before removing it.
+    if (removeMods.length) {
+      const res = await confirm({
+        title: `Remove ${removeMods.length} saved price${removeMods.length === 1 ? '' : 's'}?`,
+        body: `Clearing a price deletes that fee for ${removeMods.map(lt).join(', ')}. The course will show no price for that learning type.`,
+        confirmLabel: 'Remove prices',
+        tone: 'danger',
+      })
+      if (!res.ok) return
+    }
+    setBusy(cid)
+    try {
       if (upserts.length) {
         const { error } = await supabase.from('course_fee').upsert(upserts, { onConflict: 'course_id,modality' })
         if (error) throw error
@@ -104,6 +121,8 @@ export default function Courses() {
         <input placeholder="Search course or category…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 240 }} />
       </div>
 
+      {fees.error && <ErrorNote error={new Error('Prices could not be loaded — blank cells below do not mean a course has no fee.')} />}
+
       <div className="card">
         <table>
           <thead>
@@ -124,6 +143,7 @@ export default function Courses() {
                 {MODS.map((m) => (
                   <td key={m} className="right">
                     <input type="number" min="0" value={cellValue(c.course_id, m)}
+                      aria-label={`${c.course_name} — ${lt(m)} fee`}
                       onChange={(e) => setCell(c.course_id, m, e.target.value)}
                       placeholder="—" style={{ maxWidth: 100, textAlign: 'right' }} />
                   </td>

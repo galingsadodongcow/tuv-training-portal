@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
@@ -62,6 +62,15 @@ export default function SessionDetail() {
   const [closing, setClosing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
 
+  // Seed the forecast inputs once the record arrives — in an effect, not during
+  // render, so we never call setState mid-render.
+  useEffect(() => {
+    if (forecastInit || !sched.data) return
+    setFRev(sched.data.forecast_revenue ?? '')
+    setFPax(sched.data.forecast_participants ?? '')
+    setForecastInit(true)
+  }, [sched.data, forecastInit])
+
   if (sched.isLoading) return <Spinner label="Loading session" />
   if (sched.error) return <ErrorNote error={sched.error} />
   const schedule = sched.data
@@ -72,13 +81,6 @@ export default function SessionDetail() {
         <div className="card"><div className="empty">This session does not exist or you cannot access it.</div></div>
       </>
     )
-  }
-
-  // Seed the forecast inputs once the record arrives.
-  if (!forecastInit) {
-    setFRev(schedule.forecast_revenue ?? '')
-    setFPax(schedule.forecast_participants ?? '')
-    setForecastInit(true)
   }
 
   const ch = paxAll.data?.[schedule.schedule_id] || {}

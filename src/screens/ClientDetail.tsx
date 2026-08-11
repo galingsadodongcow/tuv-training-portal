@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -26,6 +27,7 @@ export default function ClientDetail() {
   const toast = useToast()
   const confirm = useConfirm()
   const invalidate = useInvalidate()
+  const [saving, setSaving] = useState(false)
   const client = useClient(id)
   const orgOptions = useOrgOptions()
   const hist = useClientHistory(id)
@@ -61,15 +63,19 @@ export default function ClientDetail() {
   const orgName = (orgOptions.data || []).find((o: any) => o.org_id === c.org_id)?.name
 
   const setOrg = async (orgId: string | null) => {
+    setSaving(true)
     const { error } = await supabase.from('client').update({ org_id: orgId }).eq('client_id', id)
     if (error) toast.error(error.message)
     else { toast.success(orgId ? 'Organization set.' : 'Organization cleared.'); invalidate(['client', 'clients', 'org_summary', 'org_clients']) }
+    setSaving(false)
   }
 
   const setDeleted = async (value: string | null) => {
+    setSaving(true)
     const { error } = await supabase.from('client').update({ deleted_at: value }).eq('client_id', id)
     if (error) toast.error(error.message)
     else { toast.success(value ? 'Customer archived.' : 'Customer restored.'); invalidate(['client', 'clients']) }
+    setSaving(false)
   }
   const archive = async () => {
     const res = await confirm({
@@ -117,8 +123,8 @@ export default function ClientDetail() {
         }
         actions={
           canArchive && (archived
-            ? <button className="btn btn-ghost btn-sm" onClick={() => setDeleted(null)}>Restore</button>
-            : <button className="btn btn-danger btn-sm" onClick={archive}>Archive</button>)
+            ? <button className="btn btn-ghost btn-sm" onClick={() => setDeleted(null)} disabled={saving}>Restore</button>
+            : <button className="btn btn-danger btn-sm" onClick={archive} disabled={saving}>Archive</button>)
         }
       />
 
@@ -143,7 +149,7 @@ export default function ClientDetail() {
           {orgReady && (
             <KeyVal label="Organization">
               {canSetOrg ? (
-                <select value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} style={{ maxWidth: 220 }}>
+                <select aria-label="Organization" value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} disabled={saving} style={{ maxWidth: 220 }}>
                   <option value="">None</option>
                   {(orgOptions.data || []).map((o: any) => (<option key={o.org_id} value={o.org_id}>{o.name}</option>))}
                 </select>

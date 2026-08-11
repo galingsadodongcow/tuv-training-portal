@@ -76,16 +76,22 @@ export default function Clients() {
           <table>
             <thead>
               <tr>
-                <th className="clickable" onClick={() => clientSort.toggle('company')}>Company{clientSort.indicator('company')}</th>
-                <th className="clickable" onClick={() => clientSort.toggle('name')}>Contact{clientSort.indicator('name')}</th>
-                <th className="clickable" onClick={() => clientSort.toggle('email')}>Email{clientSort.indicator('email')}</th>
-                <th className="clickable" onClick={() => clientSort.toggle('phone')}>Phone{clientSort.indicator('phone')}</th>
-                <th className="clickable" onClick={() => clientSort.toggle('owner')}>Owner{clientSort.indicator('owner')}</th>
+                {([['company', 'Company'], ['name', 'Contact'], ['email', 'Email'], ['phone', 'Phone'], ['owner', 'Owner']] as const).map(([key, label]) => (
+                  <th key={key} className="clickable" role="button" tabIndex={0}
+                    aria-sort={clientSort.sort.key === key ? (clientSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    onClick={() => clientSort.toggle(key)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clientSort.toggle(key) } }}>
+                    {label}{clientSort.indicator(key)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {clientSort.sorted.slice(0, 300).map((c: any) => (
-                <tr key={c.client_id} className="clickable" onClick={() => router.push(`/clients/${c.client_id}`)}>
+                <tr key={c.client_id} className="clickable" role="button" tabIndex={0}
+                  aria-label={`Open ${c.company || c.name || 'client'}`}
+                  onClick={() => router.push(`/clients/${c.client_id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/clients/${c.client_id}`) } }}>
                   <td style={{ fontWeight: 600 }}>{c.company || '—'}</td>
                   <td>{c.name || '—'}</td>
                   <td>{c.email || '—'}</td>

@@ -36,9 +36,6 @@ export default function Communications() {
     setBusy(false)
   }
 
-  if (log.isLoading) return <TableSkeleton rows={6} cols={5} />
-  if (log.error) return <ErrorNote error={log.error} />
-
   return (
     <>
       <div className="page-head">
@@ -57,7 +54,7 @@ export default function Communications() {
 
       {tab === 'log' && (
         <div className="card">
-          {(log.data?.length || 0) === 0 ? (
+          {log.isLoading ? <TableSkeleton rows={6} cols={5} /> : log.error ? <ErrorNote error={log.error} /> : (log.data?.length || 0) === 0 ? (
             <div className="empty">No messages yet. Run reminders or send from a record.</div>
           ) : (
             <table>
@@ -106,7 +103,7 @@ export default function Communications() {
             style={{ maxWidth: 640, width: '100%', margin: '8vh auto' }} onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => { if (e.key === 'Escape') setEdit(null) }}>
             <div className="k-label" style={{ marginBottom: 8 }}>Edit template · {edit.name}</div>
-            <label className="field"><span>Subject</span><input value={edit.subject} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} /></label>
+            <label className="field"><span>Subject</span><input autoFocus value={edit.subject} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} /></label>
             <label className="field"><span>Body</span><textarea rows={8} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} /></label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0' }}>
               <input type="checkbox" checked={edit.active} style={{ width: 'auto' }} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} /> Active

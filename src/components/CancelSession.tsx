@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useCancelReadiness, useApprovedCancellation, useTransferTargets, useInvalidate } from '../hooks/data'
@@ -21,6 +21,12 @@ export default function CancelSession({ schedule, onDone, onClose }: { schedule:
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [result, setResult] = useState(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+
+  // On open, move focus into the dialog.
+  useEffect(() => {
+    dialogRef.current?.querySelector<HTMLElement>('select, input, button')?.focus()
+  }, [])
 
   const rows = ready.data || []
   const hasApproval = (approved.data?.length || 0) > 0
@@ -64,7 +70,9 @@ export default function CancelSession({ schedule, onDone, onClose }: { schedule:
 
   return (
     <div className="drawer-scrim" onClick={() => onClose()} style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div className="card card-pad" style={{ width: 640, maxWidth: '95vw', maxHeight: '88vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div className="card card-pad" style={{ width: 640, maxWidth: '95vw', maxHeight: '88vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}
+        ref={dialogRef} role="dialog" aria-modal="true" aria-label="Cancel session"
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
         <h3 style={{ marginTop: 0 }}>Cancel session</h3>
 
         {result ? (
@@ -120,13 +128,15 @@ export default function CancelSession({ schedule, onDone, onClose }: { schedule:
                           <span className="pill pill-webshop">{r.action}</span>
                         ) : (
                           <>
-                            <select value={draft[r.order_id]?.action || ''} onChange={(e) => setAction(r.order_id, { action: e.target.value })}>
+                            <select value={draft[r.order_id]?.action || ''} onChange={(e) => setAction(r.order_id, { action: e.target.value })}
+                              aria-label={`Disposition for booking ${r.company || r.order_id}`}>
                               <option value="">Choose…</option>
                               {ACTIONS.map((a) => (<option key={a}>{a}</option>))}
                             </select>
                             {draft[r.order_id]?.action === 'Transfer' && (
                               <select style={{ marginTop: 6 }} value={draft[r.order_id]?.target || ''}
-                                onChange={(e) => setAction(r.order_id, { target: e.target.value })}>
+                                onChange={(e) => setAction(r.order_id, { target: e.target.value })}
+                                aria-label={`Transfer target session for booking ${r.company || r.order_id}`}>
                                 <option value="">Move to…</option>
                                 {targets.data?.map((t) => (
                                   <option key={t.schedule_id} value={t.schedule_id}>

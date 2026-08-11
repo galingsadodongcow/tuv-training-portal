@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useContacts, useClientInteractions, useInvalidate } from '../hooks/data'
 import { useToast } from './Toast'
 import { useConfirm } from './Confirm'
+import { Spinner } from './ui'
 import { shortDate } from '../lib/format'
 
 // Multiple contacts for a client, plus a simple interaction log.
@@ -70,7 +71,9 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
           <button className="btn btn-sm" onClick={addContact} disabled={busy}>Add contact</button>
         </div>
       )}
-      {(contacts.data?.length || 0) === 0 ? (
+      {contacts.isLoading ? (
+        <Spinner />
+      ) : (contacts.data?.length || 0) === 0 ? (
         <div className="muted fill-label" style={{ marginBottom: 14 }}>No additional contacts.</div>
       ) : (
         <div className="scroll-x">
@@ -98,7 +101,9 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
           <button className="btn btn-sm" onClick={logInteraction} disabled={busy}>Log</button>
         </div>
       )}
-      {(interactions.data?.length || 0) === 0 ? (
+      {interactions.isLoading ? (
+        <Spinner />
+      ) : (interactions.data?.length || 0) === 0 ? (
         <div className="muted fill-label">No interactions logged.</div>
       ) : (
         <div className="notes">

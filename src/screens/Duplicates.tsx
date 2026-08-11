@@ -6,23 +6,31 @@ import { supabase } from '../lib/supabase'
 import { useDuplicates } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 
 export default function Duplicates() {
   const dups = useDuplicates()
   const qc = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const [msg, setMsg] = useState(null)
 
   // NOTE: this only records the reviewer's decision on the candidate. It does
   // NOT reconcile the two orders — cancelling/merging the duplicate order and
   // moving its lines must happen server-side (an RPC) so seats and revenue stop
-  // being double-counted. Until that exists, "Merge" is a triage flag only.
+  // being double-counted. Until that exists, "Mark as duplicate" is a triage
+  // flag only.
   const resolve = async (id, status) => {
     setMsg(null)
-    if (status === 'Merged' &&
-        !window.confirm('Mark this pair as merged? This flags the candidate as resolved but does not yet cancel or combine the underlying orders.')) {
-      return
+    if (status === 'Merged') {
+      const res = await confirm({
+        title: 'Mark this pair as a duplicate?',
+        body: 'This flags the candidate as resolved. It does not yet cancel or combine the underlying orders — seats and revenue must still be reconciled on the orders themselves.',
+        confirmLabel: 'Mark as duplicate',
+        tone: 'danger',
+      })
+      if (!res.ok) return
     }
     const { error } = await supabase
       .from('duplicate_candidate')
@@ -71,7 +79,7 @@ export default function Duplicates() {
                   <td className="right">
                     <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
                       <button className="btn btn-sm" onClick={() => resolve(d.candidate_id, 'Merged')}>
-                        Merge
+                        Mark as duplicate
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={() => resolve(d.candidate_id, 'Dismissed')}>
                         Not a duplicate

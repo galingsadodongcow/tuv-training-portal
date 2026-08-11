@@ -14,20 +14,20 @@ export default function DateSegments({ segments, onChange }: { segments: any[]; 
   while (keys.current.length < rows.length) keys.current.push(++seed.current)
   if (keys.current.length > rows.length) keys.current = keys.current.slice(0, rows.length)
 
-  const update = (i, k, v) => {
+  const update = (i: number, k: string, v: string) => {
     const next = rows.map((s, idx) => (idx === i ? { ...s, [k]: v, ...(k === 'start' && !s.end ? { end: v } : {}) } : s))
     onChange(next)
   }
   const add = () => { keys.current.push(++seed.current); onChange([...rows, { start: '', end: '' }]) }
-  const remove = (i) => { keys.current.splice(i, 1); onChange(rows.filter((_, idx) => idx !== i)) }
+  const remove = (i: number) => { keys.current.splice(i, 1); onChange(rows.filter((_, idx) => idx !== i)) }
 
   return (
     <div>
       {rows.map((s, i) => (
         <div key={keys.current[i]} className="toolbar" style={{ marginBottom: 8 }}>
-          <input type="date" value={s.start} onChange={(e) => update(i, 'start', e.target.value)} required={i === 0} style={{ maxWidth: 170 }} />
+          <input type="date" aria-label={`Block ${i + 1} start`} value={s.start} onChange={(e) => update(i, 'start', e.target.value)} required={i === 0} style={{ maxWidth: 170 }} />
           <span className="muted">to</span>
-          <input type="date" value={s.end} min={s.start} onChange={(e) => update(i, 'end', e.target.value)} style={{ maxWidth: 170 }} />
+          <input type="date" aria-label={`Block ${i + 1} end`} value={s.end} min={s.start} onChange={(e) => update(i, 'end', e.target.value)} style={{ maxWidth: 170 }} />
           {rows.length > 1 && (
             <button type="button" className="linkbtn" onClick={() => remove(i)}>Remove</button>
           )}

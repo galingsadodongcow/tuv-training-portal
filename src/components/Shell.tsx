@@ -1,5 +1,5 @@
 'use client'
-import { ReactNode, Suspense, useEffect, useState } from 'react'
+import { ReactNode, Suspense, useEffect, useRef, useState, KeyboardEvent } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
@@ -14,24 +14,113 @@ export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const items = NAV.filter((n) => role && n.roles.includes(role))
   const [navOpen, setNavOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [skipFocused, setSkipFocused] = useState(false)
+  const asideRef = useRef<HTMLElement | null>(null)
+  const toggleRef = useRef<HTMLButtonElement | null>(null)
+
+  // Track the mobile breakpoint so the off-canvas rules (inert, focus trap)
+  // only apply where the drawer is actually off-canvas. Desktop is untouched.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(max-width: 860px)')
+    const sync = () => setIsMobile(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
     setNavOpen(false)
   }, [pathname])
 
+  // When collapsed on mobile the drawer is only translated off-screen, so mark it
+  // inert to pull it out of the tab order and hide it from assistive tech.
+  const drawerHidden = isMobile && !navOpen
+  useEffect(() => {
+    const el = asideRef.current as (HTMLElement & { inert?: boolean }) | null
+    if (el) el.inert = drawerHidden
+  }, [drawerHidden])
+
+  // On open (mobile), move focus into the drawer; on close, return it to the toggle.
+  useEffect(() => {
+    if (!isMobile) return
+    if (navOpen) {
+      asideRef.current?.querySelector<HTMLElement>('a, button, [tabindex]:not([tabindex="-1"])')?.focus()
+    } else {
+      toggleRef.current?.focus()
+    }
+  }, [navOpen, isMobile])
+
+  // Open the command palette by re-emitting the shortcut it already listens for.
+  const openPalette = () => {
+    window.dispatchEvent(new globalThis.KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+  }
+
+  const focusMain = () => {
+    document.getElementById('main-content')?.focus()
+  }
+
+  // Escape closes the drawer; Tab is trapped inside it while open on mobile.
+  const onDrawerKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && isMobile && navOpen) { setNavOpen(false); return }
+    if (e.key !== 'Tab' || !isMobile || !navOpen || !asideRef.current) return
+    const list = Array.from(
+      asideRef.current.querySelectorAll<HTMLElement>('a, button, input, select, [tabindex]:not([tabindex="-1"])')
+    ).filter((el) => !el.hasAttribute('disabled'))
+    if (list.length === 0) return
+    const first = list[0]
+    const last = list[list.length - 1]
+    const activeEl = document.activeElement as HTMLElement | null
+    if (e.shiftKey && activeEl === first) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && activeEl === last) { e.preventDefault(); first.focus() }
+  }
+
   return (
     <div className="app">
+      <a
+        href="#main-content"
+        className="skip-link"
+        onClick={(e) => { e.preventDefault(); focusMain() }}
+        onFocus={() => setSkipFocused(true)}
+        onBlur={() => setSkipFocused(false)}
+        style={{
+          position: 'absolute', zIndex: 100, left: 8,
+          top: skipFocused ? 8 : -48,
+          background: 'var(--card)', color: 'var(--text)',
+          border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)',
+          padding: '8px 12px', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+          transition: 'top 0.15s var(--ease)',
+        }}
+      >
+        Skip to main content
+      </a>
+
       <header className="topbar">
-        <button className="topbar-toggle" aria-label="Toggle navigation" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
+        <button ref={toggleRef} className="topbar-toggle" aria-label="Toggle navigation" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
           ☰
         </button>
         <span className="brand-mark">Academy Portal</span>
+        <button
+          className="cmdk-hint"
+          onClick={openPalette}
+          aria-label="Open command menu (Command or Control + K)"
+          title="Search and jump (⌘K)"
+          style={{
+            marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4,
+            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)',
+            padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+          }}
+        >
+          <kbd style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>⌘K</kbd>
+        </button>
       </header>
 
       {navOpen && <div className="sidebar-scrim" onClick={() => setNavOpen(false)} />}
 
-      <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
+      <aside ref={asideRef} className={`sidebar ${navOpen ? 'open' : ''}`} onKeyDown={onDrawerKey}>
         <div className="brand">
           <span className="brand-mark">Academy</span>
           <span className="brand-sub">Portal</span>
@@ -62,7 +151,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main" id="main-content" tabIndex={-1}>
         <Suspense fallback={<Spinner label="Loading" />}>{children}</Suspense>
       </main>
     </div>

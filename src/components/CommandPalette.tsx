@@ -27,6 +27,16 @@ export default function CommandPalette() {
   const router = useRouter()
   const { profile } = useAuth()
   const role = profile?.role as Role | undefined
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  // The element focused before the palette opened, so we can restore it on close.
+  const restoreFocus = useRef<HTMLElement | null>(null)
+
+  const closePalette = () => {
+    setOpen(false)
+    const el = restoreFocus.current
+    restoreFocus.current = null
+    if (el && typeof el.focus === 'function') setTimeout(() => el.focus(), 0)
+  }
 
   const navItems = useMemo(() => NAV.filter((n) => role && n.roles.includes(role)), [role])
   const navMatches = useMemo(() => {
@@ -38,14 +48,18 @@ export default function CommandPalette() {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        setOpen((o) => !o)
+        setOpen((o) => {
+          if (!o) restoreFocus.current = document.activeElement as HTMLElement | null
+          return !o
+        })
         setQ(''); setActive(0); setResults([])
       } else if (e.key === 'Escape') {
-        setOpen(false)
+        closePalette()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => setActive(0), [q])
@@ -86,13 +100,26 @@ export default function CommandPalette() {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, entries.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
     else if (e.key === 'Enter') { e.preventDefault(); entries[active]?.go() }
+    else if (e.key === 'Tab' && dialogRef.current) {
+      // Keep Tab focus inside the palette.
+      const list = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>('button, input, [href], [tabindex]:not([tabindex="-1"])')
+      ).filter((el) => !el.hasAttribute('disabled'))
+      if (list.length === 0) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      const activeEl = document.activeElement as HTMLElement | null
+      if (e.shiftKey && activeEl === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && activeEl === last) { e.preventDefault(); first.focus() }
+    }
   }
 
   let lastGroup = ''
+  const activeId = entries.length > 0 ? `cmdk-opt-${active}` : undefined
 
   return (
-    <div className="cmdk-scrim" onClick={() => setOpen(false)}>
-      <div className="cmdk" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Command menu">
+    <div className="cmdk-scrim" onClick={closePalette}>
+      <div className="cmdk" ref={dialogRef} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Command menu">
         <input
           autoFocus
           className="cmdk-input"
@@ -100,9 +127,16 @@ export default function CommandPalette() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onInputKey}
+          role="combobox"
+          aria-expanded={entries.length > 0}
+          aria-controls="cmdk-listbox"
+          aria-activedescendant={activeId}
+          aria-autocomplete="list"
         />
-        <div className="cmdk-list">
-          {entries.length === 0 && <div className="cmdk-empty">{q.trim().length >= 2 ? 'No matches' : 'No matches'}</div>}
+        <div className="cmdk-list" id="cmdk-listbox" role="listbox" aria-label="Results">
+          {entries.length === 0 && (
+            <div className="cmdk-empty">{q.trim().length >= 2 ? 'No matches' : 'Type to search records.'}</div>
+          )}
           {entries.map((it, i) => {
             const header = it.group !== lastGroup ? it.group : null
             lastGroup = it.group
@@ -110,6 +144,9 @@ export default function CommandPalette() {
               <div key={it.key}>
                 {header && <div className="cmdk-group">{header}</div>}
                 <button
+                  id={`cmdk-opt-${i}`}
+                  role="option"
+                  aria-selected={i === active}
                   className={`cmdk-item ${i === active ? 'on' : ''}`}
                   onMouseEnter={() => setActive(i)}
                   onClick={it.go}

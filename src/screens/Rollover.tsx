@@ -1,21 +1,36 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useYears } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 
 export default function Rollover() {
   const years = useYears()
   const qc = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const [mode, setMode] = useState('Copy')
-  const [fromYear, setFromYear] = useState<any>(2026)
-  const [toYear, setToYear] = useState<any>(2027)
+  const [fromYear, setFromYear] = useState<any>('')
+  const [toYear, setToYear] = useState<any>('')
+  const [defaulted, setDefaulted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+
+  // Default the source/target years from the data: highest existing year is the
+  // one to copy from, and the next year is the one to open.
+  useEffect(() => {
+    if (defaulted || !years.data?.length) return
+    const highest = Math.max(...years.data.map((y) => Number(y.year)))
+    if (Number.isFinite(highest)) {
+      setFromYear(highest)
+      setToYear(highest + 1)
+      setDefaulted(true)
+    }
+  }, [years.data, defaulted])
 
   const run = async () => {
     setResult(null)
@@ -31,9 +46,14 @@ export default function Rollover() {
     if (mode === 'Copy' && y === Number(fromYear)) {
       setResult({ ok: false, msg: 'The new year must differ from the year you copy from.' }); return
     }
-    if (mode === 'Copy' &&
-        !window.confirm(`This clones every non-cancelled ${fromYear} session into ${y} and archives ${fromYear}. Continue?`)) {
-      return
+    if (mode === 'Copy') {
+      const res = await confirm({
+        title: `Copy ${fromYear} into ${y}?`,
+        body: `This clones every non-cancelled ${fromYear} session — a full year of sessions and their bookings — into ${y}, then archives ${fromYear}. This affects the whole calendar and cannot be undone in one step.`,
+        confirmLabel: 'Copy and archive',
+        tone: 'danger',
+      })
+      if (!res.ok) return
     }
     setBusy(true)
     try {

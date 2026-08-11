@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useSessionOrders, useScheduleApprovals, useInvalidate } from '../hooks/data'
 import { Badge, KeyVal, RecordSection, RecordNotice } from './record'
+import { Spinner, ErrorNote } from './ui'
 import { useToast } from './Toast'
 import { php, shortDate, daysUntil } from '../lib/format'
 
@@ -115,6 +116,14 @@ export default function GoNoGoPanel({ schedule }: { schedule: any }) {
       requested_by: profile?.user_id,
       note: reason || `Review requested. Booked ${booked} of ${min} min.`,
     }), 'Review requested. It is on the Approvals screen.')
+
+  // The recommendation is built from booked/paid counts on the session's orders.
+  // Don't present "0 booked/paid" as a real signal while those fetches are
+  // pending or failed — gate the whole panel first.
+  if (orders.isLoading || approvals.isLoading)
+    return <RecordSection title="Go / No-Go decision"><Spinner /></RecordSection>
+  if (orders.error || approvals.error)
+    return <RecordSection title="Go / No-Go decision"><ErrorNote error={orders.error || approvals.error} /></RecordSection>
 
   return (
     <RecordSection title="Go / No-Go decision">

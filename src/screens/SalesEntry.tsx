@@ -123,6 +123,10 @@ export default function SalesEntry() {
               phone: client.phone.trim() || null,
               owner_sales_id: profile?.sales_id || null,
             }).select('client_id').single()
+          // A unique-constraint hit (23505) means the email already exists — often
+          // on a client owned by another rep and hidden from this one by RLS, so
+          // the earlier dedup lookup returned nothing. Surface a friendly message.
+          if (error?.code === '23505') throw new Error('A customer with this email already exists or is owned by another rep.')
           if (error) throw error
           clientId = data.client_id
         }

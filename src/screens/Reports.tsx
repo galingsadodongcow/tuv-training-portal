@@ -65,9 +65,12 @@ export default function Reports() {
   }, [pnl.data])
   const [verifyNo, setVerifyNo] = useState('')
   const [verifyResult, setVerifyResult] = useState<any>(undefined)
+  const [verifyError, setVerifyError] = useState<any>(null)
   const verify = async () => {
     if (!verifyNo.trim()) return
-    const { data } = await supabase.rpc('fn_verify_certificate', { p_cert: verifyNo.trim() })
+    setVerifyError(null)
+    const { data, error } = await supabase.rpc('fn_verify_certificate', { p_cert: verifyNo.trim() })
+    if (error) { setVerifyError(error); setVerifyResult(undefined); return }
     setVerifyResult(data && data.length ? data[0] : null)
   }
 
@@ -110,11 +113,48 @@ export default function Reports() {
     return { months, channels, sales, totals }
   }, [facts.data])
 
+  const stamp = () => new Date().toISOString().slice(0, 10)
   const exportMonths = () =>
     exportCsv(
-      'revenue-by-month-' + new Date().toISOString().slice(0, 10),
+      'revenue-by-month-' + stamp(),
       ['Month', 'Orders', 'Seats', 'Booked PHP', 'Collected PHP'],
       revenue.months.map((m: any) => [monthLabel(m.key), m.orders, m.seats, m.booked, m.collected])
+    )
+  const exportChannels = () =>
+    exportCsv(
+      'revenue-by-channel-' + stamp(),
+      ['Channel', 'Orders', 'Booked PHP'],
+      revenue.channels.map((c: any) => [c.key, c.orders, c.booked])
+    )
+  const exportSales = () =>
+    exportCsv(
+      'revenue-by-salesperson-' + stamp(),
+      ['Salesperson', 'Orders', 'Booked PHP'],
+      revenue.sales.map((s: any) => [s.key, s.orders, s.booked])
+    )
+  const exportReceivables = () =>
+    exportCsv(
+      'receivables-overdue-' + stamp(),
+      ['Order', 'Customer', 'Balance PHP', 'Days overdue'],
+      aging.overdue.map((r: any) => [r.order_id, r.company || r.client_name || '', r.balance, r.od])
+    )
+  const exportCerts = () =>
+    exportCsv(
+      'expiring-certificates-' + stamp(),
+      ['Certificate', 'Holder', 'Course', 'Expiry', 'Days left'],
+      (certs.data || []).map((c: any) => [c.cert_number, c.full_name, c.course_name, c.cert_expiry_date, c.days_left])
+    )
+  const exportMargins = () =>
+    exportCsv(
+      'profitability-' + stamp(),
+      ['Course', 'Date', 'Revenue PHP', 'Cost PHP', 'Margin PHP', 'Margin %'],
+      margins.rows.map((r: any) => [r.course_name, r.start_date, Number(r.revenue), Number(r.total_cost), Number(r.margin), Number(r.revenue) > 0 ? Math.round(Number(r.margin) / Number(r.revenue) * 100) : ''])
+    )
+  const exportTrainers = () =>
+    exportCsv(
+      'trainer-load-' + stamp(),
+      ['Trainer', 'Code', 'Sessions', 'Training days', 'Delivered'],
+      (trainerLoad.data || []).map((t: any) => [t.name, t.code, t.sessions, t.training_days, t.delivered])
     )
 
   return (
@@ -187,7 +227,10 @@ export default function Reports() {
 
             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
               <div>
-                <h2 style={{ fontSize: 16, marginBottom: 8 }}>By channel</h2>
+                <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                  <h2 style={{ fontSize: 16 }}>By channel</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={exportChannels} disabled={revenue.channels.length === 0}>Export CSV</button>
+                </div>
                 <div className="card">
                   <table>
                     <thead><tr><th>Channel</th><th className="right">Orders</th><th className="right">Booked</th></tr></thead>
@@ -198,7 +241,10 @@ export default function Reports() {
                 </div>
               </div>
               <div>
-                <h2 style={{ fontSize: 16, marginBottom: 8 }}>By salesperson</h2>
+                <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                  <h2 style={{ fontSize: 16 }}>By salesperson</h2>
+                  <button className="btn btn-ghost btn-sm" onClick={exportSales} disabled={revenue.sales.length === 0}>Export CSV</button>
+                </div>
                 <div className="card">
                   <table>
                     <thead><tr><th>Salesperson</th><th className="right">Orders</th><th className="right">Booked</th></tr></thead>
@@ -247,7 +293,10 @@ export default function Reports() {
               </div>
             </div>
 
-            <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Overdue</h2></div></div>
+            <div className="page-head" style={{ marginBottom: 8 }}>
+              <div><h2 style={{ fontSize: 16 }}>Overdue</h2></div>
+              <button className="btn btn-ghost btn-sm" onClick={exportReceivables} disabled={aging.overdue.length === 0}>Export CSV</button>
+            </div>
             <div className="card">
               {aging.overdue.length === 0 ? (
                 <div className="empty">Nothing overdue. {aging.count === 0 ? 'No open balances.' : 'All open balances are within terms.'}</div>
@@ -276,11 +325,12 @@ export default function Reports() {
           <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 640 }}>
             <div className="k-label" style={{ marginBottom: 8 }}>Verify a certificate</div>
             <div className="toolbar">
-              <input placeholder="TRA-2026-000001" value={verifyNo} onChange={(e) => { setVerifyNo(e.target.value); setVerifyResult(undefined) }}
+              <input aria-label="Certificate number" placeholder="TRA-2026-000001" value={verifyNo} onChange={(e) => { setVerifyNo(e.target.value); setVerifyResult(undefined); setVerifyError(null) }}
                 onKeyDown={(e) => e.key === 'Enter' && verify()} style={{ minWidth: 220 }} />
               <button className="btn btn-sm" onClick={verify}>Verify</button>
             </div>
-            {verifyResult === null && <div className="notice notice-error" style={{ marginTop: 10 }}>No certificate found with that number.</div>}
+            {verifyError && <div className="notice notice-error" style={{ marginTop: 10 }}>Could not verify the certificate: {String(verifyError.message || verifyError)}. Please try again.</div>}
+            {!verifyError && verifyResult === null && <div className="notice notice-warn" style={{ marginTop: 10 }}>No certificate found with that number.</div>}
             {verifyResult && (
               <div className={`notice ${verifyResult.valid ? 'notice-info' : 'notice-error'}`} style={{ marginTop: 10 }}>
                 <strong>{verifyResult.full_name}</strong> · {verifyResult.course_name}<br />
@@ -289,7 +339,10 @@ export default function Reports() {
             )}
           </div>
 
-          <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Expiring within four months</h2></div></div>
+          <div className="page-head" style={{ marginBottom: 8 }}>
+            <div><h2 style={{ fontSize: 16 }}>Expiring within four months</h2></div>
+            <button className="btn btn-ghost btn-sm" onClick={exportCerts} disabled={(certs.data?.length || 0) === 0}>Export CSV</button>
+          </div>
           <div className="card">
             {certs.isLoading ? <Spinner /> : certs.error ? <ErrorNote error={certs.error} /> : (certs.data?.length || 0) === 0 ? (
               <div className="empty">No certificates are expiring soon.</div>
@@ -323,6 +376,10 @@ export default function Reports() {
                 <div><div className="k-label">Margin</div><div className="k-value" style={{ color: margins.margin >= 0 ? 'inherit' : 'var(--danger)' }}>{php(margins.margin)}</div></div>
                 <div><div className="k-label">Margin %</div><div className="k-value">{margins.revenue > 0 ? Math.round(margins.margin / margins.revenue * 100) : 0}%</div></div>
               </div>
+            </div>
+            <div className="page-head" style={{ marginBottom: 8 }}>
+              <div><h2 style={{ fontSize: 16 }}>By session</h2></div>
+              <button className="btn btn-ghost btn-sm" onClick={exportMargins} disabled={margins.rows.length === 0}>Export CSV</button>
             </div>
             <div className="card">
               {margins.rows.length === 0 ? (
@@ -368,7 +425,10 @@ export default function Reports() {
 
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
             <div>
-              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Trainer utilization</h2>
+              <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                <h2 style={{ fontSize: 16 }}>Trainer utilization</h2>
+                <button className="btn btn-ghost btn-sm" onClick={exportTrainers} disabled={(trainerLoad.data?.length || 0) === 0}>Export CSV</button>
+              </div>
               <div className="card">
                 {trainerLoad.isLoading ? <Spinner /> : trainerLoad.error ? <ErrorNote error={trainerLoad.error} /> : (trainerLoad.data?.length || 0) === 0 ? (
                   <div className="empty">No active trainers.</div>

@@ -7,6 +7,7 @@ import {
   useDuplicates,
 } from '../hooks/data'
 import { KpiSkeleton } from '../components/Skeleton'
+import { ErrorNote } from '../components/ui'
 import { isUnowned, isStalled, isOverdue } from '../lib/orderState'
 
 // Days-out threshold for calling an unstaffed session urgent.
@@ -42,7 +43,8 @@ export default function DataQuality() {
   const unstaffed = useUnstaffed()
   const dups = useDuplicates()
 
-  const loading = queue.isLoading || sched.isLoading || unstaffed.isLoading
+  const loading = queue.isLoading || sched.isLoading || unstaffed.isLoading || dups.isLoading
+  const error = queue.error || sched.error || unstaffed.error || dups.error
 
   const q: any[] = queue.data || []
   const today = new Date(new Date().toDateString())
@@ -67,14 +69,16 @@ export default function DataQuality() {
         <div>
           <h1>Data quality</h1>
           <p>
-            {loading ? 'Checking the data…' : totalIssues === 0
+            {error ? 'A check could not be loaded.' : loading ? 'Checking the data…' : totalIssues === 0
               ? 'No issues found. The data is clean.'
               : `${totalIssues} record${totalIssues === 1 ? '' : 's'} need attention across ${checks.filter((c) => c.value > 0).length} check${checks.filter((c) => c.value > 0).length === 1 ? '' : 's'}. Every tile opens the records behind it.`}
           </p>
         </div>
       </div>
 
-      {loading ? (
+      {error ? (
+        <ErrorNote error={error} />
+      ) : loading ? (
         <KpiSkeleton count={8} />
       ) : (
         <div className="grid kpis">

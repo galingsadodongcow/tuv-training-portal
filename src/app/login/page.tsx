@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -11,10 +11,16 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const { session, loading } = useAuth()
   const router = useRouter()
+  const emailRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!loading && session) router.replace('/home')
   }, [loading, session, router])
+
+  // Land the cursor in the email field on arrival.
+  useEffect(() => {
+    emailRef.current?.focus()
+  }, [])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -38,6 +44,7 @@ export default function LoginPage() {
           <label className="field">
             <span>Work email</span>
             <input
+              ref={emailRef}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -56,7 +63,7 @@ export default function LoginPage() {
             />
           </label>
           {error && (
-            <div className="notice notice-error" style={{ marginBottom: 12 }}>
+            <div className="notice notice-error" role="alert" aria-live="assertive" style={{ marginBottom: 12 }}>
               {error}
             </div>
           )}
