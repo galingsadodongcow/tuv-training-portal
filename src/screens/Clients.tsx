@@ -37,7 +37,7 @@ export default function Clients() {
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [attribution.data])
 
-  const clientSort = useSort(filtered, (c: any, k: string) => (k === 'owner' ? c.salesperson?.name : c[k]))
+  const clientSort = useSort(filtered, (c: any, k: string) => (k === 'owner' ? c.salesperson?.name : c[k]), { key: 'company', dir: 'asc' })
   const exportClients = () =>
     exportCsv(
       'clients-' + new Date().toISOString().slice(0, 10),

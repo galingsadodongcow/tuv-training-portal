@@ -335,7 +335,10 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows:
     return (
       <tr key={r.schedule_id}
           className={`clickable ${risk} ${d != null && d >= 0 && d <= 7 ? 'upcoming' : ''}`}
-          onClick={() => onOpen(r)}>
+          role="button" tabIndex={0}
+          aria-label={`Open ${r.course?.course_name || 'session'}`}
+          onClick={() => onOpen(r)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(r) } }}>
         <td data-label="">
           <div style={{ fontWeight: 600 }}>{r.course?.course_name}</div>
           <div className="fill-label">{r.course?.category || '—'}</div>

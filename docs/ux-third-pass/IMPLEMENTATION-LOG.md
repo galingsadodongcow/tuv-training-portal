@@ -92,3 +92,12 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - **Routes**: `/course/new` → `/courses?new`, `/course/[id]/edit` → `/courses?edit=<id>` (redirects; the drawer is deep-linkable). Calendar's "New course"/"Course" edit links resolve through these. Nav item relabelled **Training catalogue**.
   - Capability-preserving: same fields, same category/hierarchy handling, same create/edit, same fee upsert-then-delete-removed logic — now in one editor. (The old inline "confirm before clearing a price" gate is superseded by unchecking a learning type in the form.)
 - Files: `src/screens/{Courses,CourseForm}.tsx`, `src/lib/roles.ts`, `src/app/(app)/course/new/page.tsx`, `src/app/(app)/course/[id]/edit/page.tsx`.
+
+## Wave 15 — table defaults + density polish (P3)
+- **#22 Uniform table default sort + primary row action** (targeted, low-risk):
+  - **Clients** — added an explicit default sort (`company` asc) to the already-sortable, already-clickable table.
+  - **Courses (Training catalogue)** and **Calendar list rows** — the rows opened on mouse click only; added `role="button"` + `tabIndex` + Enter/Space keyboard handlers (matching the Orders/Clients gold pattern) so the primary row action is keyboard-reachable.
+  - **E-learning** — the order id in both tables is now a link to the order record (the primary drill), instead of plain text.
+  - Verified the rest already conform: Orders/Quotations rows are keyboard-clickable with sensible default order (`created_at desc`); Reports/aggregates are pre-sorted in their memos; Admin/Duplicates/Pricing/Communications/MyWork tables are inline-edit grids, symmetric-choice, or curated worklists where a single row action is intentionally absent.
+- **#21 Visual-weight (partial)** — fixed the self-contained card-in-card in **FeedbackPanel** (the "Record a response" form was a `.card` nested inside the panel's `.card`; now a `.record-section` divider, matching the SessionDetail "one card, dividers" DEN1 pattern). *Deferred for a previewed pass:* the ReceivablePanel/ContactsPanel sub-form double-boxes and the stacked-card merges on ClientDetail/OrderDetail overviews — restyling live daily-use forms/records is better judged with eyes on the preview.
+- Files: `src/screens/{Clients,Courses,Calendar,Elearning}.tsx`, `src/components/FeedbackPanel.tsx`.
