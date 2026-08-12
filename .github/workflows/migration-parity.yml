@@ -1,0 +1,48 @@
+name: Migration parity
+
+# Deployed == reviewed (#138). The live DB is updated by applying the bundle
+# supabase/bundles/2026_program_all_migrations.sql (see apply-supabase.yml), so a
+# migration that lands in supabase/migrations/ but never makes it into the bundle
+# is reviewed-but-not-deployed drift — exactly the class that hid two live
+# security holes. This fails the PR if any migration at or after the cutoff (the
+# point the append-to-bundle convention began) is not referenced by filename in
+# the bundle. Older migrations predate the convention and are grandfathered.
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/bundles/**'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/bundles/**'
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every migration >= cutoff must be in the bundle
+        run: |
+          CUTOFF=20260808150000
+          BUNDLE=supabase/bundles/2026_program_all_migrations.sql
+          if [ ! -f "$BUNDLE" ]; then
+            echo "::error::bundle $BUNDLE not found"; exit 1
+          fi
+          missing=0
+          for f in supabase/migrations/*.sql; do
+            b=$(basename "$f")
+            ts=${b%%_*}
+            case "$ts" in (*[!0-9]*|'') continue ;; esac
+            if [ "$ts" -ge "$CUTOFF" ] && ! grep -qF "$b" "$BUNDLE"; then
+              echo "::error file=$f::$b is not referenced in $BUNDLE — append its SQL to the bundle so what is reviewed is what gets deployed."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Migration/bundle drift detected. See errors above."
+            exit 1
+          fi
+          echo "OK — every migration at or after $CUTOFF is present in the bundle."
