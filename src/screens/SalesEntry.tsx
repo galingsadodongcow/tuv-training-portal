@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useCourses, useCourseFees, useClients, useInvalidate, usePossibleDuplicateClients } from '../hooks/data'
+import { useCourses, useCourseFees, useClients, useInvalidate, usePossibleDuplicateClients, useQuoteLines } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
@@ -39,6 +39,33 @@ export default function SalesEntry() {
   // (RLS-scoped). Only meaningful for a new customer; passing '' when picking an
   // existing client self-disables the hook. Called unconditionally at top level.
   const dupClients = usePossibleDuplicateClients(client.mode === 'new' ? client.email : '')
+
+  // When converting a quote (?quote=<id>), prefill the line editor from the
+  // quote's lines so conversion is a review step, not re-entry. Fetched
+  // unconditionally at top level; the hook self-disables when there is no quote.
+  const quoteId = sp.get('quote') || undefined
+  const quoteLines = useQuoteLines(quoteId)
+  const prefilledRef = useRef(false)
+  const [quotePrefilled, setQuotePrefilled] = useState(false)
+
+  // Map the quote's lines onto SalesEntry line objects once, guarded so a
+  // re-render or the rep's edits can't wipe what they've changed. Session is
+  // left empty — quote lines are course-level, so the rep picks the session.
+  useEffect(() => {
+    if (!quoteId || prefilledRef.current) return
+    const rows = quoteLines.data
+    if (!rows || rows.length === 0) return
+    prefilledRef.current = true
+    setLines(rows.map((r: any) => ({
+      course_id: r.course_id || '',
+      schedule_id: '',
+      modality: r.modality || blankLine().modality,
+      seats: r.seats ?? 1,
+      amount: r.unit_price ?? '',
+      sessions: [] as any[],
+    })))
+    setQuotePrefilled(true)
+  }, [quoteId, quoteLines.data])
 
   // preselected session from the calendar Book link
   useEffect(() => {
@@ -324,6 +351,12 @@ export default function SalesEntry() {
             <div className="k-label">Training lines</div>
             <div className="fill-label">{totalSeats} seat{totalSeats === 1 ? '' : 's'} · {php(total)}</div>
           </div>
+
+          {quotePrefilled && quoteId && (
+            <div className="notice notice-info" style={{ marginBottom: 12 }}>
+              Lines prefilled from quote {quoteId} — review and pick sessions before saving.
+            </div>
+          )}
 
           {lines.map((l, i) => {
             const cat = feeFor(l.course_id, l.modality)

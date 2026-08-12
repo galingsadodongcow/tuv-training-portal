@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useElearningPending } from '../hooks/data'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate } from '../lib/format'
 
@@ -13,16 +14,31 @@ export default function Elearning() {
   const orders = useElearningPending()
   const qc = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const [msg, setMsg] = useState<string | null>(null)
 
-  const grant = async (lineId: string) => {
+  const grant = async (lineId: string, override?: string) => {
     setMsg(null)
     const { error } = await supabase.from('order_line')
       .update({ access_status: 'Granted', access_granted_date: new Date().toISOString().slice(0, 10) })
       .eq('line_id', lineId)
     if (error) { setMsg(error.message); toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['elearning_pending'] })
-    toast.success('Access granted.')
+    toast.success(override ? `Access granted (override): ${override}` : 'Access granted.')
+  }
+
+  // Blocked-on-payment override: unpaid orders normally can't get access, so
+  // granting anyway is a destructive/override action — gate it behind the shared
+  // confirm dialog with a required reason, the same as voids and refunds.
+  const grantAnyway = async (lineId: string) => {
+    const res = await confirm({
+      title: 'Grant access before payment?',
+      body: 'This order is not marked Paid. Granting platform access now overrides the payment gate.',
+      confirmLabel: 'Grant anyway', tone: 'danger', reason: 'required', reasonLabel: 'Reason (required)',
+    })
+    if (!res.ok) return
+    if (!res.reason?.trim()) { toast.error('A reason is required to grant before payment.'); return }
+    await grant(lineId, res.reason.trim())
   }
 
   if (orders.isLoading) return <TableSkeleton rows={8} cols={6} />
@@ -62,12 +78,23 @@ export default function Elearning() {
                   <td>{o.course?.course_name || '—'}</td>
                   <td>
                     <span className={`pill ${paid ? 'pill-go' : 'pill-tentative'}`}>{o.order?.payment_status || 'Unpaid'}</span>
+                    <div className="fill-label">
+                      {paid
+                        ? 'Payment cleared — ready to grant'
+                        : `Awaiting payment — order ${o.order?.payment_status || 'Unpaid'}`}
+                    </div>
                   </td>
                   <td className="right">
-                    <button className="btn btn-sm" onClick={() => grant(o.line_id)} disabled={!paid}
-                      title={paid ? '' : 'Access is granted after the order is paid'}>
-                      Mark access granted
-                    </button>
+                    {paid ? (
+                      <button className="btn btn-sm" onClick={() => grant(o.line_id)}>
+                        Mark access granted
+                      </button>
+                    ) : (
+                      <button className="btn btn-sm btn-danger" onClick={() => grantAnyway(o.line_id)}
+                        title="Order is not paid — grant access anyway with a reason">
+                        Grant anyway
+                      </button>
+                    )}
                   </td>
                 </tr>
                 )
