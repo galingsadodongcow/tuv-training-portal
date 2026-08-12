@@ -7,7 +7,7 @@ import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
-import { primaryFlag } from '../lib/orderState'
+import { primaryFlag, stageLabel } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -86,7 +86,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
         <input placeholder="Search order # or SAP…" defaultValue={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 240 }} />
         <select value={stage} onChange={(e) => setParam('stage', e.target.value)}>
           <option value="all">All stages</option>
-          {STAGES.map((s) => (<option key={s}>{s}</option>))}
+          {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)}</option>))}
         </select>
         <select value={pay} onChange={(e) => setParam('pay', e.target.value)}>
           <option value="all">All payments</option>
@@ -134,7 +134,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
                         </div>
                       </td>
                       <td>
-                        <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                        <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                         {(() => {
                           const f = primaryFlag(o)
                           return f ? (

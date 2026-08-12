@@ -30,6 +30,20 @@ const STALL_DAYS = 14
 const NOT_STARTED = ['New', 'In Communication', 'For Order Creation']
 const TERMINAL_STAGE = ['SAP Created', 'Cancelled', 'No Feedback']
 
+// Human-readable labels for the order fulfilment-stage enum (#126). The enum
+// value is stored and written unchanged — only the display text changes — so
+// users read "Ready to create order" instead of the raw "For Order Creation".
+export const STAGE_LABEL: Record<string, string> = {
+  'New': 'New',
+  'In Communication': 'In communication',
+  'For Order Creation': 'Ready to create order',
+  'Endorsed to Ops': 'Sent to Operations',
+  'SAP Created': 'Booked in SAP',
+  'No Feedback': 'Awaiting customer reply',
+  'Cancelled': 'Cancelled',
+}
+export const stageLabel = (s?: string | null): string => (s ? STAGE_LABEL[s] ?? s : '—')
+
 const rawAge = (d?: string | null): number | null =>
   d ? Math.floor((Date.now() - +new Date(d)) / 86400000) : null
 

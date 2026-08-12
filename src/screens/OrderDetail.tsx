@@ -17,7 +17,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
-import { collectionState, collectionTone } from '../lib/orderState'
+import { collectionState, collectionTone, stageLabel } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAYMENTS = ['Unpaid', 'Partial', 'Paid']
@@ -229,7 +229,7 @@ export default function OrderDetail() {
         badges={
           <>
             <ChannelPill value={o.channel} />
-            <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+            <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
             <span className="pill pill-cancelled">{o.payment_status}</span>
             {collection !== 'None' && collection !== 'Not due' && <Badge tone={collectionTone(collection)}>{collection}</Badge>}
             {assignee && <span className="fill-label">{assignee}</span>}
@@ -249,7 +249,7 @@ export default function OrderDetail() {
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <label className="field"><span>Stage</span>
                   <select value={stage} onChange={(e) => setStage(e.target.value)}>
-                    {STAGES.map((s) => (<option key={s}>{s}</option>))}
+                    {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)}</option>))}
                   </select>
                 </label>
                 <label className="field"><span>Payment</span>

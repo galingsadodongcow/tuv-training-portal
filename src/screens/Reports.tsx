@@ -7,6 +7,7 @@ import { Spinner, ErrorNote } from '../components/ui'
 import ChartTable, { ChartTableToggle } from '../components/ChartTable'
 import { php, money, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
+import { stageLabel } from '../lib/orderState'
 
 const monthLabel = (d: string) => {
   const dt = new Date(d)
@@ -242,7 +243,7 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
             <DigestCard title="Roster gaps" rows={digest.data?.rosterGaps || []} empty="Every seat sold has a name."
               render={(r) => (<><Link href={`/session/${r.schedule_id}`}>{r.course_name}</Link> · {shortDate(r.start_date)} · {r.missing} missing</>)} />
             <DigestCard title="Stalled orders" rows={digest.data?.stalled || []} empty="Nothing sat too long in a stage."
-              render={(r) => (<><Link href={`/orders/${r.order_id}`}>{r.order_id}</Link> · {r.company || '—'} · {r.days_in_stage}d in {r.fulfillment_stage}</>)} />
+              render={(r) => (<><Link href={`/orders/${r.order_id}`}>{r.order_id}</Link> · {r.company || '—'} · {r.days_in_stage}d in {stageLabel(r.fulfillment_stage)}</>)} />
             <DigestCard title="Unstaffed sessions" rows={digest.data?.unstaffed || []} empty="Every upcoming session has a trainer."
               render={(r) => (<><Link href={`/session/${r.schedule_id}`}>{r.course_name}</Link> · {shortDate(r.start_date)} · {r.days_out}d out</>)} />
             <DigestCard title="E-learning waiting" rows={digest.data?.elearning || []} empty="No paid e-learning is waiting for access."
