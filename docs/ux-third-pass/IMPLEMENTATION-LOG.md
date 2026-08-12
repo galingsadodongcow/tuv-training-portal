@@ -124,3 +124,10 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
     - **Pipeline** — the lead pipeline (`Inquiries embedded`).
   - **Route + Guard** (`src/app/(app)/team/page.tsx`): `sales_manager` + `super_admin`. RLS already scopes every underlying query to the manager's team/region — no new access is granted, no new tables/RPCs.
 - Files: `src/screens/Team.tsx` (new), `src/app/(app)/team/page.tsx` (new).
+
+## Wave 18 — Overview + Financial destinations (#8, build phase)
+- **#8 build — Management Overview + Financial.** The two net-new destinations the `02-role-navigation.md` management target (`Overview · Customers · Training · Financial · Analytics`) needs. Both reuse existing screens `embedded`, so there is one implementation of each surfaced as a first-class destination.
+  - **`/overview`** (`src/screens/Overview.tsx`) — the KPI landing that replaces "My Work" for a role with no task queue. Renders the role-scoped `Dashboard embedded` (booked/delivered revenue, pipeline, conversion, AR, session health, exceptions; every tile a drill-through). Guard: `management` + `super_admin`.
+  - **`/financial`** (`src/screens/Financial.tsx`) — receivables + revenue in one place, a small two-view strip (`Receivables` default · `Revenue`, deep-linkable via `?view=`) each rendering `Reports embedded section=…`. Guard: `management` + `business_owner` + `operations` + `super_admin` (the roles that already see the financial reports; RLS authoritative and these views are read-only for them).
+  - No new tables/RPCs; both are compositions of screens/hooks that already exist. Whether Overview becomes management's *default landing* (vs. My Work) is a routing decision deferred to the nav-trim wave.
+- Files: `src/screens/Overview.tsx` (new), `src/screens/Financial.tsx` (new), `src/app/(app)/overview/page.tsx` (new), `src/app/(app)/financial/page.tsx` (new).
