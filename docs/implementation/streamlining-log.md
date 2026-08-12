@@ -33,6 +33,13 @@ Implementation-focused record of the simplification work (the "make it lighter /
 - **Result:** trainer/venue/confirm happen without leaving the calendar. `useSchedules` now also selects `trainer_id`/`venue_id` so the drawer can pre-select. **Clicks:** assign a trainer went from ~4 (open session → edit → pick → save → back) to 1 in the drawer.
 - **Files:** `src/screens/Calendar.tsx`, `src/hooks/data.ts` (added `trainer_id`/`venue_id` to `useSchedules`).
 
+### S4 — Session detail: fold Notes into Activity
+- **Previous:** the session record carried **seven tabs** — Overview · Orders · Participants · **Notes** · Files · Feedback · **History** — where the History timeline already merged note events (`noteEvents(notes.data)`), so every note rendered in **two** places (the Notes thread and the History timeline).
+- **Problem:** a redundant tab and duplicated content. "Notes" was really just the composer plus a note-only view of the same events History already showed.
+- **Decision — Merge.** Notes + History collapse into one **"Activity"** tab: the note composer sits on top, the full timeline (notes, approvals, tasks, notifications, audit) below it. The tab count drops **7 → 6**. Old deep-links survive — `?tab=notes` and `?tab=history` both normalise to `activity`. The tab shows the note count (`Activity (n)`) so the thread is still discoverable at a glance.
+- **Result:** one fewer tab, and notes live in a single place instead of two. The overview (header + badges + fill/fee/trainer/venue/owners + P&L + Go/No-Go + forecast + status actions) is unchanged — the attention/summary surface was already right; this pass only trimmed the redundant tab.
+- **Files:** `src/screens/SessionDetail.tsx` (tab normalisation, merged Activity block, removed the separate Notes/History blocks).
+
 ### S3 — Leaner session creation (progressive disclosure)
 - **Previous:** the New-session form showed all 11 inputs at once — course, learning type, fee, dates, min pax, max pax, sales owner, trainer, venue, status, private-run — even though only a course and a date block are actually needed to schedule a run, and every other field already has a working default.
 - **Problem:** a wall of fields on the most common creation path, most of which the operator leaves at their default. It reads as "all of this is required," and the trainer/venue pickers duplicate the assign-in-place actions S2 added to the calendar drawer (so they no longer need to be set at creation).
@@ -50,8 +57,6 @@ Implementation-focused record of the simplification work (the "make it lighter /
 ---
 
 ## Planned next entries (this phase)
-- S4 — Session detail: tighten to the standard header + attention + summary + minimal tabs (already tabbed via REC-standard; audit tab count).
-- S5 — Participants: lifecycle (soft-cancel / transfer / substitute) on the new `participant.status` column instead of hard delete.
 - S6 — Categories/subcategories: **DB-dependent** (today `course.category` is free-text; a real hierarchy needs tables + RLS) → Supabase session; meanwhile keep category as a managed free-text list in Course management.
 
 ## Deferred to a Supabase-enabled session (DB/RLS)
