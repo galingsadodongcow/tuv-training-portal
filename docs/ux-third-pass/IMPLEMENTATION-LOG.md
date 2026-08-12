@@ -108,3 +108,12 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - Verified the rest already conform: Orders/Quotations rows are keyboard-clickable with sensible default order (`created_at desc`); Reports/aggregates are pre-sorted in their memos; Admin/Duplicates/Pricing/Communications/MyWork tables are inline-edit grids, symmetric-choice, or curated worklists where a single row action is intentionally absent.
 - **#21 Visual-weight (partial)** — fixed the self-contained card-in-card in **FeedbackPanel** (the "Record a response" form was a `.card` nested inside the panel's `.card`; now a `.record-section` divider, matching the SessionDetail "one card, dividers" DEN1 pattern). *Deferred for a previewed pass:* the ReceivablePanel/ContactsPanel sub-form double-boxes and the stacked-card merges on ClientDetail/OrderDetail overviews — restyling live daily-use forms/records is better judged with eyes on the preview.
 - Files: `src/screens/{Clients,Courses,Calendar,Elearning}.tsx`, `src/components/FeedbackPanel.tsx`.
+
+## Wave 17 — Team queue destination (#8, build phase)
+- **#8 build — Team (sales manager).** The manager-specific queue that the `02-role-navigation.md` target (`… · Team`) calls for — the work that was scattered across Fulfillment + Orders + the pipeline, gathered into one destination so those items can leave the manager's nav.
+  - **New `/team` screen** (`src/screens/Team.tsx`): a role shell with three tabs, each reusing an existing screen `embedded` (no new data paths):
+    - **Workload** — a roll-up of the open fulfillment queue by owner (open orders · stalled >14d · value per rep, plus an Unassigned row and four summary tiles). Computed client-side from `useFulfillmentQueue` (the same RLS-scoped queue the Queue tab reads), so a manager sees the load distribution before rebalancing.
+    - **Queue** — the fulfillment queue (`Worklist embedded`), which already carries **unassigned** (Claim queue), **overdue** (stalled / SLA), and **reassign** (the per-row owner select + bulk assign).
+    - **Pipeline** — the lead pipeline (`Inquiries embedded`).
+  - **Route + Guard** (`src/app/(app)/team/page.tsx`): `sales_manager` + `super_admin`. RLS already scopes every underlying query to the manager's team/region — no new access is granted, no new tables/RPCs.
+- Files: `src/screens/Team.tsx` (new), `src/app/(app)/team/page.tsx` (new).
