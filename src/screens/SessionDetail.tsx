@@ -31,7 +31,9 @@ export default function SessionDetail() {
   const router = useRouter()
   const pathname = usePathname()
   const search = useSearchParams()
-  const tab = search.get('tab') || 'overview'
+  // Notes + History merged into one "Activity" tab; keep the old deep-links alive.
+  const rawTab = search.get('tab') || 'overview'
+  const tab = rawTab === 'notes' || rawTab === 'history' ? 'activity' : rawTab
   const setTab = (t: string) => {
     const n = new URLSearchParams(search.toString())
     if (t === 'overview') n.delete('tab')
@@ -159,10 +161,9 @@ export default function SessionDetail() {
     { key: 'overview', label: 'Overview' },
     { key: 'orders', label: `Orders (${bookedCount})${waitCount ? ` · ${waitCount} waitlisted` : ''}` },
     { key: 'participants', label: 'Participants' },
-    { key: 'notes', label: 'Notes' },
     { key: 'files', label: 'Files' },
     { key: 'feedback', label: 'Feedback' },
-    { key: 'history', label: 'History' },
+    { key: 'activity', label: `Activity${notes.data?.length ? ` (${notes.data.length})` : ''}` },
   ]
 
   return (
@@ -348,39 +349,20 @@ export default function SessionDetail() {
 
       {tab === 'participants' && <div className="card card-pad"><RosterPanel schedule={schedule} /></div>}
 
-      {tab === 'notes' && (
-        <div className="card card-pad">
-          <div className="toolbar" style={{ marginBottom: 10 }}>
-            <input aria-label="Add a note" placeholder="Add a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && postNote()} />
-            <button className="btn btn-sm" onClick={postNote} disabled={busy === 'note'}>Post</button>
-          </div>
-          {notes.isLoading ? <Spinner /> : notes.data?.length === 0 ? (
-            <div className="muted fill-label">No notes yet. Start the thread.</div>
-          ) : (
-            <div className="notes">
-              {notes.data?.map((n: any) => (
-                <div key={n.note_id} className="note">
-                  <div className="note-meta">
-                    <strong>{n.profile?.full_name || 'User'}</strong>
-                    <span className="muted"> · {n.profile?.role}{n.date ? ` · ${new Date(n.date).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}</span>
-                  </div>
-                  <div>{n.note}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {tab === 'files' && (
         <div className="card card-pad"><AttachmentsPanel entityType="session" entityId={schedule.schedule_id} /></div>
       )}
 
       {tab === 'feedback' && <FeedbackPanel scheduleId={schedule.schedule_id} />}
 
-      {tab === 'history' && (
+      {tab === 'activity' && (
         <div className="card card-pad">
+          {/* Post a note, then the full timeline (notes, approvals, tasks, audit) below. */}
+          <div className="toolbar" style={{ marginBottom: 14 }}>
+            <input aria-label="Add a note" placeholder="Add a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && postNote()} />
+            <button className="btn btn-sm" onClick={postNote} disabled={busy === 'note'}>Post</button>
+          </div>
           <ActivityTimeline events={timeline} loading={notes.isLoading || schedApprovals.isLoading || activity.isLoading} />
         </div>
       )}
