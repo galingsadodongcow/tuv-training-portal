@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useSchedules, useChannelPax, useYears, useSessionHealth } from '../hooks/data'
@@ -12,6 +12,15 @@ import { healthMeta, healthNeedsAction } from '../lib/health'
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+
+// Local ISO (yyyy-mm-dd) for the `date` param — avoids the UTC shift a bare
+// toISOString() would introduce for evening-side timezones.
+const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const sameDay = (iso: string, d: Date) => {
+  const s = new Date(iso)
+  return s.getFullYear() === d.getFullYear() && s.getMonth() === d.getMonth() && s.getDate() === d.getDate()
+}
+const shortDate = (d: Date) => `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`
 
 const STATUS_TONE: Record<string, string> = {
   Confirmed: 'confirmed', Tentative: 'tentative', Running: 'running', Completed: 'completed', Cancelled: 'cancelled',
@@ -130,6 +139,82 @@ function MonthGrid({ year, monthName, sessions, onOpen, healthMap }: { year: num
   )
 }
 
+// Week grid: the seven days (Sun–Sat) around the selected date, each session
+// placed on its start day. Reuses the month grid's cells and event chips.
+function WeekGrid({ days, sessions, onOpen, healthMap }: { days: Date[]; sessions: any[]; onOpen: (r: any) => void; healthMap?: Map<string, string> }) {
+  const tod = new Date()
+  const isToday = (d: Date) => tod.getFullYear() === d.getFullYear() && tod.getMonth() === d.getMonth() && tod.getDate() === d.getDate()
+  const byDay = useMemo(
+    () => days.map((d) => sessions.filter((s) => sameDay(s.start_date, d))),
+    [days, sessions]
+  )
+  return (
+    <div className="cal-grid-wrap">
+      <div className="cal-grid">
+        {days.map((d, i) => (<div key={i} className="cal-grid-head">{WEEKDAYS[d.getDay()]} {d.getDate()}</div>))}
+        {days.map((d, i) => (
+          <div key={i} className={`cal-grid-cell ${isToday(d) ? 'cal-grid-today' : ''}`}>
+            {byDay[i].map((s) => (
+              <button key={s.schedule_id} className={`cal-event cal-event-${STATUS_TONE[s.status] || 'tentative'}`}
+                onClick={() => onOpen(s)}
+                aria-label={`${s.course?.course_name} · ${lt(s.modality)} · ${s.status} · ${s.booked_participants}/${s.min_participants} pax`}
+                title={`${s.course?.course_name} · ${lt(s.modality)} · ${s.status} · ${s.booked_participants}/${s.min_participants} pax`}>
+                <span className="cal-event-name">{s.course?.course_name}</span>
+                <span className="cal-event-meta">{STATUS_ABBR[s.status] || s.status} · {lt(s.modality)}</span>
+                <HealthChip h={healthMap?.get(s.schedule_id)} style={{ marginTop: 2, alignSelf: 'flex-start' }} />
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Slide-in summary of a single session, built entirely from the row already in
+// hand (no fetch). Deep-links into the full session page from its primary action.
+function SessionDrawer({ r, healthMap, onClose }: { r: any; healthMap?: Map<string, string>; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => { ref.current?.querySelector<HTMLElement>('a, button')?.focus() }, [])
+  const hm = healthMeta(healthMap?.get(r.schedule_id))
+  return (
+    <div className="drawer-scrim" onClick={onClose}>
+      <div className="drawer" ref={ref} role="dialog" aria-modal="true" aria-label={`Session: ${r.course?.course_name}`}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
+        <div className="drawer-head">
+          <div>
+            <h3 style={{ margin: 0 }}>{r.course?.course_name}</h3>
+            <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>{r.course?.category || '—'} · {r.course?.training_type}</p>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="drawer-body">
+          <div className="chip-row" style={{ marginBottom: 16 }}>
+            <StatusPill value={r.status} />
+            <GoPill value={r.go_status} />
+            <span className={`pill ${hm.cls}`}>{hm.label}</span>
+          </div>
+          <table style={{ marginBottom: 16 }}>
+            <tbody>
+              <tr><td>Dates</td><td className="right">{formatSegments(r.date_segments, r.start_date, r.end_date)}</td></tr>
+              <tr><td>Learning type</td><td className="right">{lt(r.modality)}</td></tr>
+              <tr><td>Fee</td><td className="right">{php(r.price)}</td></tr>
+              {r.trainer && <tr><td>Trainer</td><td className="right">{r.trainer}</td></tr>}
+              {r.venue && <tr><td>Venue</td><td className="right">{r.venue}</td></tr>}
+            </tbody>
+          </table>
+          <div style={{ marginBottom: 20 }}>
+            <div className="fill-label" style={{ marginBottom: 6 }}>Fill · {r.booked_participants}/{r.min_participants}</div>
+            <FillBar booked={r.booked_participants} min={r.min_participants} />
+          </div>
+          <Link href={`/session/${r.schedule_id}`} className="btn">Open full session →</Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows: any[]; pax: any; onOpen: (r: any) => void; canEdit: boolean; canSell: boolean; healthMap?: Map<string, string> }) {
   return rows.map((r) => {
     const ch = pax?.[r.schedule_id] || {}
@@ -209,8 +294,9 @@ export default function Calendar() {
   const pathname = usePathname()
   const get = (k: string, fb: string) => params.get(k) || fb
   const year = Number(get('year', '2026'))
-  const cal = get('cal', 'grid') // grid | list
+  const cal = get('cal', 'grid') // grid | week | day | list
   const month = get('month', CURRENT_MONTH)
+  const dateStr = get('date', toISO(new Date())) // week/day anchor (yyyy-mm-dd)
   const status = get('status', 'all')
   const category = get('category', 'all')
   const ltype = get('lt', 'all')
@@ -234,7 +320,7 @@ export default function Calendar() {
     [health.data]
   )
   const { profile } = useAuth()
-  const openSession = (r: any) => router.push(`/session/${r.schedule_id}`)
+  const [drawer, setDrawer] = useState<any | null>(null)
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
   const canSell = ['sales', 'super_admin'].includes(profile?.role as string)
 
@@ -280,12 +366,33 @@ export default function Calendar() {
     return d.getFullYear() === year && d.getMonth() === MONTHS.indexOf(gridMonth)
   }).length
 
+  // Week/day anchor and the seven Sun–Sat days around it.
+  const anchor = new Date(`${dateStr}T00:00:00`)
+  const weekDays = useMemo(() => {
+    const start = new Date(anchor)
+    start.setDate(anchor.getDate() - anchor.getDay())
+    return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
+  }, [dateStr])
+  const weekLabel = `${shortDate(weekDays[0])} – ${shortDate(weekDays[6])}, ${weekDays[6].getFullYear()}`
+  const dayLabel = `${WEEKDAYS[anchor.getDay()]}, ${shortDate(anchor)}, ${anchor.getFullYear()}`
+  const weekCount = useMemo(() => base.filter((r: any) => weekDays.some((d) => sameDay(r.start_date, d))).length, [base, weekDays])
+  const dayRows = useMemo(
+    () => base.filter((r: any) => sameDay(r.start_date, anchor)).sort((a: any, b: any) => (a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0)),
+    [base, dateStr]
+  )
+
   if (sched.isLoading || years.isLoading) return <Spinner label="Loading calendar" />
   if (sched.error) return <ErrorNote error={sched.error} />
 
   const stepMonth = (dir: number) => {
     const i = MONTHS.indexOf(gridMonth)
     setParam('month', MONTHS[(i + dir + 12) % 12])
+  }
+
+  const stepDate = (deltaDays: number) => {
+    const d = new Date(`${dateStr}T00:00:00`)
+    d.setDate(d.getDate() + deltaDays)
+    setParam('date', toISO(d))
   }
 
   const sortBtn = (key: string, label: string, align?: string) => {
@@ -323,7 +430,7 @@ export default function Calendar() {
       <div className="page-head">
         <div>
           <h1>Training calendar</h1>
-          <p>{cal === 'grid' ? `${gridMonth} ${year}` : month === 'all' ? `All ${year} sessions` : `${month} ${year}`}. The month's roster of trainings. Click a session to open it.</p>
+          <p>{cal === 'grid' ? `${gridMonth} ${year}` : cal === 'week' ? `Week of ${weekLabel}` : cal === 'day' ? dayLabel : month === 'all' ? `All ${year} sessions` : `${month} ${year}`}. The roster of trainings. Click a session to open it.</p>
         </div>
         {canEdit && (
           <div className="toolbar">
@@ -336,17 +443,28 @@ export default function Calendar() {
       <div className="filters">
         <div className="seg">
           <button className={`seg-btn ${cal === 'grid' ? 'on' : ''}`} onClick={() => setParam('cal', 'grid')}>Month</button>
+          <button className={`seg-btn ${cal === 'week' ? 'on' : ''}`} onClick={() => setParam('cal', 'week')}>Week</button>
+          <button className={`seg-btn ${cal === 'day' ? 'on' : ''}`} onClick={() => setParam('cal', 'day')}>Day</button>
           <button className={`seg-btn ${cal === 'list' ? 'on' : ''}`} onClick={() => setParam('cal', 'list')}>List</button>
         </div>
-        <div className="toolbar" style={{ gap: 4 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(-1)} title="Previous month">‹</button>
-          <select value={cal === 'grid' ? gridMonth : month} onChange={(e) => setParam('month', e.target.value)}>
-            {cal === 'list' && <option value="all">All months</option>}
-            {MONTHS.map((m) => (<option key={m}>{m}</option>))}
-          </select>
-          <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(1)} title="Next month">›</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setParam('month', CURRENT_MONTH)}>Today</button>
-        </div>
+        {cal === 'week' || cal === 'day' ? (
+          <div className="toolbar" style={{ gap: 4 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => stepDate(cal === 'week' ? -7 : -1)} title={cal === 'week' ? 'Previous week' : 'Previous day'}>‹</button>
+            <span style={{ fontWeight: 600, fontSize: 13, minWidth: 150, textAlign: 'center' }}>{cal === 'week' ? weekLabel : dayLabel}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => stepDate(cal === 'week' ? 7 : 1)} title={cal === 'week' ? 'Next week' : 'Next day'}>›</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setParam('date', toISO(new Date()))}>Today</button>
+          </div>
+        ) : (
+          <div className="toolbar" style={{ gap: 4 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(-1)} title="Previous month">‹</button>
+            <select value={cal === 'grid' ? gridMonth : month} onChange={(e) => setParam('month', e.target.value)}>
+              {cal === 'list' && <option value="all">All months</option>}
+              {MONTHS.map((m) => (<option key={m}>{m}</option>))}
+            </select>
+            <button className="btn btn-ghost btn-sm" onClick={() => stepMonth(1)} title="Next month">›</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setParam('month', CURRENT_MONTH)}>Today</button>
+          </div>
+        )}
         <input placeholder="Search course…" aria-label="Search sessions by course name" value={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 160 }} />
         <select value={year} aria-label="Filter by year" onChange={(e) => setParam('year', e.target.value)}>
           {/* Degrade quietly if the year list fails to load — keep the current year selectable. */}
@@ -366,20 +484,41 @@ export default function Calendar() {
         </select>
       </div>
 
-      {cal === 'grid' ? (
+      {cal === 'grid' && (
         <>
-          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={openSession} healthMap={healthMap} />
+          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={setDrawer} healthMap={healthMap} />
           {gridCount === 0 && (
             <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions in {gridMonth} {year}. Use the arrows or switch month.</div></div>
           )}
         </>
-      ) : (
+      )}
+
+      {cal === 'week' && (
+        <>
+          <WeekGrid days={weekDays} sessions={base} onOpen={setDrawer} healthMap={healthMap} />
+          {weekCount === 0 && (
+            <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions this week. Use the arrows or jump to Today.</div></div>
+          )}
+        </>
+      )}
+
+      {cal === 'day' && (
+        dayRows.length > 0 ? (
+          <div className="card cal-card">
+            <table className="cal-table">{head}<tbody><SessionRows rows={dayRows} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+          </div>
+        ) : (
+          <div className="card"><div className="empty">No sessions on {dayLabel}. Use the arrows or jump to Today.</div></div>
+        )
+      )}
+
+      {cal === 'list' && (
         <>
           {perscert.length > 0 && (
             <>
               <h3 style={{ margin: '4px 0 8px' }}>PersCert ({perscert.length})</h3>
               <div className="card cal-card" style={{ marginBottom: 20 }}>
-                <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+                <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
               </div>
             </>
           )}
@@ -387,7 +526,7 @@ export default function Calendar() {
             <>
               <h3 style={{ margin: '4px 0 8px' }}>Professional Training ({professional.length})</h3>
               <div className="card cal-card">
-                <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={openSession} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+                <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
               </div>
             </>
           )}
@@ -398,6 +537,8 @@ export default function Calendar() {
           )}
         </>
       )}
+
+      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} onClose={() => setDrawer(null)} />}
     </>
   )
 }
