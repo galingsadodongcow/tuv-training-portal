@@ -1,8 +1,10 @@
 'use client'
 import { useMemo, useState } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useInquiries, useCourses, useSalespeople, useInvalidate } from '../hooks/data'
+import { useSort } from '../hooks/useSort'
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
@@ -22,6 +24,9 @@ const emptyForm = { company: '', contact: '', email: '', phone: '', course_id: '
 // (`embedded`), where the shell owns the heading + tab strip.
 export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   const { profile } = useAuth()
+  const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const inquiries = useInquiries()
   const courses = useCourses()
   const people = useSalespeople()
@@ -146,15 +151,57 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
     .filter((q: any) => OPEN_STAGES.includes(q.status))
     .reduce((n: number, q: any) => n + (Number(q.est_value) || 0) * ((Number(q.probability) || 0) / 100), 0)
 
-  // Table rows: open leads first (in stage order), closed last, then by expected close.
-  const rows = useMemo(() => {
+  // Status + owner filters live in the URL so a working view survives navigation (#134).
+  const statusFilter = params.get('status') || 'all'
+  const ownerFilter = params.get('owner') || 'all'
+  const setParam = (k: string, v: string) => {
+    const n = new URLSearchParams(params.toString())
+    if (!v || v === 'all') n.delete(k)
+    else n.set(k, v)
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
+
+  // Owner options are the salespeople who actually have inquiries in view, so the
+  // dropdown stays short and RLS-relevant (a rep only ever sees their own).
+  const owners = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const q of inquiries.data || []) if (q.sales_id) m.set(String(q.sales_id), q.salesperson?.name || String(q.sales_id))
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [inquiries.data])
+
+  const filtered = useMemo(() => {
+    let list = inquiries.data || []
+    if (statusFilter !== 'all') list = list.filter((q: any) => q.status === statusFilter)
+    if (ownerFilter !== 'all') list = list.filter((q: any) => String(q.sales_id) === ownerFilter)
+    return list
+  }, [inquiries.data, statusFilter, ownerFilter])
+
+  // Default table order: open leads first (in stage order), closed last, then by
+  // expected close. This is what useSort returns while no column is selected.
+  const ordered = useMemo(() => {
     const rank = (s: string) => (OPEN_STAGES.includes(s) ? STAGES.indexOf(s) : 90 + STAGES.indexOf(s))
-    return [...(inquiries.data || [])].sort((a: any, b: any) => {
+    return [...filtered].sort((a: any, b: any) => {
       const d = rank(a.status) - rank(b.status)
       if (d !== 0) return d
       return String(a.expected_close || '9999').localeCompare(String(b.expected_close || '9999'))
     })
-  }, [inquiries.data])
+  }, [filtered])
+
+  // Click-to-sort over the filtered set. accessor maps a header key to a
+  // comparable value; with no key selected the ordered default above is kept.
+  const sortAccessor = (q: any, k: string) => {
+    switch (k) {
+      case 'company': return q.company
+      case 'course': return q.course?.course_name
+      case 'owner': return q.salesperson?.name
+      case 'status': return STAGES.indexOf(q.status)
+      case 'est_value': return Number(q.est_value) || 0
+      case 'expected_close': return q.expected_close || ''
+      default: return q[k]
+    }
+  }
+  const tableSort = useSort(ordered, sortAccessor)
+  const rows = tableSort.sorted
 
   if (inquiries.isLoading) return <TableSkeleton rows={6} cols={5} />
   if (inquiries.error) return <ErrorNote error={inquiries.error} />
@@ -279,12 +326,54 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
         </div>
       )}
 
+      {view === 'table' && (
+        <div className="filters">
+          <select value={statusFilter} onChange={(e) => setParam('status', e.target.value)} aria-label="Filter by stage">
+            <option value="all">All stages</option>
+            {STAGES.map((s) => (<option key={s} value={s}>{s}</option>))}
+          </select>
+          {owners.length > 1 && (
+            <select value={ownerFilter} onChange={(e) => setParam('owner', e.target.value)} aria-label="Filter by owner">
+              <option value="all">All owners</option>
+              {owners.map(([id, name]) => (<option key={id} value={id}>{name}</option>))}
+            </select>
+          )}
+          {(statusFilter !== 'all' || ownerFilter !== 'all') && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setParam('status', 'all'); setParam('owner', 'all') }}>Clear filters</button>
+          )}
+          <span className="fill-label" style={{ alignSelf: 'center' }}>{rows.length} shown</span>
+        </div>
+      )}
+
       {view === 'table' ? (
         <div className="card">
-          {rows.length === 0 ? <div className="empty">No inquiries yet.</div> : (
+          {rows.length === 0 ? <div className="empty">No inquiries match.</div> : (
           <div className="scroll-x">
           <table>
-            <thead><tr><th>Customer</th><th>Training interest</th><th>Owner</th><th>Stage</th><th>Health</th><th className="right">Est. value</th><th>Expected close</th>{canEdit && <th></th>}</tr></thead>
+            <thead><tr>
+              {([['company', 'Customer'], ['course', 'Training interest'], ['owner', 'Owner'], ['status', 'Stage']] as const).map(([key, label]) => (
+                <th key={key} className="clickable" role="button" tabIndex={0}
+                  aria-sort={tableSort.sort.key === key ? (tableSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  onClick={() => tableSort.toggle(key)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableSort.toggle(key) } }}>
+                  {label}{tableSort.indicator(key)}
+                </th>
+              ))}
+              <th>Health</th>
+              <th className="right clickable" role="button" tabIndex={0}
+                aria-sort={tableSort.sort.key === 'est_value' ? (tableSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onClick={() => tableSort.toggle('est_value')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableSort.toggle('est_value') } }}>
+                Est. value{tableSort.indicator('est_value')}
+              </th>
+              <th className="clickable" role="button" tabIndex={0}
+                aria-sort={tableSort.sort.key === 'expected_close' ? (tableSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onClick={() => tableSort.toggle('expected_close')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableSort.toggle('expected_close') } }}>
+                Expected close{tableSort.indicator('expected_close')}
+              </th>
+              {canEdit && <th></th>}
+            </tr></thead>
             <tbody>
               {rows.map((q: any) => {
                 const i = STAGES.indexOf(q.status)
