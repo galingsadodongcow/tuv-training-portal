@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTransferTargets, useInvalidate } from '../hooks/data'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { Spinner } from './ui'
 import { formatSegments, lt } from '../lib/labels'
 
@@ -15,11 +16,8 @@ export default function TransferOrder({ order, courseId, fromScheduleId, onClose
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
-
-  // On open, move focus into the dialog.
-  useEffect(() => {
-    dialogRef.current?.querySelector<HTMLElement>('select, input, button')?.focus()
-  }, [])
+  // Focus-in + Tab focus-trap + restore on close (#135).
+  useFocusTrap(dialogRef)
 
   const go = async () => {
     if (!target) return

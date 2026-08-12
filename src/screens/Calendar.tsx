@@ -11,6 +11,7 @@ import { useConfirm } from '../components/Confirm'
 import SavedViews from '../components/SavedViews'
 import { MultiSelect } from '../components/inputs/MultiSelect'
 import { Legend } from '../components/Legend'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
@@ -176,7 +177,8 @@ function WeekGrid({ days, sessions, onOpen, healthMap }: { days: Date[]; session
 // cancel) and the full record deep-link to the session page.
 function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?: Map<string, string>; canEdit: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => { ref.current?.querySelector<HTMLElement>('a, button, select')?.focus() }, [])
+  // Full Tab focus-trap + focus restore on close (#135).
+  useFocusTrap(ref)
   const trainers = useTrainers()
   const venues = useVenues()
   const invalidate = useInvalidate()
