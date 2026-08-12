@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
-import { useCourses, useInvalidate } from '../hooks/data'
+import { useCourses, useCategoryTree, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { lt } from '../lib/labels'
@@ -15,10 +15,12 @@ export default function CourseForm() {
   const id = (params?.id as string | undefined) || undefined
   const editing = !!id
   const courses = useCourses()
+  const tree = useCategoryTree()
   const invalidate = useInvalidate()
   const router = useRouter()
   const toast = useToast()
-  const [f, setF] = useState({ course_name: '', category: '', training_type: 'Professional', url: '', is_certification: false, max_pax: '', has_assessment: false, pass_mark: '', cert_validity_months: '' })
+  const [catId, setCatId] = useState('')
+  const [f, setF] = useState({ course_name: '', category: '', subcategory_id: '', training_type: 'Professional', url: '', is_certification: false, max_pax: '', has_assessment: false, pass_mark: '', cert_validity_months: '' })
   const [mods, setMods] = useState<ModState>({ 'Live Online Training': { on: true, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -33,7 +35,7 @@ export default function CourseForm() {
     ]).then(([c, fe]: [any, any]) => {
       if (c.error || !c.data) { setLoadError(c.error?.message || 'Course not found'); setLoaded(true); return }
       if (fe.error) { setLoadError(fe.error.message); setLoaded(true); return }
-      setF({ course_name: c.data.course_name, category: c.data.category || '', training_type: c.data.training_type, url: c.data.url || '', is_certification: !!c.data.is_certification, max_pax: c.data.max_pax != null ? String(c.data.max_pax) : '', has_assessment: !!c.data.has_assessment, pass_mark: c.data.pass_mark != null ? String(c.data.pass_mark) : '', cert_validity_months: c.data.cert_validity_months != null ? String(c.data.cert_validity_months) : '' })
+      setF({ course_name: c.data.course_name, category: c.data.category || '', subcategory_id: c.data.subcategory_id || '', training_type: c.data.training_type, url: c.data.url || '', is_certification: !!c.data.is_certification, max_pax: c.data.max_pax != null ? String(c.data.max_pax) : '', has_assessment: !!c.data.has_assessment, pass_mark: c.data.pass_mark != null ? String(c.data.pass_mark) : '', cert_validity_months: c.data.cert_validity_months != null ? String(c.data.cert_validity_months) : '' })
       const next: ModState = { 'Live Online Training': { on: false, price: '' }, 'Face-to-face': { on: false, price: '' }, 'E-learning': { on: false, price: '' } }
       for (const row of fe.data || []) next[row.modality] = { on: true, price: String(row.fee_php) }
       setMods(next)
@@ -43,6 +45,14 @@ export default function CourseForm() {
   const set = (k: string) => (e: any) => setF((s) => ({ ...s, [k]: e.target.value }))
 
   const cats = [...new Set((courses.data || []).map((c: any) => c.category).filter(Boolean))].sort()
+
+  // S6 hierarchy (falls back to the free-text category field when not live).
+  const treeData: any[] = tree.data || []
+  const hasTree = treeData.length > 0
+  const allSubs = treeData.flatMap((c: any) => c.subcategories || [])
+  const selectedSub = allSubs.find((s: any) => s.subcategory_id === f.subcategory_id)
+  const effCat = catId || selectedSub?.category_id || ''
+  const subsForCat = treeData.find((c: any) => c.category_id === effCat)?.subcategories || []
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,16 +64,24 @@ export default function CourseForm() {
         const p = Number(mods[m].price)
         if (mods[m].price === '' || !Number.isFinite(p) || p < 0) throw new Error(`Set a valid price for ${m}.`)
       }
+      // When the hierarchy is live, the picked subcategory is the source of
+      // truth and course.category is kept in sync with its category name (the
+      // old column is not dropped yet). Otherwise the free-text field is used.
+      const selCat = treeData.find((c: any) => c.category_id === effCat)
       const body: any = {
-        course_name: f.course_name.trim(), category: f.category.trim() || null, training_type: f.training_type, url: f.url.trim() || null,
+        course_name: f.course_name.trim(),
+        category: hasTree ? (selCat?.name || null) : (f.category.trim() || null),
+        subcategory_id: hasTree ? (f.subcategory_id || null) : undefined,
+        training_type: f.training_type, url: f.url.trim() || null,
         is_certification: f.is_certification, max_pax: f.max_pax === '' ? null : Number(f.max_pax),
         has_assessment: f.has_assessment, pass_mark: f.pass_mark === '' ? null : Number(f.pass_mark),
         cert_validity_months: f.cert_validity_months === '' ? null : Number(f.cert_validity_months),
       }
-      // Retry without the newer policy columns if the migrations that add them
-      // are not applied yet, so course editing never breaks.
+      if (body.subcategory_id === undefined) delete body.subcategory_id
+      // Retry without the newer columns if the migrations that add them are not
+      // applied yet, so course editing never breaks (strip-and-retry on 42703).
       const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
-      const stripped = (o: any) => { const { is_certification, max_pax, has_assessment, pass_mark, cert_validity_months, ...rest } = o; return rest }
+      const stripped = (o: any) => { const { is_certification, max_pax, has_assessment, pass_mark, cert_validity_months, subcategory_id, ...rest } = o; return rest }
       let courseId: any = id
       if (editing) {
         let { error } = await supabase.from('course').update(body).eq('course_id', id)
@@ -115,10 +133,27 @@ export default function CourseForm() {
             <input value={f.course_name} onChange={set('course_name')} required />
           </label>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <label className="field"><span>Subject category</span>
-              <input list="cats" value={f.category} onChange={set('category')} placeholder="e.g. Occupational Health and Safety" />
-              <datalist id="cats">{cats.map((c: any) => (<option key={c} value={c} />))}</datalist>
-            </label>
+            {hasTree ? (
+              <>
+                <label className="field"><span>Category</span>
+                  <select value={effCat} onChange={(e) => { setCatId(e.target.value); setF((s) => ({ ...s, subcategory_id: '' })) }}>
+                    <option value="">— none —</option>
+                    {treeData.map((c: any) => (<option key={c.category_id} value={c.category_id}>{c.name}</option>))}
+                  </select>
+                </label>
+                <label className="field"><span>Subcategory</span>
+                  <select value={f.subcategory_id} disabled={!effCat} onChange={(e) => setF((s) => ({ ...s, subcategory_id: e.target.value }))}>
+                    <option value="">— none —</option>
+                    {subsForCat.map((s: any) => (<option key={s.subcategory_id} value={s.subcategory_id}>{s.name}</option>))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <label className="field"><span>Subject category</span>
+                <input list="cats" value={f.category} onChange={set('category')} placeholder="e.g. Occupational Health and Safety" />
+                <datalist id="cats">{cats.map((c: any) => (<option key={c} value={c} />))}</datalist>
+              </label>
+            )}
             <label className="field"><span>Training type</span>
               <select value={f.training_type} onChange={set('training_type')}>
                 <option>Professional</option>
