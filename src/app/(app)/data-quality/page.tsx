@@ -1,10 +1,7 @@
-import DataQuality from '@/screens/DataQuality'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
+// Data quality folded into the single /analytics area (Data quality tab,
+// super_admin only).
 export default function Page() {
-  return (
-    <Guard roles={['super_admin']}>
-      <DataQuality />
-    </Guard>
-  )
+  redirect('/analytics?tab=data')
 }

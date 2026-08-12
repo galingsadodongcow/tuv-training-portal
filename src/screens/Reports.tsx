@@ -1,5 +1,4 @@
 'use client'
-import AnalyticsTabs from '../components/AnalyticsTabs'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
@@ -48,8 +47,15 @@ const AGING = [
   { key: '60+', label: 'Over 60 days', test: (d: number) => d > 60 },
 ]
 
-export default function Reports() {
-  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'>('digest')
+export type ReportSection = 'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'
+
+// Rendered standalone at /reports historically; now embedded as the Revenue /
+// Receivables / Certificates / Profitability / Pipeline panels of the single
+// Analytics shell. When `embedded`, the parent picks the section and owns the
+// tab strip, so we render just that one section without our own chrome.
+export default function Reports({ embedded, section }: { embedded?: boolean; section?: ReportSection } = {}) {
+  const [tab, setTab] = useState<ReportSection>('digest')
+  const activeTab: ReportSection = embedded && section ? section : tab
   const [funnelTable, setFunnelTable] = useState(false)
 
   // Period filter (RPT01). Presets resolve to a {from,to} of yyyy-mm; a custom
@@ -211,23 +217,24 @@ export default function Reports() {
 
   return (
     <>
-      <AnalyticsTabs />
-      <div className="page-head">
-        <div>
-          <h1>Reports</h1>
-          <p>The operational digest and the revenue book. The digest is the same watch-list the nightly job runs on.</p>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>Reports</h1>
+            <p>The operational digest and the revenue book. The digest is the same watch-list the nightly job runs on.</p>
+          </div>
+          <div className="seg">
+            <button className={`seg-btn ${tab === 'digest' ? 'on' : ''}`} onClick={() => setTab('digest')}>Digest</button>
+            <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
+            <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
+            <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
+            <button className={`seg-btn ${tab === 'margin' ? 'on' : ''}`} onClick={() => setTab('margin')}>Profitability</button>
+            <button className={`seg-btn ${tab === 'analytics' ? 'on' : ''}`} onClick={() => setTab('analytics')}>Analytics</button>
+          </div>
         </div>
-        <div className="seg">
-          <button className={`seg-btn ${tab === 'digest' ? 'on' : ''}`} onClick={() => setTab('digest')}>Digest</button>
-          <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
-          <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
-          <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
-          <button className={`seg-btn ${tab === 'margin' ? 'on' : ''}`} onClick={() => setTab('margin')}>Profitability</button>
-          <button className={`seg-btn ${tab === 'analytics' ? 'on' : ''}`} onClick={() => setTab('analytics')}>Analytics</button>
-        </div>
-      </div>
+      )}
 
-      {tab === 'digest' && (
+      {activeTab === 'digest' && (
         digest.isLoading ? <Spinner label="Loading digest" /> : digest.error ? <ErrorNote error={digest.error} /> : (
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
             <DigestCard title="Sessions at risk" rows={digest.data?.atRisk || []} empty="No under-filled sessions in the next three weeks."
@@ -244,7 +251,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'revenue' && (
+      {activeTab === 'revenue' && (
         facts.isLoading ? <Spinner label="Loading revenue" /> : facts.error ? <ErrorNote error={facts.error} /> : (
           <>
             {periodBar}
@@ -335,7 +342,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'receivables' && (
+      {activeTab === 'receivables' && (
         receivables.isLoading ? <Spinner label="Loading receivables" /> : receivables.error ? <ErrorNote error={receivables.error} /> : (
           <>
             <div className="card card-pad" style={{ marginBottom: 16 }}>
@@ -374,7 +381,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'certs' && (
+      {activeTab === 'certs' && (
         <>
           <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 640 }}>
             <div className="k-label" style={{ marginBottom: 8 }}>Verify a certificate</div>
@@ -420,7 +427,7 @@ export default function Reports() {
         </>
       )}
 
-      {tab === 'margin' && (
+      {activeTab === 'margin' && (
         pnl.isLoading ? <Spinner label="Loading profitability" /> : pnl.error ? <ErrorNote error={pnl.error} /> : (
           <>
             {periodBar}
@@ -461,7 +468,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'analytics' && (
+      {activeTab === 'analytics' && (
         <>
           <div className="page-head" style={{ marginBottom: 8 }}>
             <div><h2 style={{ fontSize: 16 }}>Conversion funnel</h2></div>

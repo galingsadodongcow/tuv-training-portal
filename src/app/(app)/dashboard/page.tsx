@@ -1,5 +1,7 @@
-import Dashboard from '@/screens/Dashboard'
+import { redirect } from 'next/navigation'
 
+// The five analytics destinations were consolidated into one /analytics area
+// (third-pass simplification #2). Old links land on the Overview tab.
 export default function Page() {
-  return <Dashboard />
+  redirect('/analytics')
 }
