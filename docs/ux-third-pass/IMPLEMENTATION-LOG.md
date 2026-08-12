@@ -115,3 +115,12 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - **Shared kind config** (`src/lib/search.ts`): the record-kind → label/href/roles map plus a `visibleHits(hits, role)` filter, extracted so the ⌘K **CommandPalette** and the `/search` screen share one source of truth. CommandPalette refactored to consume it (behaviour unchanged).
   - **Route + Guard** (`src/app/(app)/search/page.tsx`): available to every authenticated role (the palette already gave everyone search); nav prominence for the auditor comes in the nav-trim wave. No new tables/RPCs; RLS + the RPC's own auth guard remain authoritative.
 - Files: `src/lib/search.ts` (new), `src/screens/Search.tsx` (new), `src/app/(app)/search/page.tsx` (new), `src/components/CommandPalette.tsx`.
+
+## Wave 17 — Team queue destination (#8, build phase)
+- **#8 build — Team (sales manager).** The manager-specific queue that the `02-role-navigation.md` target (`… · Team`) calls for — the work that was scattered across Fulfillment + Orders + the pipeline, gathered into one destination so those items can leave the manager's nav.
+  - **New `/team` screen** (`src/screens/Team.tsx`): a role shell with three tabs, each reusing an existing screen `embedded` (no new data paths):
+    - **Workload** — a roll-up of the open fulfillment queue by owner (open orders · stalled >14d · value per rep, plus an Unassigned row and four summary tiles). Computed client-side from `useFulfillmentQueue` (the same RLS-scoped queue the Queue tab reads), so a manager sees the load distribution before rebalancing.
+    - **Queue** — the fulfillment queue (`Worklist embedded`), which already carries **unassigned** (Claim queue), **overdue** (stalled / SLA), and **reassign** (the per-row owner select + bulk assign).
+    - **Pipeline** — the lead pipeline (`Inquiries embedded`).
+  - **Route + Guard** (`src/app/(app)/team/page.tsx`): `sales_manager` + `super_admin`. RLS already scopes every underlying query to the manager's team/region — no new access is granted, no new tables/RPCs.
+- Files: `src/screens/Team.tsx` (new), `src/app/(app)/team/page.tsx` (new).
