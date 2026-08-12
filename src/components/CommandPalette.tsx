@@ -4,20 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV, Role } from '@/lib/roles'
-
-// What each record kind is called, where it links, and which roles may open it.
-// Read-facing kinds are visible to every role that can reach the record's screen
-// (the DB still scopes what each user actually sees on the detail page).
-const READ_ROLES: Role[] = ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor']
-const KIND: Record<string, { label: string; href: (id: string) => string; roles: Role[] }> = {
-  order: { label: 'Order', href: (id) => `/orders/${id}`, roles: READ_ROLES },
-  client: { label: 'Client', href: (id) => `/clients/${id}`, roles: READ_ROLES },
-  participant: { label: 'Participant', href: (id) => `/orders/${id}`, roles: READ_ROLES },
-  session: { label: 'Session', href: (id) => `/session/${id}`, roles: READ_ROLES },
-  organization: { label: 'Organization', href: (id) => `/organizations/${id}`, roles: READ_ROLES },
-  course: { label: 'Course', href: () => `/courses`, roles: ['super_admin', 'operations'] },
-  inquiry: { label: 'Inquiry', href: () => `/crm?tab=pipeline`, roles: ['super_admin', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor'] },
-}
+import { SEARCH_KINDS as KIND, visibleHits } from '@/lib/search'
 
 type Entry = { key: string; label: string; sub: string; group: string; go: () => void }
 
@@ -78,7 +65,7 @@ export default function CommandPalette() {
     timer.current = setTimeout(async () => {
       const { data, error } = await supabase.rpc('fn_global_search', { p_q: t })
       if (error) setResults([])
-      else setResults((data || []).filter((r: any) => KIND[r.kind]?.roles.includes(role as Role)))
+      else setResults(visibleHits((data || []) as any, role))
     }, 200)
     return () => timer.current && clearTimeout(timer.current)
   }, [q, open, role])
