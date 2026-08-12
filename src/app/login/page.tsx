@@ -14,7 +14,7 @@ export default function LoginPage() {
   const emailRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
-    if (!loading && session) router.replace('/home')
+    if (!loading && session) router.replace('/my-work')
   }, [loading, session, router])
 
   // Land the cursor in the email field on arrival.

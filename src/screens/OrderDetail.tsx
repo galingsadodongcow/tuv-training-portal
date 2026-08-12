@@ -210,7 +210,7 @@ export default function OrderDetail() {
   return (
     <>
       <RecordHeader
-        crumbs={[{ href: '/home', label: 'Home' }, { href: '/orders', label: 'Orders' }, { label: o.order_id }]}
+        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/orders', label: 'Orders' }, { label: o.order_id }]}
         title={o.client?.company || o.client?.name || 'Order'}
         subtitle={`${o.order_id} · ${shortDate(o.order_date)} · ${php(o.total_amount)}`}
         badges={
