@@ -22,7 +22,18 @@ The repo carries all Phase B + implementation migrations through:
 | **`20260812210000_rls_customer_authority`** | **customer-entity write authority + least-privilege fix** |
 | **`20260812220000_s6_category_hierarchy`** | **category → subcategory hierarchy** |
 
-## ⚠️ The one hard blocker — apply + verify the last two migrations live
+## ✅ RESOLVED (applied + verified live) — blocker cleared
+
+Done in the Supabase-enabled session:
+1. **Applied** both `20260812210000` + `20260812220000` via `apply-supabase.yml` (workflow run succeeded; no hand-pasting).
+2. **Migration ledger now records them.** The bundle is applied with `psql -f`, which never wrote `supabase_migrations.schema_migrations` — the ledger had drifted to 8 rows vs. 38 applied sections. A `_ledger_reconcile` footer was added to the bundle (idempotent `on conflict do nothing`); the ledger now records all applied sections including these two (46 rows).
+3. **RLS live-verified.** `relrowsecurity` true on `category`+`subcategory` (54/54 public tables). Re-simulated all 8 roles + `anon` + two `sales` reps in `BEGIN…ROLLBACK`: both closed holes stay closed (management/auditor `DENY` on `contact`+`quote`), coordinator/operations/business_owner gained their matrix authority, category/subcategory write = super_admin+operations only.
+4. **Advisors re-run on the applied schema.** Security = clean baseline (no ERRORs, no `0028`, no `security_definer_view`; `category`/`subcategory` policied). Performance classified; one small `20260812230000_perf_hot_fk_indexes.sql` added for the hot FKs, the rest deferred.
+5. **UI widened to match the now-live RLS** (coordinator quotes; coordinator/operations/business_owner contacts; coordinator/operations/business_owner org-set; auditor Quotations read).
+
+See `docs/implementation/role-crud-matrix.md` for the full PASS/FAIL grid and advisor snapshot.
+
+## ⚠️ The one hard blocker (historical) — apply + verify the last two migrations live
 
 `docs/implementation/role-crud-matrix.md` (§ Supabase advisor, and § Open items) records that the two newest migrations were **authored and validated in a `BEGIN…ROLLBACK` simulation but recorded as "staged in the PR, not yet applied"** to the live database. This is exactly the "merged code ≠ live schema" gap. It **cannot be verified or resolved from the code-review session** (no Supabase access there); it must be done in the Supabase-enabled session.
 
@@ -49,4 +60,4 @@ Both were reviewed at the code level here and are **safe to apply** — idempote
 - `npm run build` — compiles.
 - All 13 migrations present and idempotent; the two new ones reviewed line-by-line (safe).
 
-**Verdict:** code on `main` is ready; **production schema state is UNCONFIRMED from here** and is the primary GO gate. See `04-role-permission-final.md` for the role/RLS detail and `README.md` for the overall Go/No-Go.
+**Verdict:** **GO.** Code on `main` is ready and the production schema now matches it — both migrations applied, ledger reconciled, RLS re-simulated live (all roles PASS), advisors clean. The CONDITIONAL GO gate is cleared. See `04-role-permission-final.md` for the role/RLS detail and `README.md` for the overall Go/No-Go.
