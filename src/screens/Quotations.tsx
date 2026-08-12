@@ -8,6 +8,7 @@ import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { shortDate } from '../lib/format'
+import { quoteHealth } from '../lib/leadHealth'
 
 const STATUS_TONE: Record<string, string> = { Draft: 'pill-tentative', Sent: 'pill-webshop', Accepted: 'pill-go', Declined: 'pill-cancelled', Expired: 'pill-cancelled' }
 
@@ -81,19 +82,25 @@ export default function Quotations() {
           <table>
             <thead><tr><th>Number</th><th>Client</th><th>Status</th><th>Valid until</th><th>Owner</th><th>Created</th></tr></thead>
             <tbody>
-              {quotes.data.map((q: any) => (
+              {quotes.data.map((q: any) => {
+                const h = quoteHealth(q)
+                return (
                 <tr key={q.quote_id} style={{ cursor: 'pointer' }} role="button" tabIndex={0}
                   aria-label={`Open quote ${q.quote_number}`}
                   onClick={() => router.push(`/quotations/${q.quote_id}`)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/quotations/${q.quote_id}`) } }}>
                   <td style={{ fontWeight: 600 }}>{q.quote_number}</td>
                   <td className="fill-label">{q.client?.company || q.client?.name || '—'}</td>
-                  <td><span className={`pill ${STATUS_TONE[q.status] || 'pill-webshop'}`}>{q.status}</span></td>
+                  <td>
+                    <span className={`pill ${STATUS_TONE[q.status] || 'pill-webshop'}`}>{q.status}</span>
+                    {h && <span className={`pill ${h.cls}`} style={{ marginLeft: 6 }}>{h.label}</span>}
+                  </td>
                   <td className="fill-label">{q.valid_until ? shortDate(q.valid_until) : '—'}</td>
                   <td className="fill-label">{q.salesperson?.name || '—'}</td>
                   <td className="fill-label">{shortDate(q.created_at)}</td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}

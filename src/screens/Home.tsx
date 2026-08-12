@@ -7,7 +7,7 @@ import { useToast } from '../components/Toast'
 import {
   useFulfillmentQueue,
   useUnstaffed,
-  useSchedules,
+  useSessionHealth,
   useDuplicates,
   useApprovals,
   useMyTasks,
@@ -18,6 +18,7 @@ import { KpiSkeleton, TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { shortDate } from '../lib/format'
 import { lt } from '../lib/labels'
+import { healthNeedsAction } from '../lib/health'
 
 // Days since a timestamp, floored. Used for item age.
 const ageDays = (iso?: string) => (iso ? Math.floor((Date.now() - +new Date(iso)) / 86400000) : null)
@@ -86,17 +87,16 @@ export default function Home() {
 
   const queue = useFulfillmentQueue()
   const unstaffed = useUnstaffed()
-  const sched = useSchedules()
+  const health = useSessionHealth()
   const dups = useDuplicates()
   const approvals = useApprovals()
   const tasks = useMyTasks(userId)
   const notifs = useMyNotifications(userId)
 
   const q: any[] = queue.data || []
-  const today = new Date(new Date().toDateString())
-  const belowMin = (sched.data || []).filter(
-    (r: any) => ['Tentative', 'Confirmed'].includes(r.status) && r.booked_participants < r.min_participants && new Date(r.start_date) >= today
-  ).length
+  // Authoritative session-risk signal: the computed health view (v_session_health),
+  // same source My Work and the calendar read. Count the actionable sessions.
+  const needsAttentionSessions = (health.data || []).filter((r: any) => healthNeedsAction(r.health)).length
   const unassigned = q.filter((o) => !o.owner_code).length
   const mine = q.filter((o) => o.owner_code === myCode).length
   const myStalled = q.filter((o) => o.owner_code === myCode && o.days_in_stage > 14).length
@@ -108,7 +108,7 @@ export default function Home() {
 
   const cardsByRole: Record<string, CardDef[]> = {
     operations: [
-      { label: 'Sessions below minimum', value: belowMin, sub: 'Upcoming, still need pax', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
+      { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'At risk, below minimum, or blocked', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
       { label: 'Unstaffed sessions', value: unstaffedNear, sub: 'No trainer within 3 weeks', href: '/calendar?month=all', alert: true },
       { label: 'Awaiting endorsement', value: awaitingEndorsement, sub: 'Orders to move to ops', href: '/worklist?who=all&stage=Endorsed to Ops' },
       { label: 'Pending cancellations', value: pendingCancellations, sub: 'Decisions on the approvals screen', href: '/approvals' },
@@ -117,10 +117,10 @@ export default function Home() {
       { label: 'Unassigned orders', value: unassigned, sub: 'Claim these', href: '/worklist?who=unassigned', alert: true },
       { label: 'My open orders', value: mine, sub: 'Assigned to me', href: '/worklist?who=mine' },
       { label: 'My stalled orders', value: myStalled, sub: 'Over 14 days in stage', href: '/worklist?who=mine&view=stalled', alert: true },
-      { label: 'Sessions needing pax', value: belowMin, sub: 'Below minimum, sell seats', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
+      { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'At risk or below minimum, sell seats', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
     ],
     business_owner: [
-      { label: 'Sessions below minimum', value: belowMin, sub: 'Risk of a no-go', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
+      { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'Risk of a no-go', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
       { label: 'Pending approvals', value: pending.length, sub: 'Awaiting your decision', href: '/approvals', alert: true },
       { label: 'Unassigned orders', value: unassigned, sub: 'No owner yet', href: '/worklist?who=unassigned' },
       { label: 'Performance', value: 'View', sub: 'Revenue against forecast', href: '/dashboard' },
@@ -136,8 +136,8 @@ export default function Home() {
   // sales user must not flash ops metrics. Empty until role resolves.
   const cards = role ? (cardsByRole[role] || cardsByRole.operations) : []
 
-  const cardsLoading = queue.isLoading || sched.isLoading || approvals.isLoading
-  const cardsError = queue.error || sched.error || approvals.error || unstaffed.error || dups.error
+  const cardsLoading = queue.isLoading || health.isLoading || approvals.isLoading
+  const cardsError = queue.error || health.error || approvals.error || unstaffed.error || dups.error
 
   const completeTask = async (taskId: string) => {
     const { error } = await supabase.from('task').update({ status: 'done', completed_at: new Date().toISOString(), completed_by: userId }).eq('task_id', taskId)
