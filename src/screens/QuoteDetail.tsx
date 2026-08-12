@@ -80,7 +80,7 @@ export default function QuoteDetail() {
   return (
     <>
       <RecordHeader
-        back={{ href: '/quotations', label: 'Quotations' }}
+        crumbs={[{ href: '/home', label: 'Home' }, { href: '/quotations', label: 'Quotations' }, { label: q.quote_number }]}
         title={`${q.quote_number}`}
         subtitle={`${q.client?.company || q.client?.name || 'No client'}${q.valid_until ? ` · valid to ${shortDate(q.valid_until)}` : ''}`}
         badges={<><Badge tone={q.status === 'Accepted' ? 'ok' : q.status === 'Declined' || q.status === 'Expired' ? 'danger' : 'info'}>{q.status}</Badge>{q.converted_order_id && <Badge tone="neutral">Order {q.converted_order_id}</Badge>}</>}

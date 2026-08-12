@@ -12,21 +12,41 @@ export function RecordHeader({
   badges,
   actions,
   back,
+  crumbs,
 }: {
   title: ReactNode
   subtitle?: ReactNode
   badges?: ReactNode
   actions?: ReactNode
   back?: { href: string; label: string }
+  // Breadcrumb trail (Home › Section › Record). The last item is the current
+  // record and renders without a link. When provided it replaces the back-link.
+  crumbs?: { href?: string; label: ReactNode }[]
 }) {
   return (
     <div className="page-head record-head">
       <div>
-        {back && (
+        {crumbs && crumbs.length > 0 ? (
+          <nav className="breadcrumb" aria-label="Breadcrumb">
+            {crumbs.map((c, i) => {
+              const last = i === crumbs.length - 1
+              return (
+                <span key={i}>
+                  {i > 0 && <span className="breadcrumb-sep" aria-hidden="true">›</span>}
+                  {c.href && !last ? (
+                    <Link href={c.href}>{c.label}</Link>
+                  ) : (
+                    <span aria-current={last ? 'page' : undefined}>{c.label}</span>
+                  )}
+                </span>
+              )
+            })}
+          </nav>
+        ) : back ? (
           <Link className="back-link" href={back.href}>
             ‹ {back.label}
           </Link>
-        )}
+        ) : null}
         <h1>{title}</h1>
         {subtitle && <p>{subtitle}</p>}
         {badges && (
