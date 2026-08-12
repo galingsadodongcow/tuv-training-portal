@@ -3546,6 +3546,7 @@ grant select on public.v_sla_breach to authenticated;
 
 notify pgrst, 'reload schema';
 -- ===========================================================================
+-- 20260812250000_handoff_notifications.sql
 -- #121 — Notify the receiving side of the order endorsement handoff.
 --
 -- Endorsing an order moved it to Operations' queue but sent no in-app
@@ -3803,3 +3804,18 @@ begin
   ) hits;
 end;
 $function$;
+
+-- ===========================================================================
+-- 20260812300000_idx01_hot_fk_indexes.sql
+-- IDX01 (#138) — index the hot foreign keys (schedule year/owner, attribution,
+-- feedback→participant, orders→course). A deliberately small slice, not a broad
+-- sweep. Idempotent.
+-- ===========================================================================
+
+create index if not exists idx_schedule_year_id          on public.schedule (year_id);
+create index if not exists idx_schedule_sales_owner      on public.schedule (sales_owner);
+create index if not exists idx_schedule_operations_owner on public.schedule (operations_owner);
+create index if not exists idx_orders_course_id          on public.orders (course_id);
+create index if not exists idx_attribution_sales_id      on public.attribution (sales_id);
+create index if not exists idx_attribution_schedule_id   on public.attribution (schedule_id);
+create index if not exists idx_feedback_participant_id   on public.feedback (participant_id);
