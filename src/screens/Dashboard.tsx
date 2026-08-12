@@ -1,5 +1,4 @@
 'use client'
-import AnalyticsTabs from '../components/AnalyticsTabs'
 import { useMemo, useState, ReactNode } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import Link from 'next/link'
@@ -71,7 +70,9 @@ function DashCard({ c }: { c: CardDef }) {
   )
 }
 
-export default function Dashboard() {
+// The role dashboards. Rendered as the "Overview" tab of the single Analytics
+// shell (`embedded`), where the shell owns the heading and tab strip.
+export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
   const { profile } = useAuth()
   const role = profile?.role as Role | undefined
   const myCode = profile?.salesperson?.code
@@ -215,7 +216,7 @@ export default function Dashboard() {
       { label: 'Team stalled orders', value: stalledAll, sub: 'Over 14 days in stage', href: '/worklist?who=all&view=stalled', alert: true },
       { label: 'Unassigned orders', value: unassigned, sub: 'Need an owner', href: '/worklist?who=unassigned', alert: true },
       { label: 'Team overdue collections', value: overdueAll, sub: 'Past terms across the team', href: '/worklist?who=all&view=overdue', alert: true },
-      { label: 'Conversion', value: `${conversion}%`, sub: 'Inquiry to order', href: '/reports' },
+      { label: 'Conversion', value: `${conversion}%`, sub: 'Inquiry to order', href: '/analytics?tab=pipeline' },
       { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'At risk or below minimum', href: '/calendar?month=all&sort=fill&dir=asc' },
     ],
     coordinator: [
@@ -232,22 +233,22 @@ export default function Dashboard() {
       { label: 'Awaiting endorsement', value: awaitingEndorsement, sub: 'Orders to move to ops', href: '/worklist?who=all&stage=Endorsed to Ops' },
       { label: 'Stalled orders', value: stalledAll, sub: 'Over 14 days in stage', href: '/worklist?who=all&view=stalled', alert: true },
       { label: 'SLA breaches', value: slaBreaches, sub: 'Past the stage target', href: '/worklist?who=all', alert: true },
-      { label: 'Certificates expiring', value: certsExpiring, sub: 'Within four months', href: '/reports' },
+      { label: 'Certificates expiring', value: certsExpiring, sub: 'Within four months', href: '/analytics?tab=certs' },
     ],
     business_owner: [
       { label: 'Pending approvals', value: pendingApprovals, sub: 'Awaiting your decision', href: '/approvals', alert: true },
-      { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/reports' },
-      { label: 'Delivered revenue', value: php(delivered), sub: `${num(deliveredPax)} participants trained`, href: '/reports' },
-      { label: 'AR outstanding', value: php(ar.outstanding), sub: `${num(ar.overdueCount)} order${ar.overdueCount === 1 ? '' : 's'} overdue`, href: '/reports', alert: ar.overdueCount > 0 },
+      { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/analytics?tab=revenue' },
+      { label: 'Delivered revenue', value: php(delivered), sub: `${num(deliveredPax)} participants trained`, href: '/analytics?tab=revenue' },
+      { label: 'AR outstanding', value: php(ar.outstanding), sub: `${num(ar.overdueCount)} order${ar.overdueCount === 1 ? '' : 's'} overdue`, href: '/analytics?tab=receivables', alert: ar.overdueCount > 0 },
       { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'Risk of a no-go', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
       { label: 'Cancellation rate', value: `${cancelRate}%`, sub: 'Orders cancelled', href: '/orders?stage=Cancelled' },
     ],
     management: [
-      { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/reports' },
+      { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/analytics?tab=revenue' },
       { label: 'Pipeline', value: php(pipeline.value), sub: 'Open inquiry value', href: '/inquiries' },
-      { label: 'Conversion', value: `${conversion}%`, sub: 'Inquiry to order', href: '/reports' },
-      { label: 'Delivered revenue', value: php(delivered), sub: `${num(deliveredPax)} participants trained`, href: '/reports' },
-      { label: 'AR outstanding', value: php(ar.outstanding), sub: `${php(ar.over60)} over 60 days`, href: '/reports', alert: ar.over60 > 0 },
+      { label: 'Conversion', value: `${conversion}%`, sub: 'Inquiry to order', href: '/analytics?tab=pipeline' },
+      { label: 'Delivered revenue', value: php(delivered), sub: `${num(deliveredPax)} participants trained`, href: '/analytics?tab=revenue' },
+      { label: 'AR outstanding', value: php(ar.outstanding), sub: `${php(ar.over60)} over 60 days`, href: '/analytics?tab=receivables', alert: ar.over60 > 0 },
       { label: 'Session health', value: needsAttentionSessions, sub: 'At risk or blocked', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
       { label: 'Exceptions', value: slaBreaches, sub: 'Need exec attention', href: '/worklist?who=all', alert: true },
     ],
@@ -258,13 +259,13 @@ export default function Dashboard() {
       { label: 'High-risk writes', value: gov.highRisk, sub: 'Payment and pricing changes', href: '/audit', alert: true },
     ],
     super_admin: [
-      { label: 'Data quality', value: 'View', sub: 'Records needing attention', href: '/data-quality', alert: true },
+      { label: 'Data quality', value: 'View', sub: 'Records needing attention', href: '/analytics?tab=data', alert: true },
       { label: 'Duplicate candidates', value: dupCount, sub: 'Review and merge', href: '/duplicates', alert: true },
       { label: 'Orders missing an owner', value: unassigned, sub: 'Assign a salesperson', href: '/worklist?who=unassigned', alert: true },
       { label: 'Pending approvals', value: pendingApprovals, sub: 'Across the team', href: '/approvals' },
       { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'At risk or below minimum', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
-      { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/reports' },
-      { label: 'AR outstanding', value: php(ar.outstanding), sub: `${num(ar.overdueCount)} order${ar.overdueCount === 1 ? '' : 's'} overdue`, href: '/reports', alert: ar.overdueCount > 0 },
+      { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/analytics?tab=revenue' },
+      { label: 'AR outstanding', value: php(ar.outstanding), sub: `${num(ar.overdueCount)} order${ar.overdueCount === 1 ? '' : 's'} overdue`, href: '/analytics?tab=receivables', alert: ar.overdueCount > 0 },
       { label: 'SLA breaches', value: slaBreaches, sub: 'Past the stage target', href: '/worklist?who=all', alert: true },
     ],
   }
@@ -306,13 +307,14 @@ export default function Dashboard() {
 
   return (
     <>
-      <AnalyticsTabs />
-      <div className="page-head">
-        <div>
-          <h1>{head.title}</h1>
-          <p>{head.sub}</p>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>{head.title}</h1>
+            <p>{head.sub}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {bandError ? (
         <ErrorNote error={bandError} />

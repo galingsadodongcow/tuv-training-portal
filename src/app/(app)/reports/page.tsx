@@ -1,10 +1,7 @@
-import Reports from '@/screens/Reports'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
+// Reports folded into the single /analytics area (Revenue / Receivables /
+// Certificates / Profitability / Pipeline tabs). Old links land on Revenue.
 export default function Page() {
-  return (
-    <Guard roles={['super_admin', 'operations', 'business_owner', 'management', 'auditor']}>
-      <Reports />
-    </Guard>
-  )
+  redirect('/analytics?tab=revenue')
 }

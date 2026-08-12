@@ -72,14 +72,17 @@ export const NAV: NavItem[] = [
 
   // Oversight — decisions and analysis. Approvals retired from nav: the "Approvals
   // to decide" queue on My Work is the entry point; /approvals stays as the surface.
-  { path: '/dashboard', label: 'Analytics', roles: ALL, icon: 'dashboard', group: 'Oversight' },
+  // Analytics is the single destination for Dashboard + Reports + Quality + Data
+  // quality (third-pass #2); role-scoped tabs live inside it.
+  { path: '/analytics', label: 'Analytics', roles: ALL, icon: 'dashboard', group: 'Oversight' },
 
   // Admin — catalogue, pricing, configuration, governance.
   { path: '/courses', label: 'Courses and pricing', roles: ['super_admin', 'operations'], icon: 'courses', group: 'Admin' },
   { path: '/pricing', label: 'Pricing rules', roles: ['super_admin', 'operations', 'business_owner'], icon: 'pricing', group: 'Admin' },
   { path: '/communications', label: 'Communications', roles: ['super_admin', 'operations'], icon: 'comms', group: 'Admin' },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'], icon: 'rollover', group: 'Admin' },
-  { path: '/data-quality', label: 'Data quality', roles: ['super_admin'], icon: 'quality', group: 'Admin' },
+  // Data quality folded into Analytics (super_admin sees it as a tab there); the
+  // standalone nav item and /data-quality route (now a redirect) are retired.
   { path: '/admin', label: 'Users and access', roles: ['super_admin'], icon: 'admin', group: 'Admin' },
   { path: '/audit', label: 'Audit log', roles: ['super_admin', 'auditor'], icon: 'audit', group: 'Admin' },
 ]
