@@ -7,8 +7,9 @@ import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
-import { primaryFlag, stageLabel } from '../lib/orderState'
+import { primaryFlag, stageLabel, STAGE_MEANING } from '../lib/orderState'
 import SavedViews from '../components/SavedViews'
+import { Legend } from '../components/Legend'
 import { FilterChip } from '../components/inputs/FilterChip'
 import { Tooltip } from '../components/inputs/Tooltip'
 
@@ -80,6 +81,8 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
           </div>
         )}
         <div className="toolbar">
+          <Legend title="What the stages mean"
+            items={STAGES.map((s) => ({ label: <span className="pill pill-webshop">{stageLabel(s)}</span>, desc: STAGE_MEANING[s] || '' }))} />
           <Tooltip label="Exports only the orders on the current page, not all matches.">
             <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}>Export this page</button>
           </Tooltip>

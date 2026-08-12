@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -161,6 +161,11 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   // Status + owner filters live in the URL so a working view survives navigation (#134).
   const statusFilter = params.get('status') || 'all'
   const ownerFilter = params.get('owner') || 'all'
+  // A notification deep-link (?focus=) scrolls the linked inquiry into view (#139).
+  const focusId = params.get('focus') || ''
+  useEffect(() => {
+    if (focusId) document.getElementById(`inq-${focusId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusId, inquiries.data])
   const setParam = (k: string, v: string) => {
     const n = new URLSearchParams(params.toString())
     if (!v || v === 'all') n.delete(k)
@@ -384,7 +389,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
                 const i = STAGES.indexOf(q.status)
                 const h = inquiryHealth(q)
                 return (
-                  <tr key={q.inquiry_id}>
+                  <tr key={q.inquiry_id} id={`inq-${q.inquiry_id}`} className={String(q.inquiry_id) === focusId ? 'row-focus' : undefined}>
                     <td>
                       <div style={{ fontWeight: 600 }}>{q.company}</div>
                       <div className="fill-label">{q.contact || '—'}{q.salesperson?.name ? '' : ''}</div>
