@@ -8,7 +8,6 @@ import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
 import { primaryFlag } from '../lib/orderState'
-import { useSort } from '../hooks/useSort'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -26,26 +25,31 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
   const q = params.get('q') || ''
   const stage = params.get('stage') || 'all'
   const pay = params.get('pay') || 'all'
+  const sortKey = params.get('sort') || ''
+  const sortDir: 'asc' | 'desc' = params.get('dir') === 'asc' ? 'asc' : 'desc'
   const setParam = (k: string, v: string) => {
     const n = new URLSearchParams(params.toString())
     if (!v || v === 'all') n.delete(k)
     else n.set(k, v)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  // Sorting runs in the database across the whole filtered set (not just the
+  // visible page). Clicking a header sets the sort in the URL and resets paging;
+  // clicking the active column flips the direction.
+  const toggleSort = (key: string) => {
+    const n = new URLSearchParams(params.toString())
+    if (sortKey === key) n.set('dir', sortDir === 'asc' ? 'desc' : 'asc')
+    else { n.set('sort', key); n.set('dir', 'asc') }
+    setPage(0)
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
+  const sortIndicator = (key: string) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
   // Reset to the first page whenever a filter changes.
   useEffect(() => setPage(0), [q, stage, pay])
 
-  const query = useOrdersPaged({ page, pageSize: PAGE_SIZE, q, stage, pay })
+  const query = useOrdersPaged({ page, pageSize: PAGE_SIZE, q, stage, pay, sortKey, sortDir })
   const rows: any[] = query.data?.rows || []
-  // Sort is page-local: it reorders the current page's rows in the browser, not
-  // the whole filtered dataset (the query is paged server-side by order_date).
-  const sort = useSort(rows, (o: any, k: string) => {
-    if (k === 'customer') return o.client?.company || o.client?.name || null
-    if (k === 'total_seats') return Number(o.total_seats) || 0
-    if (k === 'total_amount') return Number(o.total_amount) || 0
-    return o?.[k]
-  })
   const count = query.data?.count ?? 0
   const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const from = count === 0 ? 0 : page * PAGE_SIZE + 1
@@ -55,7 +59,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
     exportCsv(
       `orders-${new Date().toISOString().slice(0, 10)}`,
       ['Order', 'Date', 'Customer', 'Stage', 'Payment', 'SAP', 'Channel', 'Seats', 'Amount'],
-      sort.sorted.map((o) => [
+      rows.map((o) => [
         o.order_id, o.order_date, o.client?.company || o.client?.name || '',
         o.fulfillment_stage, o.payment_status, o.sap_order_no || '', o.channel, o.total_seats, o.total_amount,
       ])
@@ -68,7 +72,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
         {!embedded && (
           <div>
             <h1>Orders</h1>
-            <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines. Column sort reorders the current page.</p>
+            <p>{count} order{count === 1 ? '' : 's'}. Filtered, sorted and paged in the database across all matches. One row per order — expand for its training lines.</p>
             <span className="k-sub">All amounts in PHP (₱)</span>
           </div>
         )}
@@ -102,17 +106,17 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
                 <tr>
                   {([['order_id', 'Order'], ['customer', 'Customer'], ['fulfillment_stage', 'Stage'], ['sap_order_no', 'SAP'], ['channel', 'Channel'], ['total_seats', 'Seats', 'right'], ['total_amount', 'Amount', 'right']] as const).map(([key, label, align]) => (
                     <th key={key} className={`clickable${align ? ' ' + align : ''}`} role="button" tabIndex={0}
-                      aria-sort={sort.sort.key === key ? (sort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      onClick={() => sort.toggle(key)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort.toggle(key) } }}>
-                      {label}{sort.indicator(key)}
+                      aria-sort={sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      onClick={() => toggleSort(key)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}>
+                      {label}{sortIndicator(key)}
                     </th>
                   ))}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {sort.sorted.map((o) => (
+                {rows.map((o) => (
                   <Fragment key={o.order_id}>
                     <tr className="clickable" role="button" tabIndex={0}
                       aria-label={`Open order ${o.order_id}`}

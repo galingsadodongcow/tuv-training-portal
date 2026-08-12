@@ -1261,15 +1261,29 @@ export function useSessionsForCourse(courseId?: string) {
 
 // Server-side paged orders: filters and paging run in the database,
 // so the screen stays fast as the table grows.
-export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all' }: {
+// Columns the Orders table may sort on, server-side. Maps a UI sort key to the
+// actual DB column so the whole filtered dataset is ordered in the database
+// (not just the visible page). 'customer' orders by the joined client company.
+const ORDERS_SORT_COLUMNS: Record<string, string> = {
+  order_id: 'order_id',
+  fulfillment_stage: 'fulfillment_stage',
+  sap_order_no: 'sap_order_no',
+  channel: 'channel',
+  total_seats: 'total_seats',
+  total_amount: 'total_amount',
+}
+
+export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all', sortKey = '', sortDir = 'desc' }: {
   page?: number
   pageSize?: number
   q?: string
   stage?: string
   pay?: string
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
 }) {
   return useQuery({
-    queryKey: ['orders_paged', page, pageSize, q, stage, pay],
+    queryKey: ['orders_paged', page, pageSize, q, stage, pay, sortKey, sortDir],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       let query = supabase
@@ -1278,8 +1292,22 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
           'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))',
           { count: 'exact' }
         )
-        .order('order_date', { ascending: false })
-        .range(page * pageSize, page * pageSize + pageSize - 1)
+
+      // Server-side ordering across the whole filtered set. Fall back to newest
+      // first when no (or an unknown) sort key is given.
+      const asc = sortDir === 'asc'
+      if (sortKey === 'customer') {
+        // Order the top-level orders by the joined client's company. This is the
+        // PostgREST embedded-ordering form for a to-one relationship
+        // (order=client(company)); passing { referencedTable } would instead
+        // order the embedded rows and no-op at the parent level.
+        query = query.order('client(company)' as any, { ascending: asc, nullsFirst: false })
+      } else if (ORDERS_SORT_COLUMNS[sortKey]) {
+        query = query.order(ORDERS_SORT_COLUMNS[sortKey], { ascending: asc, nullsFirst: false })
+      } else {
+        query = query.order('order_date', { ascending: false })
+      }
+      query = query.range(page * pageSize, page * pageSize + pageSize - 1)
 
       if (stage !== 'all') query = query.eq('fulfillment_stage', stage)
       if (pay !== 'all') query = query.eq('payment_status', pay)
