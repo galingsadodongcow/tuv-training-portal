@@ -65,7 +65,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
         {canAdd && <button className="btn btn-ghost btn-sm" onClick={() => setAdding((a) => !a)}>{adding ? 'Close' : '+ Contact'}</button>}
       </div>
       {adding && (
-        <div className="card card-pad" style={{ marginBottom: 10, maxWidth: 640 }}>
+        <div className="subform" style={{ marginBottom: 10, maxWidth: 640 }}>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Name</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
             <label className="field"><span>Title</span><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>

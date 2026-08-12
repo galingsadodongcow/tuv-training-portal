@@ -185,6 +185,12 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
 }
 .card-pad { padding: 20px; }
+/* Inline pop-open form (record payment, add contact, refund…) that lives inside
+   a record-detail card. Lighter than a full .card — a soft-bordered inset, no
+   elevation — so it doesn't double-box within the surrounding card (DEN1 /
+   third-pass #21). */
+.subform { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-subtle); padding: 14px; }
+:root[data-density='compact'] .subform { padding: 10px; }
 /* Stacked worklist section (title + its card), single-sourced vertical rhythm
    shared by My Work / Operations today instead of repeated inline margins. */
 .section { margin-bottom: 22px; }
