@@ -3,19 +3,22 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { homePathForRole } from '@/lib/roles'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { session, loading } = useAuth()
+  const { session, profile, loading } = useAuth()
   const router = useRouter()
   const emailRef = useRef<HTMLInputElement | null>(null)
 
+  // Land each role on its own home once the session and profile have loaded
+  // (management → Overview, auditor → Audit, everyone else → My Work).
   useEffect(() => {
-    if (!loading && session) router.replace('/my-work')
-  }, [loading, session, router])
+    if (!loading && session && profile) router.replace(homePathForRole(profile.role))
+  }, [loading, session, profile, router])
 
   // Land the cursor in the email field on arrival.
   useEffect(() => {
