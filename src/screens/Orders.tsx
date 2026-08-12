@@ -9,6 +9,8 @@ import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
 import { primaryFlag, stageLabel } from '../lib/orderState'
 import SavedViews from '../components/SavedViews'
+import { FilterChip } from '../components/inputs/FilterChip'
+import { Tooltip } from '../components/inputs/Tooltip'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -78,13 +80,14 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
           </div>
         )}
         <div className="toolbar">
-          <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}
-            title="Exports only the orders on the current page, not all matches.">Export this page</button>
+          <Tooltip label="Exports only the orders on the current page, not all matches.">
+            <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}>Export this page</button>
+          </Tooltip>
         </div>
       </div>
 
       <div className="filters">
-        <input placeholder="Search order # or SAP…" defaultValue={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 240 }} />
+        <input placeholder="Search order # or SAP…" value={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 240 }} />
         <select value={stage} onChange={(e) => setParam('stage', e.target.value)}>
           <option value="all">All stages</option>
           {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)}</option>))}
@@ -94,6 +97,15 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
           {['Paid', 'Unpaid', 'Partial'].map((p) => (<option key={p}>{p}</option>))}
         </select>
       </div>
+
+      {(q || stage !== 'all' || pay !== 'all') && (
+        <div className="filters" style={{ marginTop: -6 }}>
+          {q && <FilterChip label={`Search: ${q}`} onClear={() => setParam('q', '')} />}
+          {stage !== 'all' && <FilterChip label={`Stage: ${stageLabel(stage)}`} onClear={() => setParam('stage', 'all')} />}
+          {pay !== 'all' && <FilterChip label={`Payment: ${pay}`} onClear={() => setParam('pay', 'all')} />}
+          <button className="btn btn-ghost btn-sm" onClick={() => { setParam('q', ''); setParam('stage', 'all'); setParam('pay', 'all') }}>Clear all</button>
+        </div>
+      )}
 
       <div className="filters" style={{ marginTop: -6 }}>
         <SavedViews surface="orders" paramKeys={['q', 'stage', 'pay', 'sort', 'dir']} />

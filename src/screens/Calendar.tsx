@@ -9,6 +9,7 @@ import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '..
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import SavedViews from '../components/SavedViews'
+import { MultiSelect } from '../components/inputs/MultiSelect'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
@@ -410,7 +411,8 @@ export default function Calendar() {
   const cal = get('cal', 'grid') // grid | week | day | list
   const month = get('month', CURRENT_MONTH)
   const dateStr = get('date', toISO(new Date())) // week/day anchor (yyyy-mm-dd)
-  const status = get('status', 'all')
+  // Status is now a multi-select — a comma-joined list in the URL (empty = all).
+  const statusParam = params.get('status') || ''
   const category = get('category', 'all')
   const ltype = get('lt', 'all')
   const q = get('q', '')
@@ -444,17 +446,18 @@ export default function Calendar() {
 
   // Filter by everything except the month; the grid slices by start date and
   // the list applies the month text on top.
+  const statusList = useMemo(() => statusParam.split(',').map((s) => s.trim()).filter(Boolean), [statusParam])
   const base = useMemo(() => {
     if (!sched.data) return []
     const term = q.trim().toLowerCase()
     return sched.data.filter(
       (r: any) =>
-        (status === 'all' || r.status === status) &&
+        (statusList.length === 0 || statusList.includes(r.status)) &&
         (category === 'all' || r.course?.category === category) &&
         (ltype === 'all' || r.modality === ltype) &&
         (!term || r.course?.course_name?.toLowerCase().includes(term))
     )
-  }, [sched.data, status, category, ltype, q])
+  }, [sched.data, statusList, category, ltype, q])
 
   const rows = useMemo(() => {
     let out = base.filter((r: any) => month === 'all' || r.month === month)
@@ -581,10 +584,9 @@ export default function Calendar() {
           {/* Degrade quietly if the year list fails to load — keep the current year selectable. */}
           {(years.data?.length ? years.data : [{ year_id: year, year }]).map((y: any) => (<option key={y.year_id} value={y.year}>{y.year}</option>))}
         </select>
-        <select value={status} aria-label="Filter by status" onChange={(e) => setParam('status', e.target.value)}>
-          <option value="all">All statuses</option>
-          {['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => (<option key={s}>{s}</option>))}
-        </select>
+        <MultiSelect ariaLabel="Filter by status" allLabel="All statuses"
+          options={['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => ({ value: s, label: s }))}
+          values={statusList} onChange={(vals) => setParam('status', vals.join(','))} />
         <select value={category} aria-label="Filter by category" onChange={(e) => setParam('category', e.target.value)}>
           <option value="all">All categories</option>
           {categories.map((c: any) => (<option key={c}>{c}</option>))}
