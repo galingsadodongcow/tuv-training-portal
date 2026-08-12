@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useCloseCheck, useInvalidate } from '../hooks/data'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { Spinner } from './ui'
 import { useConfirm } from './Confirm'
 import { php } from '../lib/format'
@@ -11,6 +12,8 @@ export default function CloseSession({ schedule, onDone, onClose }: { schedule: 
   const check = useCloseCheck(schedule.schedule_id)
   const invalidate = useInvalidate()
   const confirm = useConfirm()
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useFocusTrap(dialogRef)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [result, setResult] = useState(null)
@@ -40,7 +43,7 @@ export default function CloseSession({ schedule, onDone, onClose }: { schedule: 
 
   return (
     <div className="drawer-scrim" onClick={() => onClose()} style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div className="card card-pad" role="dialog" aria-modal="true" aria-label="Close session"
+      <div ref={dialogRef} className="card card-pad" role="dialog" aria-modal="true" aria-label="Close session"
         style={{ width: 500, maxWidth: '94vw' }} onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
         <h3 style={{ marginTop: 0 }}>Close session</h3>
