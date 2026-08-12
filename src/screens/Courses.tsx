@@ -16,7 +16,12 @@ const MODS = ['Live Online Training', 'Face-to-face', 'E-learning']
 // fee-editing path (#13, was: inline grid here + the form). Deep-linkable via
 // ?new / ?edit=<id>; the old /course/new and /course/[id]/edit routes redirect
 // in.
-export default function Courses() {
+//
+// `readOnly` renders the same directory as a pure catalogue lookup for the
+// sales/oversight roles (the /training entry, #8): no "+ New course", no
+// edit-drawer, non-interactive rows. Write access is the DB's call regardless —
+// this only removes affordances the edit screen (super_admin/operations) keeps.
+export default function Courses({ readOnly }: { readOnly?: boolean } = {}) {
   const courses = useCourses()
   const fees = useCourseFees()
   const search = useSearchParams()
@@ -54,11 +59,16 @@ export default function Courses() {
       <div className="page-head">
         <div>
           <h1>Training catalogue</h1>
-          <p>Every course and its fee per learning type, excl. VAT. Open a course to edit its details and prices.</p>
+          <p>
+            Every course and its fee per learning type, excl. VAT.{' '}
+            {readOnly ? 'Sessions and dates are on the Calendar.' : 'Open a course to edit its details and prices.'}
+          </p>
         </div>
-        <div className="toolbar">
-          <button className="btn" onClick={openNew}>+ New course</button>
-        </div>
+        {!readOnly && (
+          <div className="toolbar">
+            <button className="btn" onClick={openNew}>+ New course</button>
+          </div>
+        )}
       </div>
 
       <div className="filters">
@@ -77,10 +87,12 @@ export default function Courses() {
           </thead>
           <tbody>
             {rows.map((c: any) => (
-              <tr key={c.course_id} className="clickable" role="button" tabIndex={0}
-                aria-label={`Edit ${c.course_name}`}
-                onClick={() => openEdit(c.course_id)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(c.course_id) } }}>
+              <tr key={c.course_id} {...(readOnly ? {} : {
+                className: 'clickable', role: 'button', tabIndex: 0,
+                'aria-label': `Edit ${c.course_name}`,
+                onClick: () => openEdit(c.course_id),
+                onKeyDown: (e: any) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(c.course_id) } },
+              })}>
                 <td>
                   <div style={{ fontWeight: 600 }}>{c.course_name}</div>
                   <div className="fill-label">{c.category || '—'}</div>
@@ -96,7 +108,7 @@ export default function Courses() {
         {rows.length === 0 && <div className="empty">No courses match.</div>}
       </div>
 
-      {drawerOpen && <CourseDrawer courseId={editId} onClose={closeDrawer} />}
+      {!readOnly && drawerOpen && <CourseDrawer courseId={editId} onClose={closeDrawer} />}
     </>
   )
 }
