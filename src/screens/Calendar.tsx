@@ -260,7 +260,7 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
         <div className="drawer-head">
           <div>
             <h3 style={{ margin: 0 }}>{r.course?.course_name}</h3>
-            <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>{r.course?.category || '—'} · {r.course?.training_type}</p>
+            <p className="muted" style={{ fontSize: 13, margin: '4px 0 0' }}>{r.course?.category || '—'}{r.course?.subcategory ? ` · ${r.course.subcategory}` : ''} · {r.course?.training_type}</p>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
         </div>
@@ -338,7 +338,7 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows:
           onClick={() => onOpen(r)}>
         <td data-label="">
           <div style={{ fontWeight: 600 }}>{r.course?.course_name}</div>
-          <div className="fill-label">{r.course?.category || '—'}</div>
+          <div className="fill-label">{r.course?.category || '—'}{r.course?.subcategory ? ` · ${r.course.subcategory}` : ''}</div>
           <RiskTag cls={risk} />
         </td>
         <td data-label="Training type">
