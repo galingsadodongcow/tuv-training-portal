@@ -50,6 +50,55 @@ const AGING = [
 export default function Reports() {
   const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'>('digest')
   const [funnelTable, setFunnelTable] = useState(false)
+
+  // Period filter (RPT01). Presets resolve to a {from,to} of yyyy-mm; a custom
+  // range is driven by the two month inputs. Default 'all' == whole dataset, so
+  // nothing changes until the user picks a range. Only the date-bearing tabs
+  // (revenue, margin) read this; snapshot/future-dated tabs ignore it.
+  const [period, setPeriod] = useState<'all' | 'year' | 'ytd' | '12m' | 'custom'>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const range = useMemo<{ from: string; to: string }>(() => {
+    const ym = (d: Date) => d.toISOString().slice(0, 7)
+    const now = new Date()
+    const y = now.getFullYear()
+    switch (period) {
+      case 'year': return { from: `${y}-01`, to: `${y}-12` }
+      case 'ytd': return { from: `${y}-01`, to: ym(now) }
+      case '12m': return { from: ym(new Date(y, now.getMonth() - 11, 1)), to: ym(now) }
+      case 'custom': return { from: customFrom, to: customTo }
+      default: return { from: '', to: '' }
+    }
+  }, [period, customFrom, customTo])
+  const inPeriod = (d?: string | null) => {
+    if (!range.from && !range.to) return true
+    if (!d) return false
+    const m = String(d).slice(0, 7)
+    if (range.from && m < range.from) return false
+    if (range.to && m > range.to) return false
+    return true
+  }
+  const periodLabel = useMemo(() => {
+    if (!range.from && !range.to) return 'All time'
+    const fmt = (m: string) => (m ? monthLabel(`${m}-01`) : '—')
+    if (range.from && range.to) return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`
+    return range.from ? `From ${fmt(range.from)}` : `Through ${fmt(range.to)}`
+  }, [range])
+  const periodBar = (
+    <div className="filters">
+      <div className="seg">
+        {([['all', 'All'], ['year', 'This year'], ['ytd', 'Year to date'], ['12m', 'Last 12 months']] as const).map(([k, label]) => (
+          <button key={k} className={`seg-btn ${period === k ? 'on' : ''}`} onClick={() => setPeriod(k)}>{label}</button>
+        ))}
+      </div>
+      <input type="month" aria-label="Period from" value={range.from}
+        onChange={(e) => { const v = e.target.value; setCustomFrom(v); setCustomTo((t) => t || range.to); setPeriod('custom') }} />
+      <span className="fill-label">to</span>
+      <input type="month" aria-label="Period to" value={range.to}
+        onChange={(e) => { const v = e.target.value; setCustomTo(v); setCustomFrom((f) => f || range.from); setPeriod('custom') }} />
+      <span className="fill-label" style={{ marginLeft: 'auto' }}>{periodLabel}</span>
+    </div>
+  )
   const digest = useDigest()
   const facts = useOrderFacts()
   const receivables = useReceivables()
@@ -61,10 +110,10 @@ export default function Reports() {
   const countryRev = useCountryRevenue()
 
   const margins = useMemo(() => {
-    const rows = (pnl.data || []).filter((r: any) => Number(r.revenue) > 0 || Number(r.total_cost) > 0)
+    const rows = (pnl.data || []).filter((r: any) => (Number(r.revenue) > 0 || Number(r.total_cost) > 0) && inPeriod(r.start_date))
     const t = rows.reduce((a: any, r: any) => ({ revenue: a.revenue + Number(r.revenue || 0), cost: a.cost + Number(r.total_cost || 0), margin: a.margin + Number(r.margin || 0) }), { revenue: 0, cost: 0, margin: 0 })
     return { rows, ...t }
-  }, [pnl.data])
+  }, [pnl.data, range])
   const [verifyNo, setVerifyNo] = useState('')
   const [verifyResult, setVerifyResult] = useState<any>(undefined)
   const [verifyError, setVerifyError] = useState<any>(null)
@@ -88,7 +137,7 @@ export default function Reports() {
   }, [receivables.data])
 
   const revenue = useMemo(() => {
-    const rows = (facts.data || []).filter((f: any) => f.order_status !== 'Cancelled')
+    const rows = (facts.data || []).filter((f: any) => f.order_status !== 'Cancelled' && inPeriod(f.order_month))
     const byMonth: Record<string, any> = {}
     const byChannel: Record<string, any> = {}
     const bySales: Record<string, any> = {}
@@ -113,7 +162,7 @@ export default function Reports() {
       return t
     }, { orders: 0, seats: 0, booked: 0, collected: 0 })
     return { months, channels, sales, totals }
-  }, [facts.data])
+  }, [facts.data, range])
 
   const stamp = () => new Date().toISOString().slice(0, 10)
   const exportMonths = () =>
@@ -196,6 +245,7 @@ export default function Reports() {
       {tab === 'revenue' && (
         facts.isLoading ? <Spinner label="Loading revenue" /> : facts.error ? <ErrorNote error={facts.error} /> : (
           <>
+            {periodBar}
             <div className="card card-pad" style={{ marginBottom: 16 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
                 <div><div className="k-label">Orders</div><div className="k-value">{num(revenue.totals.orders)}</div></div>
@@ -206,7 +256,7 @@ export default function Reports() {
             </div>
 
             <div className="page-head" style={{ marginBottom: 8 }}>
-              <div><h2 style={{ fontSize: 16 }}>By month</h2></div>
+              <div><h2 style={{ fontSize: 16 }}>By month <span className="fill-label" style={{ fontWeight: 400 }}>· {periodLabel}</span></h2></div>
               <button className="btn btn-ghost btn-sm" onClick={exportMonths}>Export CSV</button>
             </div>
             <div className="card" style={{ marginBottom: 20 }}>
@@ -371,6 +421,7 @@ export default function Reports() {
       {tab === 'margin' && (
         pnl.isLoading ? <Spinner label="Loading profitability" /> : pnl.error ? <ErrorNote error={pnl.error} /> : (
           <>
+            {periodBar}
             <div className="card card-pad" style={{ marginBottom: 16 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
                 <div><div className="k-label">Revenue</div><div className="k-value">{php(margins.revenue)}</div></div>
@@ -380,7 +431,7 @@ export default function Reports() {
               </div>
             </div>
             <div className="page-head" style={{ marginBottom: 8 }}>
-              <div><h2 style={{ fontSize: 16 }}>By session</h2></div>
+              <div><h2 style={{ fontSize: 16 }}>By session <span className="fill-label" style={{ fontWeight: 400 }}>· {periodLabel}</span></h2></div>
               <button className="btn btn-ghost btn-sm" onClick={exportMargins} disabled={margins.rows.length === 0}>Export CSV</button>
             </div>
             <div className="card">
