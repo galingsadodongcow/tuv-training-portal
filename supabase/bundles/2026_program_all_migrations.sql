@@ -3640,3 +3640,35 @@ begin
     from order_handoff h
    where h.order_id = p_order and h.endorsed_by is not null and h.endorsed_by <> auth.uid();
 end $function$;
+
+-- ===========================================================================
+-- 20260812260000_lock_payment_status_to_ledger.sql
+-- #127 — Reconcile payment_status with the AR ledger. A BEFORE UPDATE trigger
+-- re-derives payment_status from the ledger (net confirmed payments − refunds +
+-- applied credits, vs the order total) whenever an update tries to change it, so
+-- it can never drift by hand; and it normalizes every existing order. Idempotent.
+-- ===========================================================================
+
+create or replace function public.fn_orders_lock_payment_status()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+declare v_total numeric; v_net numeric;
+begin
+  if new.payment_status is distinct from old.payment_status then
+    v_total := coalesce(new.total_amount, 0);
+    v_net := coalesce((select sum(amount) from payment where order_id = new.order_id and status = 'Confirmed'), 0)
+           - coalesce((select sum(amount) from refund where order_id = new.order_id), 0)
+           + coalesce((select sum(amount) from credit_note where applied_to_order = new.order_id and status = 'Applied'), 0);
+    new.payment_status := (case
+        when v_net <= 0 then 'Unpaid'
+        when v_net >= v_total then 'Paid'
+        else 'Partial' end)::payment_status_t;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_orders_lock_payment_status on public.orders;
+create trigger trg_orders_lock_payment_status
+  before update on public.orders
+  for each row execute function public.fn_orders_lock_payment_status();
+
+select public.fn_ar_recompute(order_id) from public.orders;

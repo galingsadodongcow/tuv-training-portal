@@ -20,7 +20,6 @@ import { formatSegments, lt } from '../lib/labels'
 import { collectionState, collectionTone, stageLabel } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
-const PAYMENTS = ['Unpaid', 'Partial', 'Paid']
 
 function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => void; onCancel: () => void }) {
   const targets = useTransferTargets(line.course_id, line.schedule_id)
@@ -182,7 +181,7 @@ export default function OrderDetail() {
   const save = async () => {
     setBusy(true); setMsg(null); setConflict(false)
     let q = supabase.from('orders')
-      .update({ fulfillment_stage: stage, sap_order_no: sap.trim() || null, payment_status: pay })
+      .update({ fulfillment_stage: stage, sap_order_no: sap.trim() || null })
       .eq('order_id', o.order_id)
     // Optimistic concurrency: only overwrite the row we actually read. If the
     // updated_at token is absent (migration not applied), fall back to a plain
@@ -253,13 +252,11 @@ export default function OrderDetail() {
                   </select>
                 </label>
                 <label className="field"><span>Payment</span>
-                  {isSales ? (
-                    <input value={pay} readOnly disabled aria-label="Payment status (read-only)" />
-                  ) : (
-                    <select value={pay} onChange={(e) => setPay(e.target.value)}>
-                      {PAYMENTS.map((p) => (<option key={p}>{p}</option>))}
-                    </select>
-                  )}
+                  {/* Payment status is derived from the AR ledger and locked by a DB
+                      trigger (#127) — it can't be set by hand. Record a payment on
+                      the Payments tab to change it. Read-only for every role. */}
+                  <input value={pay} readOnly disabled aria-label="Payment status (set automatically from recorded payments)" />
+                  <span className="fill-label">Set automatically from recorded payments (Payments tab).</span>
                 </label>
               </div>
               <label className="field"><span>SAP reference{isSales ? '' : ' (optional)'}</span>
