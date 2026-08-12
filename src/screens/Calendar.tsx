@@ -17,6 +17,13 @@ const STATUS_TONE: Record<string, string> = {
   Confirmed: 'confirmed', Tentative: 'tentative', Running: 'running', Completed: 'completed', Cancelled: 'cancelled',
 }
 
+// Short status token shown in the month grid so status isn't signalled by the
+// event's colour alone (WCAG 1.4.1). Distinct 1-letter codes avoid the C/C/C
+// collision between Confirmed / Completed / Cancelled.
+const STATUS_ABBR: Record<string, string> = {
+  Confirmed: 'C', Tentative: 'T', Running: 'R', Completed: 'D', Cancelled: 'X',
+}
+
 function UrgencyPill({ days }: { days: number | null }) {
   if (days == null || days < 0) return null
   if (days === 0) return <span className="pill pill-today">Today</span>
@@ -33,6 +40,20 @@ function HealthChip({ h, style }: { h?: string; style?: React.CSSProperties }) {
   if (!h || !healthNeedsAction(h)) return null
   const m = healthMeta(h)
   return <span className={`pill ${m.cls}`} style={{ fontSize: 10, padding: '1px 6px', ...style }}>{m.label}</span>
+}
+
+// Textual companion to the coloured risk bar on the row's first cell, so an
+// at-risk (undersold, start date approaching) session is never signalled by
+// colour alone (WCAG 1.4.1). Reuses the danger/warning pill tones.
+function RiskTag({ cls }: { cls: string }) {
+  if (cls !== 'risk-red' && cls !== 'risk-amber') return null
+  return (
+    <span className={`pill ${cls === 'risk-red' ? 'pill-today' : 'pill-thisweek'}`}
+      title="Undersold with the start date approaching — needs attention"
+      style={{ fontSize: 10, padding: '1px 6px', marginTop: 2, alignSelf: 'flex-start' }}>
+      ▲ At risk
+    </span>
+  )
 }
 
 function riskClass(r: any) {
@@ -94,9 +115,11 @@ function MonthGrid({ year, monthName, sessions, onOpen, healthMap }: { year: num
             {day && <div className="cal-grid-daynum">{day}</div>}
             {day && (byDay[day] || []).map((s) => (
               <button key={s.schedule_id} className={`cal-event cal-event-${STATUS_TONE[s.status] || 'tentative'}`}
-                onClick={() => onOpen(s)} title={`${s.course?.course_name} · ${lt(s.modality)} · ${s.status} · ${s.booked_participants}/${s.min_participants} pax`}>
+                onClick={() => onOpen(s)}
+                aria-label={`${s.course?.course_name} · ${lt(s.modality)} · ${s.status} · ${s.booked_participants}/${s.min_participants} pax`}
+                title={`${s.course?.course_name} · ${lt(s.modality)} · ${s.status} · ${s.booked_participants}/${s.min_participants} pax`}>
                 <span className="cal-event-name">{s.course?.course_name}</span>
-                <span className="cal-event-meta">{lt(s.modality)}</span>
+                <span className="cal-event-meta">{STATUS_ABBR[s.status] || s.status} · {lt(s.modality)}</span>
                 <HealthChip h={healthMap?.get(s.schedule_id)} style={{ marginTop: 2, alignSelf: 'flex-start' }} />
               </button>
             ))}
@@ -111,13 +134,15 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows:
   return rows.map((r) => {
     const ch = pax?.[r.schedule_id] || {}
     const d = daysUntil(r.start_date)
+    const risk = riskClass(r)
     return (
       <tr key={r.schedule_id}
-          className={`clickable ${riskClass(r)} ${d != null && d >= 0 && d <= 7 ? 'upcoming' : ''}`}
+          className={`clickable ${risk} ${d != null && d >= 0 && d <= 7 ? 'upcoming' : ''}`}
           onClick={() => onOpen(r)}>
         <td data-label="">
           <div style={{ fontWeight: 600 }}>{r.course?.course_name}</div>
           <div className="fill-label">{r.course?.category || '—'}</div>
+          <RiskTag cls={risk} />
         </td>
         <td data-label="Training type">
           <span className={`pill ${r.course?.training_type === 'PersCert' ? 'pill-inside' : 'pill-webshop'}`}>

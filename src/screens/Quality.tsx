@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useNpsSummary, useTrainerQuality, useComplaints, useInvalidate } from '../hooks/data'
 import { useToast } from '../components/Toast'
 import { Spinner, ErrorNote } from '../components/ui'
+import ChartTable, { ChartTableToggle } from '../components/ChartTable'
 import { shortDate } from '../lib/format'
 
 const SEVERITY = ['Low', 'Medium', 'High'] as const
@@ -31,6 +32,7 @@ export default function Quality() {
   const [form, setForm] = useState({ subject: '', description: '', severity: 'Medium' })
   const [busy, setBusy] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [npsTable, setNpsTable] = useState(false)
 
   const addComplaint = async () => {
     if (!form.subject.trim()) return
@@ -75,14 +77,34 @@ export default function Quality() {
           <div className="card"><div className="empty">No feedback captured yet. Record responses from a session's Feedback tab.</div></div>
         ) : (
           <div className="card card-pad">
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
-              <div><div className="k-label">NPS</div><div className="k-value" style={{ color: Number(nps.data.nps_score) >= 0 ? 'inherit' : 'var(--danger)' }}>{nps.data.nps_score ?? '—'}</div><div className="fill-label">{nps.data.responses} responses</div></div>
-              <div><div className="k-label">Promoters</div><div className="k-value">{nps.data.promoters}</div></div>
-              <div><div className="k-label">Passives</div><div className="k-value">{nps.data.passives}</div></div>
-              <div><div className="k-label">Detractors</div><div className="k-value">{nps.data.detractors}</div></div>
-              <div><div className="k-label">Content</div><div className="k-value"><Stars value={nps.data.avg_content} /></div></div>
-              <div><div className="k-label">Trainer</div><div className="k-value"><Stars value={nps.data.avg_trainer} /></div></div>
+            <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+              <div className="k-label">Feedback summary</div>
+              <ChartTableToggle on={npsTable} onToggle={() => setNpsTable((v) => !v)} />
             </div>
+            {npsTable ? (
+              <ChartTable
+                caption="Feedback summary"
+                columns={[{ key: 'metric', label: 'Metric' }, { key: 'value', label: 'Value', align: 'right' }]}
+                rows={[
+                  { metric: 'NPS', value: nps.data.nps_score ?? '—' },
+                  { metric: 'Responses', value: nps.data.responses },
+                  { metric: 'Promoters', value: nps.data.promoters },
+                  { metric: 'Passives', value: nps.data.passives },
+                  { metric: 'Detractors', value: nps.data.detractors },
+                  { metric: 'Content score', value: nps.data.avg_content == null ? '—' : `${Number(nps.data.avg_content).toFixed(1)} of 5` },
+                  { metric: 'Trainer score', value: nps.data.avg_trainer == null ? '—' : `${Number(nps.data.avg_trainer).toFixed(1)} of 5` },
+                ]}
+              />
+            ) : (
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                <div><div className="k-label">NPS</div><div className="k-value" style={{ color: Number(nps.data.nps_score) >= 0 ? 'inherit' : 'var(--danger)' }}>{nps.data.nps_score ?? '—'}</div><div className="fill-label">{nps.data.responses} responses</div></div>
+                <div><div className="k-label">Promoters</div><div className="k-value">{nps.data.promoters}</div></div>
+                <div><div className="k-label">Passives</div><div className="k-value">{nps.data.passives}</div></div>
+                <div><div className="k-label">Detractors</div><div className="k-value">{nps.data.detractors}</div></div>
+                <div><div className="k-label">Content</div><div className="k-value"><Stars value={nps.data.avg_content} /></div></div>
+                <div><div className="k-label">Trainer</div><div className="k-value"><Stars value={nps.data.avg_trainer} /></div></div>
+              </div>
+            )}
           </div>
         )
       )}

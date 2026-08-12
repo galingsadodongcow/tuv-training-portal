@@ -4,7 +4,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate, useTrainers, useVenues, checkConflicts, useTrainerCourseMap, useSessionTrainers } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
-import DateSegments from '../components/DateSegments'
+import DateSegments, { SegError } from '../components/DateSegments'
 import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
 import { LEARNING_TYPES, lt, segmentsDays } from '../lib/labels'
@@ -111,6 +111,26 @@ export default function SessionForm() {
   const maxPax = maxPaxFor(selectedCourse)
   const irca = isIrcaCourse(selectedCourse?.course_name)
 
+  // Monotonic date guard (roadmap #29). Hard error: a block whose end falls
+  // before its start — this blocks submit. Soft warning: a block that starts
+  // before the previous block ends (out of order / overlapping). ISO date
+  // strings sort lexicographically, so a plain string compare is correct.
+  const segErrors = useMemo<SegError[]>(
+    () =>
+      segments.map((s: any, i: number) => {
+        if (s.start && s.end && s.end < s.start) {
+          return { level: 'error', msg: "End date can't be before the start date." }
+        }
+        const prev = segments[i - 1]
+        if (prev && prev.end && s.start && s.start < prev.end) {
+          return { level: 'warn', msg: 'This block starts before the previous one ends.' }
+        }
+        return null
+      }),
+    [segments]
+  )
+  const hasDateError = segErrors.some((e) => e?.level === 'error')
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true); setMsg(null)
@@ -200,7 +220,7 @@ export default function SessionForm() {
 
           <div className="field">
             <span style={{ display: 'block', fontSize: 12, color: 'var(--tr-slate)', marginBottom: 5, fontWeight: 600 }}>Dates</span>
-            <DateSegments segments={segments} onChange={setSegments} />
+            <DateSegments segments={segments} onChange={setSegments} errors={segErrors} />
           </div>
 
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -290,7 +310,7 @@ export default function SessionForm() {
           )}
           {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
           <div className="toolbar">
-            <button className="btn" disabled={busy || conflicts.length > 0}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create session'}</button>
+            <button className="btn" disabled={busy || conflicts.length > 0 || hasDateError}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create session'}</button>
             <button type="button" className="btn btn-ghost" onClick={() => router.push('/calendar')}>Cancel</button>
           </div>
         </form>

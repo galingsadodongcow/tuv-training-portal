@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad, useCountryRevenue } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import ChartTable, { ChartTableToggle } from '../components/ChartTable'
 import { php, money, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
 
@@ -48,6 +49,7 @@ const AGING = [
 
 export default function Reports() {
   const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'>('digest')
+  const [funnelTable, setFunnelTable] = useState(false)
   const digest = useDigest()
   const facts = useOrderFacts()
   const receivables = useReceivables()
@@ -408,9 +410,26 @@ export default function Reports() {
 
       {tab === 'analytics' && (
         <>
-          <div className="page-head" style={{ marginBottom: 8 }}><div><h2 style={{ fontSize: 16 }}>Conversion funnel</h2></div></div>
+          <div className="page-head" style={{ marginBottom: 8 }}>
+            <div><h2 style={{ fontSize: 16 }}>Conversion funnel</h2></div>
+            {funnel.data && <ChartTableToggle on={funnelTable} onToggle={() => setFunnelTable((v) => !v)} />}
+          </div>
           {funnel.isLoading ? <Spinner label="Loading funnel" /> : !funnel.data ? (
             <div className="card"><div className="empty">Funnel data is unavailable. Run the analytics migration to enable it.</div></div>
+          ) : funnelTable ? (
+            <div className="card card-pad" style={{ marginBottom: 20 }}>
+              <ChartTable
+                caption="Conversion funnel"
+                columns={[{ key: 'stage', label: 'Stage' }, { key: 'value', label: 'Value', align: 'right' }, { key: 'note', label: 'Detail', align: 'right' }]}
+                rows={[
+                  { stage: 'Inquiries', value: num(funnel.data.inquiries), note: `${num(funnel.data.open_inq)} still open` },
+                  { stage: 'Won', value: num(funnel.data.won), note: `${num(funnel.data.lost)} lost` },
+                  { stage: 'Win rate', value: `${Number(funnel.data.won) + Number(funnel.data.lost) > 0 ? Math.round(Number(funnel.data.won) / (Number(funnel.data.won) + Number(funnel.data.lost)) * 100) : 0}%`, note: 'of closed inquiries' },
+                  { stage: 'Quotes', value: num(funnel.data.quotes), note: `${num(funnel.data.quotes_accepted)} accepted` },
+                  { stage: 'Orders', value: num(funnel.data.orders_total), note: 'active' },
+                ]}
+              />
+            </div>
           ) : (
             <div className="card card-pad" style={{ marginBottom: 20 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>

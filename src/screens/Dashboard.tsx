@@ -1,10 +1,11 @@
 'use client'
-import { useMemo, ReactNode } from 'react'
+import { useMemo, useState, ReactNode } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useSchedules, useOrders, useActiveYear } from '../hooks/data'
 import Link from 'next/link'
 import { Spinner, ErrorNote } from '../components/ui'
 import { KpiSkeleton } from '../components/Skeleton'
+import ChartTable, { ChartTableToggle } from '../components/ChartTable'
 import { php, num } from '../lib/format'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -91,6 +92,38 @@ export default function Dashboard() {
   const channelSummary = model.channelData.map((e) => `${e.name} ${php(e.value)}`).join(', ')
 
   return (
+    <DashboardBody
+      YEAR={YEAR}
+      model={model}
+      attain={attain}
+      monthlyEmpty={monthlyEmpty}
+      channelEmpty={channelEmpty}
+      channelSummary={channelSummary}
+    />
+  )
+}
+
+// Rendered body split out so the per-chart "View as table" toggles can hold state
+// without violating the rules-of-hooks against the early returns above.
+function DashboardBody({
+  YEAR,
+  model,
+  attain,
+  monthlyEmpty,
+  channelEmpty,
+  channelSummary,
+}: {
+  YEAR: number
+  model: any
+  attain: number
+  monthlyEmpty: boolean
+  channelEmpty: boolean
+  channelSummary: string
+}) {
+  const [monthTable, setMonthTable] = useState(false)
+  const [channelTable, setChannelTable] = useState(false)
+
+  return (
     <>
       <div className="page-head">
         <div>
@@ -112,9 +145,18 @@ export default function Dashboard() {
 
       <div className="grid" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
         <div className="card card-pad">
-          <div className="k-label" style={{ marginBottom: 10 }}>Booked revenue by month</div>
+          <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+            <div className="k-label">Booked revenue by month</div>
+            {!monthlyEmpty && <ChartTableToggle on={monthTable} onToggle={() => setMonthTable((v) => !v)} />}
+          </div>
           {monthlyEmpty ? (
             <div className="empty" style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No booked revenue yet for {YEAR}.</div>
+          ) : monthTable ? (
+            <ChartTable
+              caption={`Booked revenue by month for ${YEAR}`}
+              columns={[{ key: 'month', label: 'Month' }, { key: 'revenue', label: 'Booked revenue', align: 'right' }]}
+              rows={model.byMonth.map((m: any) => ({ month: m.month, revenue: php(m.revenue) }))}
+            />
           ) : (
             <div role="img" aria-label={`Booked revenue by month for ${YEAR}, total ${php(model.revenue)}`}>
               <ResponsiveContainer width="100%" height={260}>
@@ -130,9 +172,18 @@ export default function Dashboard() {
         </div>
 
         <div className="card card-pad">
-          <div className="k-label" style={{ marginBottom: 10 }}>Revenue by channel</div>
+          <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+            <div className="k-label">Revenue by channel</div>
+            {!channelEmpty && <ChartTableToggle on={channelTable} onToggle={() => setChannelTable((v) => !v)} />}
+          </div>
           {channelEmpty ? (
             <div className="empty" style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No data yet.</div>
+          ) : channelTable ? (
+            <ChartTable
+              caption={`Revenue by channel for ${YEAR}`}
+              columns={[{ key: 'name', label: 'Channel' }, { key: 'value', label: 'Revenue', align: 'right' }]}
+              rows={model.channelData.map((e: any) => ({ name: e.name, value: php(e.value) }))}
+            />
           ) : (
             <>
               <div role="img" aria-label={`Revenue by channel for ${YEAR}: ${channelSummary}`}>

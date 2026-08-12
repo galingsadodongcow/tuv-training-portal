@@ -2,9 +2,13 @@
 
 import { useRef } from 'react'
 
+// Per-block validation result from the parent form. `error` = hard (end before
+// start, blocks submit); `warn` = soft (overlaps the previous block).
+export type SegError = { level: 'error' | 'warn'; msg: string } | null
+
 // Editor for one or more date blocks. Single block = a normal run.
 // More blocks = staggered or skipping dates (e.g. Sep 11–14 & 17).
-export default function DateSegments({ segments, onChange }: { segments: any[]; onChange: (next: any[]) => void }) {
+export default function DateSegments({ segments, onChange, errors }: { segments: any[]; onChange: (next: any[]) => void; errors?: SegError[] }) {
   const rows = segments?.length ? segments : [{ start: '', end: '' }]
 
   // Stable per-row keys so removing a middle block doesn't make React reuse the
@@ -23,16 +27,24 @@ export default function DateSegments({ segments, onChange }: { segments: any[]; 
 
   return (
     <div>
-      {rows.map((s, i) => (
-        <div key={keys.current[i]} className="toolbar" style={{ marginBottom: 8 }}>
-          <input type="date" aria-label={`Block ${i + 1} start`} value={s.start} onChange={(e) => update(i, 'start', e.target.value)} required={i === 0} style={{ maxWidth: 170 }} />
-          <span className="muted">to</span>
-          <input type="date" aria-label={`Block ${i + 1} end`} value={s.end} min={s.start} onChange={(e) => update(i, 'end', e.target.value)} style={{ maxWidth: 170 }} />
-          {rows.length > 1 && (
-            <button type="button" className="linkbtn" onClick={() => remove(i)}>Remove</button>
-          )}
-        </div>
-      ))}
+      {rows.map((s, i) => {
+        const err = errors?.[i] || null
+        return (
+          <div key={keys.current[i]} style={{ marginBottom: 8 }}>
+            <div className="toolbar">
+              <input type="date" aria-label={`Block ${i + 1} start`} value={s.start} className={err?.level === 'warn' ? 'invalid' : undefined} onChange={(e) => update(i, 'start', e.target.value)} required={i === 0} style={{ maxWidth: 170 }} />
+              <span className="muted">to</span>
+              <input type="date" aria-label={`Block ${i + 1} end`} value={s.end} min={s.start} className={err?.level === 'error' ? 'invalid' : undefined} onChange={(e) => update(i, 'end', e.target.value)} style={{ maxWidth: 170 }} />
+              {rows.length > 1 && (
+                <button type="button" className="linkbtn" onClick={() => remove(i)}>Remove</button>
+              )}
+            </div>
+            {err && (err.level === 'error'
+              ? <span className="field-error">{err.msg}</span>
+              : <span className="fill-label" style={{ marginTop: 4 }}>{err.msg}</span>)}
+          </div>
+        )
+      })}
       <button type="button" className="btn btn-ghost btn-sm" onClick={add}>+ Add date block (staggered dates)</button>
       <div className="fill-label" style={{ marginTop: 6 }}>
         Use extra blocks for skipping schedules, for example 11–14 then 17.
