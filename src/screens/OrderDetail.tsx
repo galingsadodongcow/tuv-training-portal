@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, ReactNode } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
@@ -201,6 +201,16 @@ export default function OrderDetail() {
     setBusy(false)
   }
 
+  // The overview is one card with record-section dividers (the SessionDetail
+  // model, third-pass #21) instead of three stacked cards. The first visible
+  // section sits flush at the card top; the rest get a divider above them. Which
+  // section is first depends on the role's gates.
+  const firstOverview = canEdit ? 'fulfillment' : (canEndorse || canAccept || canReturn) ? 'endorsement' : 'details'
+  const ovSection = (id: string, title: string, body: ReactNode) =>
+    id === firstOverview
+      ? <div><div className="k-label" style={{ marginBottom: 8 }}>{title}</div>{body}</div>
+      : <RecordSection title={title}>{body}</RecordSection>
+
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'lines', label: `Lines (${lines.length})` },
@@ -233,10 +243,9 @@ export default function OrderDetail() {
       <RecordTabs tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === 'overview' && (
-        <>
-          {canEdit && (
-            <div className="card card-pad" style={{ marginBottom: 16 }}>
-              <div className="k-label" style={{ marginBottom: 8 }}>Fulfillment</div>
+        <div className="card card-pad">
+          {canEdit && ovSection('fulfillment', 'Fulfillment', (
+            <>
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <label className="field"><span>Stage</span>
                   <select value={stage} onChange={(e) => setStage(e.target.value)}>
@@ -272,12 +281,11 @@ export default function OrderDetail() {
                 </div>
               )}
               <button className="btn btn-sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-            </div>
-          )}
+            </>
+          ))}
 
-          {(canEndorse || canAccept || canReturn) && (
-            <div className="card card-pad" style={{ marginBottom: 16 }}>
-              <div className="k-label" style={{ marginBottom: 8 }}>Endorsement</div>
+          {(canEndorse || canAccept || canReturn) && ovSection('endorsement', 'Endorsement', (
+            <>
               {hstatus && (
                 <div className="fill-label" style={{ marginBottom: 8 }}>
                   Status: <Badge tone={hstatus === 'Accepted' ? 'ok' : hstatus === 'Returned' ? 'danger' : 'info'}>{hstatus}</Badge>
@@ -304,17 +312,17 @@ export default function OrderDetail() {
                 {canAccept && hstatus === 'Endorsed' && <button className="btn btn-sm" onClick={doAccept} disabled={accept.isPending}>{accept.isPending ? 'Accepting…' : 'Accept'}</button>}
                 {canReturn && <button className="btn btn-ghost btn-sm" onClick={doReturn} disabled={returnForCorrection.isPending}>Return for correction</button>}
               </div>
-            </div>
-          )}
+            </>
+          ))}
 
-          <div className="card card-pad">
+          {ovSection('details', 'Details', (
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
               <KeyVal label="Customer">{o.client?.company || o.client?.name || '—'}</KeyVal>
               <KeyVal label="Seats">{o.total_seats}</KeyVal>
               <KeyVal label="Order status">{o.order_status || '—'}</KeyVal>
             </div>
-          </div>
-        </>
+          ))}
+        </div>
       )}
 
       {tab === 'lines' && (

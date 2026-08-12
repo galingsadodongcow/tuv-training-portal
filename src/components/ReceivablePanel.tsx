@@ -128,7 +128,7 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
       )}
 
       {canManage && pay.open && (
-        <div className="card card-pad" style={{ marginBottom: 12, maxWidth: 560 }}>
+        <div className="subform" style={{ marginBottom: 12, maxWidth: 560 }}>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Amount</span><input type="number" min="0" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} /></label>
             <label className="field"><span>Date</span><input type="date" value={pay.paid_date} onChange={(e) => setPay({ ...pay, paid_date: e.target.value })} /></label>
@@ -140,7 +140,7 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
       )}
 
       {canManage && inv.open && (
-        <div className="card card-pad" style={{ marginBottom: 12, maxWidth: 560 }}>
+        <div className="subform" style={{ marginBottom: 12, maxWidth: 560 }}>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
             <label className="field"><span>Amount</span><input type="number" min="0" value={inv.amount} onChange={(e) => setInv({ ...inv, amount: e.target.value })} /></label>
             <label className="field"><span>Due date</span><input type="date" value={inv.due_date} onChange={(e) => setInv({ ...inv, due_date: e.target.value })} /></label>
@@ -204,7 +204,7 @@ export default function ReceivablePanel({ orderId, totalAmount }: { orderId: str
           </table>
           </div>
           {ref && (
-            <div className="card card-pad" style={{ margin: '10px 0', maxWidth: 480 }}>
+            <div className="subform" style={{ margin: '10px 0', maxWidth: 480 }}>
               <div className="k-label" style={{ marginBottom: 8 }}>Refund a payment</div>
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <label className="field"><span>Amount (max {php(ref.max)})</span><input type="number" min="0" max={ref.max} value={ref.amount} onChange={(e) => setRef({ ...ref, amount: e.target.value })} /></label>

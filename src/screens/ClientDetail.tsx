@@ -178,7 +178,10 @@ export default function ClientDetail() {
         }
       />
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
+      <RecordTabs tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === 'overview' && (
+      <div className="card card-pad">
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14 }}>
           <KeyVal label="Bookings">{live.length}</KeyVal>
           <KeyVal label="Seats">{seats}</KeyVal>
@@ -188,76 +191,72 @@ export default function ClientDetail() {
             <span style={{ color: outstanding > 0 ? 'var(--tr-amber)' : undefined }}>{php(outstanding)}</span>
           </KeyVal>
         </div>
-      </div>
 
-      <RecordTabs tabs={tabs} active={tab} onChange={setTab} />
+        <RecordSection title="Details">
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+            <KeyVal label="Contact">{c.contact || c.name || '—'}</KeyVal>
+            <KeyVal label="Email">{c.email || '—'}</KeyVal>
+            <KeyVal label="Phone">{c.phone || '—'}</KeyVal>
+            <KeyVal label="Industry">{c.industry || '—'}</KeyVal>
+            {orgReady && (
+              <KeyVal label="Organization">
+                {canSetOrg ? (
+                  creatingOrg && canCreateOrg ? (
+                    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input aria-label="New organization name" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} placeholder="Organization name" style={{ maxWidth: 170 }} onKeyDown={(e) => e.key === 'Enter' && createOrg()} />
+                      <button className="btn btn-sm" disabled={saving || !newOrgName.trim()} onClick={createOrg}>Save</button>
+                      <button className="linkbtn" onClick={() => { setCreatingOrg(false); setNewOrgName('') }}>Cancel</button>
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <select aria-label="Organization" value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} disabled={saving} style={{ maxWidth: 200 }}>
+                        <option value="">None</option>
+                        {(orgOptions.data || []).map((o: any) => (<option key={o.org_id} value={o.org_id}>{o.name}</option>))}
+                      </select>
+                      {canCreateOrg && <button className="linkbtn" onClick={() => setCreatingOrg(true)}>+ New</button>}
+                    </span>
+                  )
+                ) : c.org_id ? (
+                  <Link href={`/organizations/${c.org_id}`}>{orgName || 'Organization'}</Link>
+                ) : '—'}
+              </KeyVal>
+            )}
+          </div>
+        </RecordSection>
 
-      {tab === 'overview' && (
-      <>
-      <div className="card card-pad">
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-          <KeyVal label="Contact">{c.contact || c.name || '—'}</KeyVal>
-          <KeyVal label="Email">{c.email || '—'}</KeyVal>
-          <KeyVal label="Phone">{c.phone || '—'}</KeyVal>
-          <KeyVal label="Industry">{c.industry || '—'}</KeyVal>
-          {orgReady && (
-            <KeyVal label="Organization">
-              {canSetOrg ? (
-                creatingOrg && canCreateOrg ? (
-                  <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input aria-label="New organization name" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} placeholder="Organization name" style={{ maxWidth: 170 }} onKeyDown={(e) => e.key === 'Enter' && createOrg()} />
-                    <button className="btn btn-sm" disabled={saving || !newOrgName.trim()} onClick={createOrg}>Save</button>
-                    <button className="linkbtn" onClick={() => { setCreatingOrg(false); setNewOrgName('') }}>Cancel</button>
-                  </span>
-                ) : (
-                  <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <select aria-label="Organization" value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} disabled={saving} style={{ maxWidth: 200 }}>
-                      <option value="">None</option>
-                      {(orgOptions.data || []).map((o: any) => (<option key={o.org_id} value={o.org_id}>{o.name}</option>))}
-                    </select>
-                    {canCreateOrg && <button className="linkbtn" onClick={() => setCreatingOrg(true)}>+ New</button>}
-                  </span>
-                )
-              ) : c.org_id ? (
-                <Link href={`/organizations/${c.org_id}`}>{orgName || 'Organization'}</Link>
-              ) : '—'}
-            </KeyVal>
-          )}
-        </div>
-      </div>
-
-      {/* Related accounts — the parent/child grouping folded in from the retired
-          Organizations book (#6). Siblings under the same org; the org record
-          (kept off-nav) is where members/attributes/files are managed. */}
-      {orgReady && c.org_id && (
-        <RecordSection title="Related accounts">
-          <div className="card">
-            <div className="toolbar" style={{ justifyContent: 'space-between', padding: '10px 14px' }}>
+        {/* Related accounts — the parent/child grouping folded in from the retired
+            Organizations book (#6). Siblings under the same org; the org record
+            (kept off-nav) is where members/attributes/files are managed. De-carded
+            into a record-section so the overview is one card, not stacked cards. */}
+        {orgReady && c.org_id && (
+          <RecordSection title="Related accounts">
+            <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
               <span className="fill-label">Other customers under {orgName || 'this organization'}</span>
               <Link href={`/organizations/${c.org_id}`} className="btn btn-ghost btn-sm">Manage organization ›</Link>
             </div>
             {siblings.isLoading ? (
-              <div style={{ padding: 14 }}><Spinner /></div>
+              <Spinner />
             ) : related.length === 0 ? (
-              <div className="empty">No other accounts under this organization yet.</div>
+              <div className="muted fill-label">No other accounts under this organization yet.</div>
             ) : (
-              <table>
-                <thead><tr><th>Customer</th><th>Contact</th><th>Owner</th></tr></thead>
-                <tbody>
-                  {related.map((s: any) => (
-                    <tr key={s.client_id}>
-                      <td><Link href={`/clients/${s.client_id}`} style={{ fontWeight: 600 }}>{s.company || s.name}</Link></td>
-                      <td className="fill-label">{s.contact || '—'}</td>
-                      <td className="fill-label">{s.salesperson?.name || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="scroll-x">
+                <table>
+                  <thead><tr><th>Customer</th><th>Contact</th><th>Owner</th></tr></thead>
+                  <tbody>
+                    {related.map((s: any) => (
+                      <tr key={s.client_id}>
+                        <td><Link href={`/clients/${s.client_id}`} style={{ fontWeight: 600 }}>{s.company || s.name}</Link></td>
+                        <td className="fill-label">{s.contact || '—'}</td>
+                        <td className="fill-label">{s.salesperson?.name || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-        </RecordSection>
-      )}
-      </>
+          </RecordSection>
+        )}
+      </div>
       )}
 
       {tab === 'orders' && (
