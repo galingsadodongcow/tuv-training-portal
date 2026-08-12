@@ -333,6 +333,12 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 /* ------------------------------------------- Record detail workspaces */
 .back-link { display: inline-block; font-size: 13px; color: var(--text-muted); text-decoration: none; margin-bottom: 6px; }
 .back-link:hover { color: var(--accent); }
+/* Breadcrumb trail on record headers (Home › Section › Record) */
+.breadcrumb { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.breadcrumb a { color: var(--text-muted); text-decoration: none; }
+.breadcrumb a:hover { color: var(--accent); }
+.breadcrumb-sep { color: var(--text-faint); margin: 0 2px; }
+.breadcrumb [aria-current="page"] { color: var(--text); font-weight: 550; }
 .record-head { align-items: flex-start; }
 .record-actions { flex-shrink: 0; }
 .record-section { border-top: 1px solid var(--border-soft); padding-top: 18px; margin-top: 18px; }

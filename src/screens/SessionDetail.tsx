@@ -168,7 +168,7 @@ export default function SessionDetail() {
   return (
     <>
       <RecordHeader
-        back={{ href: '/calendar', label: 'Calendar' }}
+        crumbs={[{ href: '/home', label: 'Home' }, { href: '/calendar', label: 'Calendar' }, { label: schedule.course?.course_name || 'Session' }]}
         title={schedule.course?.course_name}
         subtitle={`${formatSegments(schedule.date_segments, schedule.start_date, schedule.end_date)} · ${lt(schedule.modality)} · ${schedule.course?.training_type}`}
         badges={
