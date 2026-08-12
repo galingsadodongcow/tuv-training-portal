@@ -52,3 +52,11 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - **Routes kept as redirects** for a release: `/dashboard → /analytics`, `/reports → /analytics?tab=revenue`, `/quality → /analytics?tab=quality`, `/data-quality → /analytics?tab=data`. Dashboard KPI cards repointed from `/reports`·`/data-quality` to the matching `/analytics?tab=…`.
   - **Nav:** the single "Analytics" item now points to `/analytics`; the standalone **Data quality** Admin item is retired (super_admin reaches it as the Data quality tab). `AnalyticsTabs.tsx` deleted.
 - Files: `src/screens/{Analytics,Complaints,Dashboard,Reports,Quality,DataQuality}.tsx`, `src/app/(app)/{analytics,complaints,dashboard,reports,quality,data-quality}/page.tsx`, `src/lib/roles.ts`; deleted `src/components/AnalyticsTabs.tsx`.
+
+## Wave 9 — Organizations → Customer 360
+- **#6 Organizations → Customer 360** — the standalone Organizations book folds into the customer record.
+  - **Customer 360 Overview** gains **Related accounts**: the parent organization plus the sibling customers under it (`useOrgClients(client.org_id)`, self excluded), each linking to its customer record, with a **"Manage organization ›"** link to the org record. The existing editable Organization field stays; **org creation folds in** as an inline **"+ New"** (create org + group this customer), gated to the old Organizations-screen creators (super_admin / owning sales).
+  - **Nav:** the **Organizations** item is removed from the Customers group. `Organizations.tsx` (list) deleted; `/organizations` now **redirects to `/clients`**.
+  - **Org record kept, off-nav:** `/organizations/[id]` (`OrganizationDetail`) stays reachable from a customer to manage members, attributes, and files — so no org-admin capability is lost (there is no Admin › Reference data home yet; redirecting the record would have dropped org files/edit/membership). Its crumbs/back now point to Customers.
+  - `organization` table + RLS untouched; app still uses the `org_id` column (the `organization_id` canonical/`org_id` mirror sync trigger from the phase-B migration bridges it).
+- Files: `src/screens/{ClientDetail,OrganizationDetail}.tsx`, `src/lib/roles.ts`, `src/app/(app)/organizations/page.tsx`; deleted `src/screens/Organizations.tsx`.

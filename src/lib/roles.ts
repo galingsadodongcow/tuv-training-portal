@@ -59,9 +59,11 @@ export const NAV: NavItem[] = [
   { path: '/sales-entry', label: 'New order', roles: ['super_admin', 'sales', 'coordinator'], icon: 'plus', group: 'CRM' },
   { path: '/orders', label: 'Orders', roles: ALL, icon: 'orders', group: 'CRM' },
 
-  // Customers — the customer record.
+  // Customers — the customer record. Organizations folded into Customer 360
+  // (parent grouping + Related accounts on the record; #6). The org list route
+  // redirects to /clients; the org record (/organizations/[id]) stays reachable
+  // off-nav from a customer for managing members, attributes, and files.
   { path: '/clients', label: 'Customers', roles: ALL, icon: 'clients', group: 'Customers' },
-  { path: '/organizations', label: 'Organizations', roles: ALL, icon: 'organizations', group: 'Customers' },
 
   // Operations — delivery and fulfillment. (Operations today retired: its
   // aggregator sections live in My Work + Calendar; /operations-today redirects.)

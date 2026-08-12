@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useClient, useClientHistory, useEntityActivity, useAuditTrail, useInvalidate, useOrgOptions } from '../hooks/data'
+import { useClient, useClientHistory, useEntityActivity, useAuditTrail, useInvalidate, useOrgOptions, useOrgClients } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordTabs, RecordSection, KeyVal, Badge } from '../components/record'
 import ActivityTimeline from '../components/ActivityTimeline'
@@ -38,11 +38,16 @@ export default function ClientDetail() {
   const confirm = useConfirm()
   const invalidate = useInvalidate()
   const [saving, setSaving] = useState(false)
+  const [creatingOrg, setCreatingOrg] = useState(false)
+  const [newOrgName, setNewOrgName] = useState('')
   const client = useClient(id)
   const orgOptions = useOrgOptions()
   const hist = useClientHistory(id)
   const activity = useEntityActivity('client', id)
   const audit = useAuditTrail('client', id)
+  // Sibling accounts under the same organization (the Organizations book folded
+  // into the customer record — #6). Disabled until org_id resolves.
+  const siblings = useOrgClients((client.data as any)?.org_id)
 
   if (client.isLoading) return <Spinner label="Loading customer" />
   if (client.error) return <ErrorNote error={client.error} />
@@ -71,13 +76,34 @@ export default function ClientDetail() {
   // the control until then.
   const orgReady = c.org_id !== undefined
   const canSetOrg = orgReady && (['super_admin', 'coordinator', 'operations', 'business_owner'].includes(profile?.role as string) || isOwnerSales)
+  // Creating a new org (vs. assigning an existing one) keeps the old
+  // Organizations-screen gate: super_admin, or the owning sales rep.
+  const canCreateOrg = canSetOrg && (profile?.role === 'super_admin' || (profile?.role === 'sales' && isOwnerSales))
   const orgName = (orgOptions.data || []).find((o: any) => o.org_id === c.org_id)?.name
+  // Other customers under the same organization (this customer excluded).
+  const related = (siblings.data || []).filter((s: any) => s.client_id !== id)
 
   const setOrg = async (orgId: string | null) => {
     setSaving(true)
     const { error } = await supabase.from('client').update({ org_id: orgId }).eq('client_id', id)
     if (error) toast.error(error.message)
     else { toast.success(orgId ? 'Organization set.' : 'Organization cleared.'); invalidate(['client', 'clients', 'org_summary', 'org_clients']) }
+    setSaving(false)
+  }
+
+  // Create a new organization and group this customer under it. Org creation
+  // folded here from the retired Organizations list; attributes (industry,
+  // country, notes) are then editable on the organization record.
+  const createOrg = async () => {
+    const name = newOrgName.trim()
+    if (!name) return
+    setSaving(true)
+    const { data, error } = await supabase.from('organization').insert({ name }).select('org_id').single()
+    if (error) { toast.error(error.message); setSaving(false); return }
+    const { error: e2 } = await supabase.from('client').update({ org_id: data.org_id }).eq('client_id', id)
+    if (e2) toast.error(e2.message)
+    else { toast.success('Organization created.'); invalidate(['client', 'clients', 'org_summary', 'org_clients', 'org_options']) }
+    setCreatingOrg(false); setNewOrgName('')
     setSaving(false)
   }
 
@@ -162,6 +188,7 @@ export default function ClientDetail() {
       <RecordTabs tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === 'overview' && (
+      <>
       <div className="card card-pad">
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
           <KeyVal label="Contact">{c.contact || c.name || '—'}</KeyVal>
@@ -171,10 +198,21 @@ export default function ClientDetail() {
           {orgReady && (
             <KeyVal label="Organization">
               {canSetOrg ? (
-                <select aria-label="Organization" value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} disabled={saving} style={{ maxWidth: 220 }}>
-                  <option value="">None</option>
-                  {(orgOptions.data || []).map((o: any) => (<option key={o.org_id} value={o.org_id}>{o.name}</option>))}
-                </select>
+                creatingOrg && canCreateOrg ? (
+                  <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input aria-label="New organization name" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} placeholder="Organization name" style={{ maxWidth: 170 }} onKeyDown={(e) => e.key === 'Enter' && createOrg()} />
+                    <button className="btn btn-sm" disabled={saving || !newOrgName.trim()} onClick={createOrg}>Save</button>
+                    <button className="linkbtn" onClick={() => { setCreatingOrg(false); setNewOrgName('') }}>Cancel</button>
+                  </span>
+                ) : (
+                  <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select aria-label="Organization" value={c.org_id || ''} onChange={(e) => setOrg(e.target.value || null)} disabled={saving} style={{ maxWidth: 200 }}>
+                      <option value="">None</option>
+                      {(orgOptions.data || []).map((o: any) => (<option key={o.org_id} value={o.org_id}>{o.name}</option>))}
+                    </select>
+                    {canCreateOrg && <button className="linkbtn" onClick={() => setCreatingOrg(true)}>+ New</button>}
+                  </span>
+                )
               ) : c.org_id ? (
                 <Link href={`/organizations/${c.org_id}`}>{orgName || 'Organization'}</Link>
               ) : '—'}
@@ -182,6 +220,39 @@ export default function ClientDetail() {
           )}
         </div>
       </div>
+
+      {/* Related accounts — the parent/child grouping folded in from the retired
+          Organizations book (#6). Siblings under the same org; the org record
+          (kept off-nav) is where members/attributes/files are managed. */}
+      {orgReady && c.org_id && (
+        <RecordSection title="Related accounts">
+          <div className="card">
+            <div className="toolbar" style={{ justifyContent: 'space-between', padding: '10px 14px' }}>
+              <span className="fill-label">Other customers under {orgName || 'this organization'}</span>
+              <Link href={`/organizations/${c.org_id}`} className="btn btn-ghost btn-sm">Manage organization ›</Link>
+            </div>
+            {siblings.isLoading ? (
+              <div style={{ padding: 14 }}><Spinner /></div>
+            ) : related.length === 0 ? (
+              <div className="empty">No other accounts under this organization yet.</div>
+            ) : (
+              <table>
+                <thead><tr><th>Customer</th><th>Contact</th><th>Owner</th></tr></thead>
+                <tbody>
+                  {related.map((s: any) => (
+                    <tr key={s.client_id}>
+                      <td><Link href={`/clients/${s.client_id}`} style={{ fontWeight: 600 }}>{s.company || s.name}</Link></td>
+                      <td className="fill-label">{s.contact || '—'}</td>
+                      <td className="fill-label">{s.salesperson?.name || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </RecordSection>
+      )}
+      </>
       )}
 
       {tab === 'orders' && (
