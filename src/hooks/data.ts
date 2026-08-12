@@ -917,7 +917,30 @@ export function useContacts(clientId?: string) {
   return useQuery({
     queryKey: ['contacts', clientId],
     enabled: !!clientId,
-    queryFn: () => okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), []),
+    queryFn: async () => {
+      // Hide soft-removed contacts (#129). Falls back to the unfiltered query
+      // before the contact.status migration is applied (42703).
+      const withStatus = await supabase.from('contact').select('*').eq('client_id', clientId).neq('status', 'Removed').order('is_primary', { ascending: false })
+      if (!withStatus.error) return withStatus.data
+      if (!isMissingColumn(withStatus.error)) throw withStatus.error
+      return okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), [])
+    },
+  })
+}
+
+// Orders currently returned-for-correction (order_handoff.status = 'Returned'),
+// for the distinct My Work queue (#129). RLS scopes rows to orders the user can
+// see (fn_can_see_order). The caller joins order details from the queue it holds.
+export function useReturnedHandoffs() {
+  return useQuery({
+    queryKey: ['returned_handoffs'],
+    queryFn: () => okOr(
+      supabase.from('order_handoff')
+        .select('order_id, return_reason, returned_at')
+        .eq('status', 'Returned')
+        .order('returned_at', { ascending: false }),
+      []
+    ),
   })
 }
 
