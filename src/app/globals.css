@@ -589,11 +589,6 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .health-ok      { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
 .health-done    { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
 /* small dot form for dense calendars */
-.health-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
-.health-dot.health-blocked { background: var(--danger); }
-.health-dot.health-risk { background: var(--warning); }
-.health-dot.health-ok { background: var(--success); }
-.health-dot.health-done { background: var(--text-faint); }
 
 /* Notification center */
 .notif-wrap { position: relative; display: inline-flex; margin-left: 8px; }

@@ -159,7 +159,7 @@ export default function OrderDetail() {
     let overrideReason: string | undefined
     if (comp && comp.ok === false) {
       if (profile?.role !== 'super_admin') { toast.error('Order is not complete — resolve the blockers first.'); return }
-      const res = await confirm({ title: 'Endorse despite blockers?', body: 'This order has open completeness blockers. As super admin you may override.', confirmLabel: 'Override and endorse', tone: 'danger', reason: 'optional', reasonLabel: 'Override reason (required)' })
+      const res = await confirm({ title: 'Endorse despite blockers?', body: 'This order has open completeness blockers. As super admin you may override.', confirmLabel: 'Override and endorse', tone: 'danger', reason: 'required', reasonLabel: 'Override reason (required)' })
       if (!res.ok) return
       if (!res.reason?.trim()) { toast.error('An override reason is required.'); return }
       overrideReason = res.reason.trim()
@@ -172,7 +172,7 @@ export default function OrderDetail() {
     catch (e: any) { toast.error(e.message || 'Could not accept the endorsement.') }
   }
   const doReturn = async () => {
-    const res = await confirm({ title: 'Return for correction?', body: 'This sends the order back to “For Order Creation”.', confirmLabel: 'Return', tone: 'danger', reason: 'optional', reasonLabel: 'Reason (required)' })
+    const res = await confirm({ title: 'Return for correction?', body: 'This sends the order back to “Ready to create order”.', confirmLabel: 'Return', tone: 'danger', reason: 'required', reasonLabel: 'Reason (required)' })
     if (!res.ok) return
     if (!res.reason?.trim()) { toast.error('A reason is required to return an order.'); return }
     try { await returnForCorrection.mutateAsync({ orderId: id, reason: res.reason.trim() }); toast.success('Returned for correction.') }

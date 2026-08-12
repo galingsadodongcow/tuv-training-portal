@@ -217,14 +217,14 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
     setMsg(null)
     const { error } = await supabase.from('participant').update({ result, assessed_date: new Date().toISOString().slice(0, 10) }).eq('participant_id', pid)
     if (error) { setMsg(error.message); toast.error(error.message) }
-    else invalidate(['roster'])
+    else { invalidate(['roster']); toast.success('Result saved.') }
   }
 
   const setScore = async (pid, score) => {
     setMsg(null)
     const { error } = await supabase.from('participant').update({ score: score === '' ? null : Number(score) }).eq('participant_id', pid)
     if (error) { setMsg(error.message); toast.error(error.message) }
-    else invalidate(['roster'])
+    else { invalidate(['roster']); toast.success('Score saved.') }
   }
 
   const issueOne = async (pid) => {
