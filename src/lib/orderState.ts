@@ -8,6 +8,8 @@
 // assignment) or a fulfillment-queue row (age_days, days_in_stage, owner_code),
 // so the same predicates power every screen.
 
+import { signalFromTone, signalMeta } from './health'
+
 export type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral'
 export type FlagKind = 'blocker' | 'collection'
 
@@ -107,6 +109,11 @@ export function primaryFlag(o: any): OrderFlag | null {
   if (flags.length === 0) return null
   return [...flags].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone])[0]
 }
+
+// An order flag's pill class on the shared attention scale (health.ts), so
+// order blockers render in the same blocked/risk/ok colours as session health
+// instead of borrowing status-pill classes.
+export const flagClass = (f: OrderFlag): string => signalMeta(signalFromTone(f.tone)).cls
 
 // ---- named work queues, shared by the fulfillment screen and home links ----
 export interface OrderView {
