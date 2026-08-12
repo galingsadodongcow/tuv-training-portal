@@ -31,6 +31,9 @@ export default function Inquiries() {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>(emptyForm)
   const [busy, setBusy] = useState(false)
+  // Deal-sizing fields (value, probability, close, source, …) fold away — logging
+  // an inbound lead only needs the company and a contact; qualification comes later.
+  const [dealDetails, setDealDetails] = useState(false)
   const set = (k: string) => (e: any) => setForm((f: any) => ({ ...f, [k]: e.target.value }))
 
   const byStage = useMemo(() => {
@@ -67,7 +70,7 @@ export default function Inquiries() {
       ;({ error } = await supabase.from('inquiry').insert(base))
     }
     if (error) toast.error(error.message)
-    else { toast.success('Inquiry added.'); setForm(emptyForm); setCreating(false); invalidate(['inquiries']) }
+    else { toast.success('Inquiry added.'); setForm(emptyForm); setCreating(false); setDealDetails(false); invalidate(['inquiries']) }
     setBusy(false)
   }
 
@@ -109,30 +112,15 @@ export default function Inquiries() {
 
       {creating && (
         <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 720 }}>
+          {/* Essentials — enough to log the lead and start working it. */}
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Company</span><input value={form.company} onChange={set('company')} /></label>
             <label className="field"><span>Contact</span><input value={form.contact} onChange={set('contact')} /></label>
             <label className="field"><span>Email</span><input type="email" value={form.email} onChange={set('email')} /></label>
-            <label className="field"><span>Phone</span><input value={form.phone} onChange={set('phone')} /></label>
             <label className="field"><span>Course of interest</span>
               <select value={form.course_id} onChange={set('course_id')}>
                 <option value="">Not specified</option>
                 {courses.data?.map((c: any) => (<option key={c.course_id} value={c.course_id}>{c.course_name}</option>))}
-              </select>
-            </label>
-            <label className="field"><span>Offering</span>
-              <select value={form.offering_type} onChange={set('offering_type')}>
-                {OFFERINGS.map((o) => (<option key={o}>{o}</option>))}
-              </select>
-            </label>
-            <label className="field"><span>Estimated pax</span><input type="number" min="1" value={form.pax} onChange={set('pax')} /></label>
-            <label className="field"><span>Estimated value (PHP)</span><input type="number" min="0" value={form.est_value} onChange={set('est_value')} /></label>
-            <label className="field"><span>Win probability %</span><input type="number" min="0" max="100" value={form.probability} onChange={set('probability')} /></label>
-            <label className="field"><span>Expected close</span><input type="date" value={form.expected_close} onChange={set('expected_close')} /></label>
-            <label className="field"><span>Source</span>
-              <select value={form.source} onChange={set('source')}>
-                <option value="">Not specified</option>
-                {SOURCES.map((s) => (<option key={s}>{s}</option>))}
               </select>
             </label>
             {isAdmin && (
@@ -144,6 +132,37 @@ export default function Inquiries() {
               </label>
             )}
           </div>
+
+          {/* Deal sizing / qualification — optional, folded by default. */}
+          {!dealDetails ? (
+            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={false} style={{ marginTop: 4 }} onClick={() => setDealDetails(true)}>
+              Add deal details — phone, offering, pax, value, probability, close, source
+            </button>
+          ) : (
+            <>
+              <div className="toolbar" style={{ margin: '4px 0 8px' }}>
+                <button type="button" className="btn btn-ghost btn-sm" aria-expanded={true} onClick={() => setDealDetails(false)}>Hide deal details</button>
+              </div>
+              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <label className="field"><span>Phone</span><input value={form.phone} onChange={set('phone')} /></label>
+                <label className="field"><span>Offering</span>
+                  <select value={form.offering_type} onChange={set('offering_type')}>
+                    {OFFERINGS.map((o) => (<option key={o}>{o}</option>))}
+                  </select>
+                </label>
+                <label className="field"><span>Estimated pax</span><input type="number" min="1" value={form.pax} onChange={set('pax')} /></label>
+                <label className="field"><span>Estimated value (PHP)</span><input type="number" min="0" value={form.est_value} onChange={set('est_value')} /></label>
+                <label className="field"><span>Win probability %</span><input type="number" min="0" max="100" value={form.probability} onChange={set('probability')} /></label>
+                <label className="field"><span>Expected close</span><input type="date" value={form.expected_close} onChange={set('expected_close')} /></label>
+                <label className="field"><span>Source</span>
+                  <select value={form.source} onChange={set('source')}>
+                    <option value="">Not specified</option>
+                    {SOURCES.map((s) => (<option key={s}>{s}</option>))}
+                  </select>
+                </label>
+              </div>
+            </>
+          )}
           <div className="toolbar" style={{ marginTop: 8 }}>
             <button className="btn btn-sm" onClick={createInquiry} disabled={busy}>{busy ? 'Adding…' : 'Add inquiry'}</button>
           </div>

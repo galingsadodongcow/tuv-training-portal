@@ -56,6 +56,18 @@ Implementation-focused record of the simplification work (the "make it lighter /
 
 ---
 
+## Phase 2 — Sales / CRM simplification
+
+### CRM1 — Leaner inquiry capture (progressive disclosure)
+- **Previous:** the "New inquiry" form (inline on the pipeline board) showed **all 11 fields at once** — company, contact, email, phone, course, offering, estimated pax, estimated value, win probability, expected close, source (plus salesperson for admins) — though only **company** is required to log a lead.
+- **Problem:** logging an inbound lead should take seconds, but the form presented a full qualification questionnaire up front. Most of those fields (value, probability, expected close, source, pax) are deal-*sizing* data that gets filled in as the lead is worked, not at first contact.
+- **Decision — Simplify (progressive disclosure), mirroring S3.** The form now leads with the essentials — **Company · Contact · Email · Course of interest** (+ Salesperson for admins) — and folds the deal-sizing fields (phone, offering, pax, value, probability, expected close, source) behind an **"Add deal details"** toggle. `offering_type` keeps its `Public` default; every folded field was already optional in `createInquiry`, so nothing about validation or submit changed. The disclosure resets when the form closes or a lead is saved.
+- **Result:** capturing a lead is a 4-field task (company + contact + email + course) instead of 11; qualification data is one click away when the rep is ready for it. No new required fields.
+- **Files:** `src/screens/Inquiries.tsx` (`dealDetails` state + folded qualification grid).
+- **Also reviewed, no change needed:** `Quotations.tsx` (create form already 2–3 fields), `SalesEntry.tsx` (already a clean card-per-section flow with staged validation).
+
+---
+
 ## Planned next entries (this phase)
 - S6 — Categories/subcategories: **DB-dependent** (today `course.category` is free-text; a real hierarchy needs tables + RLS) → Supabase session; meanwhile keep category as a managed free-text list in Course management.
 
