@@ -419,9 +419,6 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
-.pill-today { background: var(--danger); color: #fff; }
-.pill-thisweek { background: var(--warning); color: #fff; }
-.pill-soon { background: var(--accent-tint); color: var(--accent); }
 .cal-table tr.upcoming { background: var(--accent-tint-2); }
 .cal-table tr.upcoming td:first-child { font-weight: 600; }
 .cal-table tr.upcoming:hover { background: var(--accent-tint); }
@@ -579,18 +576,17 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 }
 .nav-list > .nav-group:first-child { padding-top: 4px; }
 
-/* Computed session-health pills (see src/lib/health.ts) */
-.health-blocked   { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
-.health-risk      { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
-.health-attention { background: color-mix(in srgb, var(--warning) 11%, transparent); color: var(--warning); }
-.health-healthy   { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
-.health-done      { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
+/* The one attention scale — blocked · risk · ok · done (see src/lib/health.ts).
+   Session health, order flags, and lead/quote badges all render with these. */
+.health-blocked { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
+.health-risk    { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+.health-ok      { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.health-done    { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
 /* small dot form for dense calendars */
 .health-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
 .health-dot.health-blocked { background: var(--danger); }
 .health-dot.health-risk { background: var(--warning); }
-.health-dot.health-attention { background: color-mix(in srgb, var(--warning) 60%, var(--card)); }
-.health-dot.health-healthy { background: var(--success); }
+.health-dot.health-ok { background: var(--success); }
 .health-dot.health-done { background: var(--text-faint); }
 
 /* Notification center */

@@ -1,5 +1,5 @@
 'use client'
-import { orderFlags, primaryFlag } from '../lib/orderState'
+import { orderFlags, primaryFlag, flagClass } from '../lib/orderState'
 
 // A one-line state banner for the order workspace. It leads with the single
 // most important problem, then lists the rest as chips. When nothing is wrong
@@ -25,7 +25,7 @@ export default function BlockerBar({ order }: { order: any }) {
       {rest.length > 0 && (
         <span className="blockerbar-rest">
           {rest.map((f, i) => (
-            <span key={i} className={`pill ${f.tone === 'danger' ? 'pill-nogo' : f.tone === 'warn' ? 'pill-tentative' : 'pill-webshop'}`}>
+            <span key={i} className={`pill ${flagClass(f)}`}>
               {f.label}
             </span>
           ))}

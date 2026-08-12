@@ -10,7 +10,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
-import { healthMeta, healthNeedsAction } from '../lib/health'
+import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
@@ -36,14 +36,6 @@ const STATUS_ABBR: Record<string, string> = {
   Confirmed: 'C', Tentative: 'T', Running: 'R', Completed: 'D', Cancelled: 'X',
 }
 
-function UrgencyPill({ days }: { days: number | null }) {
-  if (days == null || days < 0) return null
-  if (days === 0) return <span className="pill pill-today">Today</span>
-  if (days <= 7) return <span className="pill pill-thisweek">In {days}d</span>
-  if (days <= 30) return <span className="pill pill-soon">In {days}d</span>
-  return null
-}
-
 // Small at-a-glance cue for sessions that need operator attention (blocked / at
 // risk / needs attention). Healthy and terminal sessions show nothing, so the
 // calendar stays quiet unless something actually needs eyes. Degrades to null
@@ -56,11 +48,12 @@ function HealthChip({ h, style }: { h?: string; style?: React.CSSProperties }) {
 
 // Textual companion to the coloured risk bar on the row's first cell, so an
 // at-risk (undersold, start date approaching) session is never signalled by
-// colour alone (WCAG 1.4.1). Reuses the danger/warning pill tones.
+// colour alone (WCAG 1.4.1). Reads on the shared attention scale — a red bar is
+// blocked, an amber bar is risk.
 function RiskTag({ cls }: { cls: string }) {
   if (cls !== 'risk-red' && cls !== 'risk-amber') return null
   return (
-    <span className={`pill ${cls === 'risk-red' ? 'pill-today' : 'pill-thisweek'}`}
+    <span className={`pill ${cls === 'risk-red' ? signalMeta('blocked').cls : signalMeta('risk').cls}`}
       title="Undersold with the start date approaching — needs attention"
       style={{ fontSize: 10, padding: '1px 6px', marginTop: 2, alignSelf: 'flex-start' }}>
       ▲ At risk
@@ -354,11 +347,8 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows:
           </span>
         </td>
         <td data-label="Dates">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span>{formatSegments(r.date_segments, r.start_date, r.end_date)}</span>
-            <UrgencyPill days={d} />
-          </div>
-          {d != null && d > 30 && <div className="fill-label">in {d}d</div>}
+          <span>{formatSegments(r.date_segments, r.start_date, r.end_date)}</span>
+          {d != null && d >= 0 && <div className="fill-label">{d === 0 ? 'today' : `in ${d}d`}</div>}
           {d != null && d < 0 && <div className="fill-label">past</div>}
         </td>
         <td data-label="Learning type" className="hide-m">
