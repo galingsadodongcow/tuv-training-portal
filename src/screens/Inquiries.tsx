@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useInquiries, useCourses, useSalespeople, useInvalidate } from '../hooks/data'
 import { useSort } from '../hooks/useSort'
 import { Combobox } from '../components/inputs/Combobox'
+import { useFormErrors, Field } from '../components/inputs/Field'
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
@@ -46,6 +47,14 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>(emptyForm)
   const [busy, setBusy] = useState(false)
+  // Inline per-field validation for the New-inquiry form (#125).
+  const fe = useFormErrors()
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const createErrors = {
+    company: !form.company.trim() ? 'Company is required.' : null,
+    email: form.email.trim() && !emailRe.test(form.email.trim()) ? 'Enter a valid email.' : null,
+    sales: isAdmin && !form.sales_id ? 'Pick a salesperson.' : null,
+  }
   // Deal-sizing fields (value, probability, close, source, …) fold away — logging
   // an inbound lead only needs the company and a contact; qualification comes later.
   const [dealDetails, setDealDetails] = useState(false)
@@ -72,9 +81,9 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   }, [inquiries.data])
 
   const createInquiry = async () => {
+    if (!fe.submit(createErrors)) return
     const salesId = isAdmin ? form.sales_id : profile?.sales_id
     if (!salesId) { toast.error('Pick a salesperson for this inquiry.'); return }
-    if (!form.company.trim()) { toast.error('Company is required.'); return }
     setBusy(true)
     const body: any = {
       sales_id: salesId,
@@ -282,21 +291,25 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
         <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 720 }}>
           {/* Essentials — enough to log the lead and start working it. */}
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <label className="field"><span>Company</span><input value={form.company} onChange={set('company')} /></label>
+            <Field label="Company" required error={createErrors.company} show={fe.shows('company')}>
+              <input value={form.company} onChange={set('company')} {...fe.inputProps('company', createErrors.company)} />
+            </Field>
             <label className="field"><span>Contact</span><input value={form.contact} onChange={set('contact')} /></label>
-            <label className="field"><span>Email</span><input type="email" value={form.email} onChange={set('email')} /></label>
+            <Field label="Email" error={createErrors.email} show={fe.shows('email')}>
+              <input type="email" value={form.email} onChange={set('email')} {...fe.inputProps('email', createErrors.email)} />
+            </Field>
             <label className="field"><span>Course of interest</span>
               <Combobox ariaLabel="Course of interest" placeholder="Search a course…"
                 options={courseOptions} value={form.course_id}
                 onChange={(v) => setForm((f: any) => ({ ...f, course_id: v }))} />
             </label>
             {isAdmin && (
-              <label className="field"><span>Salesperson</span>
-                <select value={form.sales_id} onChange={set('sales_id')}>
+              <Field label="Salesperson" required error={createErrors.sales} show={fe.shows('sales')}>
+                <select value={form.sales_id} onChange={set('sales_id')} {...fe.inputProps('sales', createErrors.sales)}>
                   <option value="">Select…</option>
                   {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
                 </select>
-              </label>
+              </Field>
             )}
           </div>
 
