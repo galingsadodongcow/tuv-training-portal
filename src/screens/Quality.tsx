@@ -1,4 +1,5 @@
 'use client'
+import AnalyticsTabs from '../components/AnalyticsTabs'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
@@ -60,6 +61,7 @@ export default function Quality() {
 
   return (
     <>
+      <AnalyticsTabs />
       <div className="page-head">
         <div>
           <h1>Feedback and quality</h1>
