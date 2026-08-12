@@ -14,6 +14,7 @@ import {
   useInvalidate,
   useInquiries,
   useQuotes,
+  useDuplicates,
 } from '../hooks/data'
 import { inquiryHealth, quoteHealth } from '../lib/leadHealth'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
@@ -115,6 +116,13 @@ export default function MyWork() {
   // (ops/BO/super_admin) see everyone's — same rule as the Worklist default.
   const selfScoped = !!myCode && !profile?.salesperson?.is_supervisor
   const canDecide = role === 'business_owner' || role === 'super_admin'
+
+  // Duplicate-order candidates — the retired Duplicates screen surfaces here as a
+  // My Work exception for the roles that resolve them (#14). Resolution stays on
+  // the /duplicates screen (kept, off-nav).
+  const canSeeDuplicates = ['super_admin', 'operations', 'coordinator'].includes(role as string)
+  const duplicates = useDuplicates()
+  const dupRows = canSeeDuplicates ? (duplicates.data || []) : []
 
   const tasks = useMyTasks(userId)
   const approvals = useApprovals()
@@ -445,6 +453,35 @@ export default function MyWork() {
           </tbody>
         </table>
       </Section>
+
+      {/* 6. Possible duplicate orders — the retired Duplicates screen, surfaced as
+          an exception for the roles that resolve them. Resolve on /duplicates. */}
+      {canSeeDuplicates && (
+        <Section
+          title="Possible duplicate orders"
+          count={dupRows.length}
+          isLoading={duplicates.isLoading}
+          error={duplicates.error}
+          isEmpty={dupRows.length === 0}
+          emptyLabel="No open duplicate candidates."
+        >
+          <table>
+            <tbody>
+              {dupRows.map((d: any) => (
+                <tr key={d.candidate_id}>
+                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {d.order_id_a} <span className="fill-label">vs</span> {d.order_id_b}
+                    <div className="fill-label">{d.match_basis}</div>
+                  </td>
+                  <td className="right">
+                    <Link href="/duplicates">Resolve ›</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
     </>
   )
 }
