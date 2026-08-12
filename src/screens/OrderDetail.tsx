@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAuditTrail, useOrderNotes,
@@ -9,7 +9,7 @@ import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAudi
 import ActivityTimeline from '../components/ActivityTimeline'
 import { noteEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
-import { RecordHeader, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
+import { RecordHeader, RecordTabs, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
 import BlockerBar from '../components/BlockerBar'
 import ReceivablePanel from '../components/ReceivablePanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
@@ -66,6 +66,16 @@ function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => voi
 export default function OrderDetail() {
   const params = useParams()
   const id = String(params.id)
+  const router = useRouter()
+  const pathname = usePathname()
+  const search = useSearchParams()
+  const tab = search.get('tab') || 'overview'
+  const setTab = (t: string) => {
+    const n = new URLSearchParams(search.toString())
+    if (t === 'overview') n.delete('tab')
+    else n.set('tab', t)
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
   const { profile } = useAuth()
   const invalidate = useInvalidate()
   const toast = useToast()
@@ -188,10 +198,19 @@ export default function OrderDetail() {
     setBusy(false)
   }
 
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'lines', label: `Lines (${lines.length})` },
+    { key: 'payments', label: 'Payments' },
+    { key: 'files', label: 'Files' },
+    { key: 'comments', label: `Comments (${notes.data?.length || 0})` },
+    { key: 'activity', label: 'Activity' },
+  ]
+
   return (
     <>
       <RecordHeader
-        back={{ href: '/orders', label: 'Orders' }}
+        crumbs={[{ href: '/home', label: 'Home' }, { href: '/orders', label: 'Orders' }, { label: o.order_id }]}
         title={o.client?.company || o.client?.name || 'Order'}
         subtitle={`${o.order_id} · ${shortDate(o.order_date)} · ${php(o.total_amount)}`}
         badges={
@@ -208,151 +227,177 @@ export default function OrderDetail() {
 
       <BlockerBar order={o} />
 
-      {canEdit && (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <div className="k-label" style={{ marginBottom: 8 }}>Fulfillment</div>
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <label className="field"><span>Stage</span>
-              <select value={stage} onChange={(e) => setStage(e.target.value)}>
-                {STAGES.map((s) => (<option key={s}>{s}</option>))}
-              </select>
-            </label>
-            <label className="field"><span>Payment</span>
-              {isSales ? (
-                <input value={pay} readOnly disabled aria-label="Payment status (read-only)" />
-              ) : (
-                <select value={pay} onChange={(e) => setPay(e.target.value)}>
-                  {PAYMENTS.map((p) => (<option key={p}>{p}</option>))}
-                </select>
-              )}
-            </label>
-          </div>
-          <label className="field"><span>SAP reference{isSales ? '' : ' (optional)'}</span>
-            {isSales ? (
-              <input value={sap || '—'} readOnly disabled aria-label="SAP order number (read-only)" />
-            ) : (
-              <input value={sap} onChange={(e) => setSap(e.target.value)} placeholder="176152681" />
-            )}
-          </label>
-          <div className="fill-label" style={{ marginBottom: 10 }}>
-            A note for reference only. It does not change the order's stage.
-          </div>
-          {msg && (
-            <div style={{ marginBottom: 10 }}>
-              <RecordNotice ok={msg.ok}>
-                {msg.t}
-                {conflict && <> <button className="linkbtn" onClick={reload}>Reload</button></>}
-              </RecordNotice>
-            </div>
-          )}
-          <button className="btn btn-sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        </div>
-      )}
+      <RecordTabs tabs={tabs} active={tab} onChange={setTab} />
 
-      {(canEndorse || canAccept || canReturn) && (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <div className="k-label" style={{ marginBottom: 8 }}>Endorsement</div>
-          {hstatus && (
-            <div className="fill-label" style={{ marginBottom: 8 }}>
-              Status: <Badge tone={hstatus === 'Accepted' ? 'ok' : hstatus === 'Returned' ? 'danger' : 'info'}>{hstatus}</Badge>
-              {hstatus === 'Returned' && handoff.data?.return_reason ? ` · ${handoff.data.return_reason}` : ''}
-            </div>
-          )}
-          {comp && (
-            <div style={{ marginBottom: 10 }}>
-              {(comp.hard?.length || 0) === 0
-                ? <div className="fill-label" style={{ color: 'var(--success, var(--accent))' }}>All completeness checks pass.</div>
-                : (
-                  <>
-                    <div className="k-label" style={{ marginBottom: 4 }}>Blockers</div>
-                    <ul className="fill-label" style={{ margin: 0, paddingLeft: 18, color: 'var(--warning)' }}>{comp.hard.map((h: string, i: number) => <li key={i}>{h}</li>)}</ul>
-                  </>
-                )}
-              {(comp.warn?.length || 0) > 0 && (
-                <ul className="fill-label" style={{ margin: '6px 0 0', paddingLeft: 18 }}>{comp.warn.map((w: string, i: number) => <li key={i}>{w}</li>)}</ul>
-              )}
-            </div>
-          )}
-          <div className="toolbar" style={{ gap: 6 }}>
-            {canEndorse && <button className="btn btn-sm" onClick={doEndorse} disabled={endorse.isPending}>{endorse.isPending ? 'Endorsing…' : 'Endorse to Operations'}</button>}
-            {canAccept && hstatus === 'Endorsed' && <button className="btn btn-sm" onClick={doAccept} disabled={accept.isPending}>{accept.isPending ? 'Accepting…' : 'Accept'}</button>}
-            {canReturn && <button className="btn btn-ghost btn-sm" onClick={doReturn} disabled={returnForCorrection.isPending}>Return for correction</button>}
-          </div>
-        </div>
-      )}
-
-      <div className="card card-pad">
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 4 }}>
-          <KeyVal label="Customer">{o.client?.company || o.client?.name || '—'}</KeyVal>
-          <KeyVal label="Seats">{o.total_seats}</KeyVal>
-          <KeyVal label="Order status">{o.order_status || '—'}</KeyVal>
-        </div>
-
-        <RecordSection title={`Training lines (${lines.length})`}>
-          {lines.length === 0 && <div className="muted fill-label">No lines on this order.</div>}
-          {lines.map((l: any) => (
-            <div key={l.line_id} style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 600 }}>{l.line_no}. {l.course?.course_name}</div>
-              <div className="fill-label">
-                {l.schedule_id
-                  ? <Link href={`/session/${l.schedule_id}`}>{l.schedule ? formatSegments(l.schedule.date_segments, l.schedule.start_date, l.schedule.end_date) : 'View session'}</Link>
-                  : 'E-learning, no session'}
-                {' · '}{l.seats} seat{l.seats > 1 ? 's' : ''} · {php(l.amount_php)} · {l.line_status}
+      {tab === 'overview' && (
+        <>
+          {canEdit && (
+            <div className="card card-pad" style={{ marginBottom: 16 }}>
+              <div className="k-label" style={{ marginBottom: 8 }}>Fulfillment</div>
+              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <label className="field"><span>Stage</span>
+                  <select value={stage} onChange={(e) => setStage(e.target.value)}>
+                    {STAGES.map((s) => (<option key={s}>{s}</option>))}
+                  </select>
+                </label>
+                <label className="field"><span>Payment</span>
+                  {isSales ? (
+                    <input value={pay} readOnly disabled aria-label="Payment status (read-only)" />
+                  ) : (
+                    <select value={pay} onChange={(e) => setPay(e.target.value)}>
+                      {PAYMENTS.map((p) => (<option key={p}>{p}</option>))}
+                    </select>
+                  )}
+                </label>
               </div>
-              {canEdit && l.schedule_id && (
-                moving === l.line_id ? (
-                  <LineTransfer line={l} onDone={() => setMoving(null)} onCancel={() => setMoving(null)} />
+              <label className="field"><span>SAP reference{isSales ? '' : ' (optional)'}</span>
+                {isSales ? (
+                  <input value={sap || '—'} readOnly disabled aria-label="SAP order number (read-only)" />
                 ) : (
-                  <button className="linkbtn" style={{ padding: 0 }} onClick={() => setMoving(l.line_id)}>Move to another session</button>
-                )
-              )}
-            </div>
-          ))}
-        </RecordSection>
-
-        <RecordSection title="Accounts receivable">
-          <ReceivablePanel orderId={id} totalAmount={Number(o.total_amount || 0)} />
-        </RecordSection>
-
-        <RecordSection title="Files">
-          <AttachmentsPanel entityType="order" entityId={id} />
-        </RecordSection>
-
-        <RecordSection title={`Comments (${notes.data?.length || 0})`}>
-          <div className="toolbar" style={{ marginBottom: 10 }}>
-            <input aria-label="Add a comment" placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && postComment()} />
-            <button className="btn btn-sm" onClick={postComment} disabled={posting}>{posting ? 'Posting…' : 'Post'}</button>
-          </div>
-          {notes.isLoading ? <Spinner /> : (notes.data?.length || 0) === 0 ? (
-            <div className="muted fill-label">No comments yet. Start the thread.</div>
-          ) : (
-            <div className="notes">
-              {notes.data?.map((n: any) => (
-                <div key={n.note_id} className="note">
-                  <div className="note-meta">
-                    <strong>{n.profile?.full_name || 'User'}</strong>
-                    <span className="muted"> · {n.profile?.role}{n.date ? ` · ${new Date(n.date).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}</span>
-                  </div>
-                  <div>{n.note}</div>
+                  <input value={sap} onChange={(e) => setSap(e.target.value)} placeholder="176152681" />
+                )}
+              </label>
+              <div className="fill-label" style={{ marginBottom: 10 }}>
+                A note for reference only. It does not change the order's stage.
+              </div>
+              {msg && (
+                <div style={{ marginBottom: 10 }}>
+                  <RecordNotice ok={msg.ok}>
+                    {msg.t}
+                    {conflict && <> <button className="linkbtn" onClick={reload}>Reload</button></>}
+                  </RecordNotice>
                 </div>
-              ))}
+              )}
+              <button className="btn btn-sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
             </div>
           )}
-        </RecordSection>
 
-        <RecordSection title="Activity">
-          <ActivityTimeline
-            events={mergeActivity(
-              noteEvents(notes.data),
-              taskEvents(activity.data?.tasks),
-              notificationEvents(activity.data?.notifs),
-              auditEvents(audit.data)
+          {(canEndorse || canAccept || canReturn) && (
+            <div className="card card-pad" style={{ marginBottom: 16 }}>
+              <div className="k-label" style={{ marginBottom: 8 }}>Endorsement</div>
+              {hstatus && (
+                <div className="fill-label" style={{ marginBottom: 8 }}>
+                  Status: <Badge tone={hstatus === 'Accepted' ? 'ok' : hstatus === 'Returned' ? 'danger' : 'info'}>{hstatus}</Badge>
+                  {hstatus === 'Returned' && handoff.data?.return_reason ? ` · ${handoff.data.return_reason}` : ''}
+                </div>
+              )}
+              {comp && (
+                <div style={{ marginBottom: 10 }}>
+                  {(comp.hard?.length || 0) === 0
+                    ? <div className="fill-label" style={{ color: 'var(--success, var(--accent))' }}>All completeness checks pass.</div>
+                    : (
+                      <>
+                        <div className="k-label" style={{ marginBottom: 4 }}>Blockers</div>
+                        <ul className="fill-label" style={{ margin: 0, paddingLeft: 18, color: 'var(--warning)' }}>{comp.hard.map((h: string, i: number) => <li key={i}>{h}</li>)}</ul>
+                      </>
+                    )}
+                  {(comp.warn?.length || 0) > 0 && (
+                    <ul className="fill-label" style={{ margin: '6px 0 0', paddingLeft: 18 }}>{comp.warn.map((w: string, i: number) => <li key={i}>{w}</li>)}</ul>
+                  )}
+                </div>
+              )}
+              <div className="toolbar" style={{ gap: 6 }}>
+                {canEndorse && <button className="btn btn-sm" onClick={doEndorse} disabled={endorse.isPending}>{endorse.isPending ? 'Endorsing…' : 'Endorse to Operations'}</button>}
+                {canAccept && hstatus === 'Endorsed' && <button className="btn btn-sm" onClick={doAccept} disabled={accept.isPending}>{accept.isPending ? 'Accepting…' : 'Accept'}</button>}
+                {canReturn && <button className="btn btn-ghost btn-sm" onClick={doReturn} disabled={returnForCorrection.isPending}>Return for correction</button>}
+              </div>
+            </div>
+          )}
+
+          <div className="card card-pad">
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+              <KeyVal label="Customer">{o.client?.company || o.client?.name || '—'}</KeyVal>
+              <KeyVal label="Seats">{o.total_seats}</KeyVal>
+              <KeyVal label="Order status">{o.order_status || '—'}</KeyVal>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'lines' && (
+        <div className="card card-pad">
+          <RecordSection title={`Training lines (${lines.length})`}>
+            {lines.length === 0 && <div className="muted fill-label">No lines on this order.</div>}
+            {lines.map((l: any) => (
+              <div key={l.line_id} style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 600 }}>{l.line_no}. {l.course?.course_name}</div>
+                <div className="fill-label">
+                  {l.schedule_id
+                    ? <Link href={`/session/${l.schedule_id}`}>{l.schedule ? formatSegments(l.schedule.date_segments, l.schedule.start_date, l.schedule.end_date) : 'View session'}</Link>
+                    : 'E-learning, no session'}
+                  {' · '}{l.seats} seat{l.seats > 1 ? 's' : ''} · {php(l.amount_php)} · {l.line_status}
+                </div>
+                {canEdit && l.schedule_id && (
+                  moving === l.line_id ? (
+                    <LineTransfer line={l} onDone={() => setMoving(null)} onCancel={() => setMoving(null)} />
+                  ) : (
+                    <button className="linkbtn" style={{ padding: 0 }} onClick={() => setMoving(l.line_id)}>Move to another session</button>
+                  )
+                )}
+              </div>
+            ))}
+          </RecordSection>
+        </div>
+      )}
+
+      {tab === 'payments' && (
+        <div className="card card-pad">
+          <RecordSection title="Accounts receivable">
+            <ReceivablePanel orderId={id} totalAmount={Number(o.total_amount || 0)} />
+          </RecordSection>
+        </div>
+      )}
+
+      {tab === 'files' && (
+        <div className="card card-pad">
+          <RecordSection title="Files">
+            <AttachmentsPanel entityType="order" entityId={id} />
+          </RecordSection>
+        </div>
+      )}
+
+      {tab === 'comments' && (
+        <div className="card card-pad">
+          <RecordSection title={`Comments (${notes.data?.length || 0})`}>
+            <div className="toolbar" style={{ marginBottom: 10 }}>
+              <input aria-label="Add a comment" placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && postComment()} />
+              <button className="btn btn-sm" onClick={postComment} disabled={posting}>{posting ? 'Posting…' : 'Post'}</button>
+            </div>
+            {notes.isLoading ? <Spinner /> : (notes.data?.length || 0) === 0 ? (
+              <div className="muted fill-label">No comments yet. Start the thread.</div>
+            ) : (
+              <div className="notes">
+                {notes.data?.map((n: any) => (
+                  <div key={n.note_id} className="note">
+                    <div className="note-meta">
+                      <strong>{n.profile?.full_name || 'User'}</strong>
+                      <span className="muted"> · {n.profile?.role}{n.date ? ` · ${new Date(n.date).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                    </div>
+                    <div>{n.note}</div>
+                  </div>
+                ))}
+              </div>
             )}
-            loading={activity.isLoading}
-          />
-        </RecordSection>
-      </div>
+          </RecordSection>
+        </div>
+      )}
+
+      {tab === 'activity' && (
+        <div className="card card-pad">
+          <RecordSection title="Activity">
+            <ActivityTimeline
+              events={mergeActivity(
+                noteEvents(notes.data),
+                taskEvents(activity.data?.tasks),
+                notificationEvents(activity.data?.notifs),
+                auditEvents(audit.data)
+              )}
+              loading={activity.isLoading}
+            />
+          </RecordSection>
+        </div>
+      )}
     </>
   )
 }
