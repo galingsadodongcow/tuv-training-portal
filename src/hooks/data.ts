@@ -31,19 +31,23 @@ export function useSchedules(year = 2026) {
 // Single schedule for the record detail route. Same shape as useSchedules so
 // the detail screen and the calendar rows read the same fields.
 export function useSchedule(scheduleId?: string) {
+  // Base columns always available. Owner embeds (the operations owner from
+  // profiles, the sales owner from salesperson) are appended optionally and
+  // stripped on error, so an older schema still returns the session.
+  const BASE =
+    'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, operations_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+  const OWNERS = ', salesOwner:sales_owner(name, code), opsOwner:operations_owner(full_name)'
   return useQuery({
     queryKey: ['schedule', scheduleId],
     enabled: !!scheduleId,
-    queryFn: () =>
-      sel(
-        supabase
-          .from('schedule')
-          .select(
-            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
-          )
-          .eq('schedule_id', scheduleId)
-          .single()
-      ),
+    queryFn: async () => {
+      const full = await supabase.from('schedule').select(BASE + OWNERS).eq('schedule_id', scheduleId).single()
+      if (!full.error) return full.data as any
+      // Owner embeds couldn't resolve — fall back to the base select unchanged.
+      const base = await supabase.from('schedule').select(BASE).eq('schedule_id', scheduleId).single()
+      if (base.error) throw base.error
+      return base.data as any
+    },
   })
 }
 
