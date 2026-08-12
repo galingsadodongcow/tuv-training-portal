@@ -36,7 +36,7 @@ export default function OrganizationDetail() {
   if (!o) {
     return (
       <>
-        <RecordHeader title="Organization not found" back={{ href: '/organizations', label: 'Organizations' }} />
+        <RecordHeader title="Organization not found" back={{ href: '/clients', label: 'Customers' }} />
         <div className="card"><div className="empty">This organization does not exist or you cannot access it.</div></div>
       </>
     )
@@ -66,7 +66,7 @@ export default function OrganizationDetail() {
   return (
     <>
       <RecordHeader
-        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/organizations', label: 'Organizations' }, { label: o.name }]}
+        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/clients', label: 'Customers' }, { label: o.name }]}
         title={o.name}
         subtitle={[o.industry, o.country].filter(Boolean).join(' · ') || undefined}
         badges={<Badge tone="info">{members.data?.length || 0} contact{(members.data?.length || 0) === 1 ? '' : 's'}</Badge>}
