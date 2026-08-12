@@ -1,9 +1,11 @@
 # Third-pass simplification — handoff
 
-**Status:** the third-pass backlog is **effectively complete**. All P0/P1 structural
-items, the P3 table/density polish, and the #23 DB retirement are **merged and live
-on `main`**. Two threads remain open on purpose (see "What's left"), both because
-they need a product decision or a human preview rather than more implementation.
+**Status:** the third-pass backlog is **complete**. All P0/P1 structural items, the P3
+table/density polish, and the #23 DB retirement are **merged and live on `main`**. The
+two threads that were held open (#8's remaining destinations + nav trim, and #21's
+visual-weight remainder) are now **built as draft PRs #111–#116** awaiting the owner's
+review of the deploy previews (see "What's left") — they were held for a product
+decision / human preview, both of which this session resolved.
 
 Read `README.md`, `10-prioritized-simplification-backlog.md`, and
 `IMPLEMENTATION-LOG.md` (the full wave-by-wave record, waves 1–15) first. Repo
@@ -58,37 +60,36 @@ deleted.
 13→5, Sales-manager 9→5, Management 11→6, Auditor 10→6, Business-owner 12→7,
 Super-admin 21→12.
 
-## What's left (2 threads — both need a decision, not just code)
+## What's left — both threads now BUILT (draft PRs awaiting review + merge)
 
-### #8 Per-role nav redesign — the safe portion is already delivered; the rest is BLOCKED
-The folds above already cut nav to at/near the `02-role-navigation.md` targets for most
-roles. The **remaining** target cuts each require a **net-new destination that does not
-exist**, so finishing #8 is a product decision, not a subtraction:
-- **Auditor → `Audit · Search`** needs a **global Search** screen. (Note: a
-  `fn_global_search(p_q)` RPC exists in the DB, but there is no UI for it — building that
-  UI would unlock the auditor target.)
-- **Sales-manager → `… · Team`** needs a **Team** queue screen (pipeline + unassigned +
-  overdue + workload + reassign).
-- **Management → `Overview · … · Financial`** needs an **Overview** KPI landing and a
-  **Financial** (receivables + revenue) destination.
-- A read-only **Training** catalogue entry for sales/ops (the current `/courses` is the
-  admin edit screen, gated to super_admin/operations).
+Both remaining threads were built this session as **draft PRs** (do NOT auto-merge —
+they change every role's nav and restyle live records; the owner reviews the deploy
+previews first). Waves 16–21, PRs #111–#116.
 
-Guardrail tension: this pass is **subtraction-only**, and this app has **no global
-search fallback**, so dropping the remaining items from nav without building these
-destinations would *remove practical access*, not just prominence. Decide whether to
-build the destinations (then trimming nav is safe) before touching `src/lib/roles.ts`.
+### #8 Per-role nav redesign — DONE (build + trim), pending review
+The remaining target cuts were blocked only because their destinations didn't exist.
+This session built them (the explicit opt-in to *build*), then trimmed the nav:
+- **Global Search** (`/search`) — wave 16, PR #111. A full-page UI over the existing
+  `fn_global_search(p_q)` RPC; shared kind-config with the ⌘K palette. Unblocks the auditor.
+- **Team** (`/team`) — wave 17, PR #112. Sales-manager queue: Workload · Queue (Worklist:
+  unassigned/overdue/reassign) · Pipeline (Inquiries), all reused `embedded`.
+- **Overview + Financial** (`/overview`, `/financial`) — wave 18, PR #113. Overview =
+  Dashboard KPI landing; Financial = Reports revenue + receivables. Management's two new items.
+- **Training read-only** (`/training`) — wave 19, PR #114. A `readOnly` mode of `Courses`
+  (no create/edit affordances); `/courses` stays the admin edit screen.
+- **Nav trim** — wave 20, PR #116 (**merge after #111–#114**). `roles.ts` cut to the `02`
+  targets; `homePathForRole()` gives management (Overview) and the auditor (Audit) their own
+  home; **Admin** kept as a grouped section so config screens aren't stranded; route Guards
+  untouched (authority unchanged, prominence only). Decisions confirmed with the owner:
+  keep a grouped Admin section · keep CRM as the Orders hub · Overview becomes management's
+  landing · auditor trimmed to Audit · Search.
 
-### #21 Visual-weight — remainder deferred for a previewed pass
-Done: FeedbackPanel card-in-card. **Remaining, want eyes on the deploy preview** (they
-restyle live daily-use forms/records):
-- `ReceivablePanel` (`:131/143/207`) and `ContactsPanel` (`:68`) sub-form cards double-box
-  inside the detail-screen card wrappers (`OrderDetail:347`, `ClientDetail:323`) — de-card
-  the sub-forms (→ `record-section`/bordered) or drop the outer wrapper.
-- Stacked-card merges on the ClientDetail (`:181`+`:197`) and OrderDetail (`:310`) overviews
-  — merge into one card with `record-section` dividers (the SessionDetail pattern is the
-  model). Also worth standardizing: ClientDetail uses `RecordSection > .card` while
-  OrderDetail uses `.card > RecordSection`.
+### #21 Visual-weight — DONE, pending preview
+- FeedbackPanel card-in-card (wave 15) + **wave 21, PR #115**: new `.subform` inset de-cards
+  the ReceivablePanel/ContactsPanel sub-forms; OrderDetail & ClientDetail overviews collapse
+  their stacked cards into one card with `record-section` dividers (the SessionDetail model).
+  One behaviour change flagged for the owner: ClientDetail's KPI grid now lives in the overview
+  tab (header badges still carry owner/overdue/archived on every tab).
 
 ## Working method (as used this session)
 Per item: fresh branch off latest `main` → implement **capability-preserving** (nothing
