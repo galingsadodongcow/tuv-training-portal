@@ -210,6 +210,10 @@ export default function SessionDetail() {
             <KeyVal label="Trainer">{schedule.trainer?.name || <span className="muted">Not assigned</span>}</KeyVal>
             <KeyVal label="Venue">{schedule.venue?.name || <span className="muted">Not assigned</span>}</KeyVal>
           </div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
+            <KeyVal label="Operations owner">{schedule.opsOwner?.full_name || <span className="muted">Unassigned</span>}</KeyVal>
+            <KeyVal label="Sales owner">{schedule.salesOwner?.name || <span className="muted">Unassigned</span>}</KeyVal>
+          </div>
 
           <div className="k-label" style={{ marginBottom: 6 }}>Pax by channel</div>
           <div className="chip-row">
