@@ -101,13 +101,17 @@ export default function GoNoGoPanel({ schedule }: { schedule: any }) {
     run('go', () => supabase.from('schedule').update({ status: 'Confirmed' }).eq('schedule_id', schedule.schedule_id), 'Session confirmed as Go.')
   }
 
-  const proposeNoGo = () =>
+  const proposeNoGo = () => {
+    // A No-Go goes to the business owner as a cancellation request — it must
+    // carry a rationale for the audit trail.
+    if (!reason.trim()) { setMsg({ ok: false, t: 'A reason is required to propose No-Go.' }); toast.error('A reason is required to propose No-Go.'); return }
     run('nogo', () => supabase.from('approval').insert({
       object_type: 'Schedule cancellation',
       schedule_id: schedule.schedule_id,
       requested_by: profile?.user_id,
-      note: `No-Go proposed. Booked ${booked} of ${min} min.${reason ? ' ' + reason : ''}`,
+      note: `No-Go proposed. Booked ${booked} of ${min} min. ${reason.trim()}`,
     }), 'No-Go proposed. The business owner decides on the Approvals screen.')
+  }
 
   const requestReview = () =>
     run('review', () => supabase.from('approval').insert({
@@ -175,14 +179,14 @@ export default function GoNoGoPanel({ schedule }: { schedule: any }) {
 
       {canOps(profile?.role) && !decided && (
         <div style={{ marginTop: 14 }}>
-          <label className="field"><span>Reason (for No-Go or review)</span>
+          <label className="field"><span>Reason (required for No-Go)</span>
             <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Short reason for the record" />
           </label>
           <div className="toolbar">
             <button className="btn btn-sm" disabled={busy === 'go'} onClick={confirmGo}>
               {armGo ? 'Confirm Go anyway' : 'Confirm Go'}
             </button>
-            <button className="btn btn-danger btn-sm" disabled={busy === 'nogo'} onClick={proposeNoGo}>Propose No-Go</button>
+            <button className="btn btn-danger btn-sm" disabled={busy === 'nogo' || !reason.trim()} onClick={proposeNoGo}>Propose No-Go</button>
             <button className="btn btn-ghost btn-sm" disabled={busy === 'review'} onClick={requestReview}>Request review</button>
           </div>
           {armGo && (
