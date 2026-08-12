@@ -34,7 +34,7 @@ export default function QuoteDetail() {
   if (quote.isLoading) return <Spinner label="Loading quote" />
   if (quote.error) return <ErrorNote error={quote.error} />
   const q: any = quote.data
-  if (!q) return (<><RecordHeader title="Quote not found" back={{ href: '/quotations', label: 'Quotations' }} /><div className="card"><div className="empty">This quote does not exist.</div></div></>)
+  if (!q) return (<><RecordHeader title="Quote not found" back={{ href: '/crm?tab=quotes', label: 'Quotations' }} /><div className="card"><div className="empty">This quote does not exist.</div></div></>)
 
   const feeFor = (courseId: string, modality: string) => fees.data?.find((f: any) => f.course_id === courseId && f.modality === modality)?.fee_php ?? ''
 
@@ -81,7 +81,7 @@ export default function QuoteDetail() {
   return (
     <>
       <RecordHeader
-        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/quotations', label: 'Quotations' }, { label: q.quote_number }]}
+        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/crm?tab=quotes', label: 'Quotations' }, { label: q.quote_number }]}
         title={`${q.quote_number}`}
         subtitle={`${q.client?.company || q.client?.name || 'No client'}${q.valid_until ? ` · valid to ${shortDate(q.valid_until)}` : ''}`}
         badges={<><Badge tone={q.status === 'Accepted' ? 'ok' : q.status === 'Declined' || q.status === 'Expired' ? 'danger' : 'info'}>{q.status}</Badge>{q.converted_order_id && <Badge tone="neutral">Order {q.converted_order_id}</Badge>}</>}

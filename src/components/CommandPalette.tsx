@@ -16,7 +16,7 @@ const KIND: Record<string, { label: string; href: (id: string) => string; roles:
   session: { label: 'Session', href: (id) => `/session/${id}`, roles: READ_ROLES },
   organization: { label: 'Organization', href: (id) => `/organizations/${id}`, roles: READ_ROLES },
   course: { label: 'Course', href: () => `/courses`, roles: ['super_admin', 'operations'] },
-  inquiry: { label: 'Inquiry', href: () => `/inquiries`, roles: ['super_admin', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor'] },
+  inquiry: { label: 'Inquiry', href: () => `/crm?tab=pipeline`, roles: ['super_admin', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor'] },
 }
 
 type Entry = { key: string; label: string; sub: string; group: string; go: () => void }

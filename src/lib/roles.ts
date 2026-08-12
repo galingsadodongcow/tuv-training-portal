@@ -53,11 +53,11 @@ export const NAV: NavItem[] = [
   { path: '/my-work', label: 'My Work', roles: ALL, icon: 'fulfillment' },
   { path: '/calendar', label: 'Calendar', roles: ALL, icon: 'calendar' },
 
-  // CRM — the commercial pipeline (Sales / Coordinator facing).
-  { path: '/inquiries', label: 'Inquiries', roles: ['super_admin', 'sales', 'coordinator', 'sales_manager', ...OVERSIGHT], icon: 'inquiries', group: 'CRM' },
-  { path: '/quotations', label: 'Quotations', roles: ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor'], icon: 'quotes', group: 'CRM' },
-  { path: '/sales-entry', label: 'New order', roles: ['super_admin', 'sales', 'coordinator'], icon: 'plus', group: 'CRM' },
-  { path: '/orders', label: 'Orders', roles: ALL, icon: 'orders', group: 'CRM' },
+  // CRM — the commercial pipeline in one destination (third-pass #7): Pipeline
+  // (inquiries) · Quotes · Orders tabs, with "New order" as an action inside.
+  // The old list routes redirect here; record routes (/orders/[id],
+  // /quotations/[id]) and the /sales-entry create form are unchanged (off-nav).
+  { path: '/crm', label: 'CRM', roles: ALL, icon: 'orders', group: 'CRM' },
 
   // Customers — the customer record. Organizations folded into Customer 360
   // (parent grouping + Related accounts on the record; #6). The org list route

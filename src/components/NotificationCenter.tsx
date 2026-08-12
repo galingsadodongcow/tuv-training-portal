@@ -16,7 +16,7 @@ function entityHref(type?: string, id?: string): string | null {
     case 'client': return `/clients/${id}`
     case 'organization': return `/organizations/${id}`
     case 'quote': return `/quotations/${id}`
-    case 'inquiry': return `/inquiries`
+    case 'inquiry': return `/crm?tab=pipeline`
     case 'approval': return `/approvals`
     default: return null
   }

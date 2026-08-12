@@ -18,7 +18,9 @@ const SOURCES = ['Website', 'Referral', 'Event', 'Repeat client', 'Cold outreach
 
 const emptyForm = { company: '', contact: '', email: '', phone: '', course_id: '', pax: '', offering_type: 'Public', sales_id: '', est_value: '', probability: '', expected_close: '', source: '' }
 
-export default function Inquiries() {
+// The inquiry pipeline. Rendered as the "Pipeline" tab of the CRM shell
+// (`embedded`), where the shell owns the heading + tab strip.
+export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   const { profile } = useAuth()
   const inquiries = useInquiries()
   const courses = useCourses()
@@ -163,10 +165,12 @@ export default function Inquiries() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1>Inquiry pipeline</h1>
-          <p>{total} inquir{total === 1 ? 'y' : 'ies'}, {won} closed won. Weighted open pipeline {php(weighted)}. {isAdmin ? 'You see the whole team.' : 'You see your own.'}</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1>Inquiry pipeline</h1>
+            <p>{total} inquir{total === 1 ? 'y' : 'ies'}, {won} closed won. Weighted open pipeline {php(weighted)}. {isAdmin ? 'You see the whole team.' : 'You see your own.'}</p>
+          </div>
+        )}
         <div className="toolbar">
           {(['table', 'board'] as const).map((v) => (
             <button key={v} className={`btn btn-sm ${view === v ? '' : 'btn-ghost'}`} onClick={() => setView(v)}>
