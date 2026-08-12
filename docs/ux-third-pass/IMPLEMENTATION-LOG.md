@@ -16,3 +16,8 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
 - **#20 Relabel** — the order/booking move UI ("Transfer" on Session Orders + Order Lines + the shared `TransferOrder` modal) → **"Move booking"**, so it stops reading as the participant **Transfer** (which stays in the roster).
 - Files: `src/screens/{Resources,ClientDetail,SessionDetail,OrderDetail}.tsx`, `src/components/TransferOrder.tsx`.
 - *Carried forward:* #17 CourseForm progressive disclosure, session status-row → primary+More.
+
+## Wave 3 — form & action trims
+- **#17 Course create — progressive disclosure** — certification, assessment, pass mark, cert validity, seat-cap override, and webshop URL fold behind an **"Advanced"** toggle (open when editing so populated values show; folded for a new course). Essentials up front: title, category/subcategory, training type, learning types + fees. No submit-behaviour change (folded fields keep their defaults).
+- **#9 finish — Session status row → one primary + More** — the 7-button operations status strip now shows a single state-appropriate primary (**Confirm session** while Tentative, else **Close session**) plus **More actions** (the raw status overrides, Cancel-with-dispositions, Clone). Session detail is now: 5 tabs, ~5 header badges (was 6), 1 primary status action (was 7 competing buttons).
+- Files: `src/screens/{CourseForm,SessionDetail}.tsx`.
