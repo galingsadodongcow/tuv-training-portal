@@ -65,11 +65,12 @@ export default function ClientDetail() {
   // who owns this client may archive it.
   const isOwnerSales = profile?.role === 'sales' && !!profile?.sales_id && c.owner_sales_id === profile?.sales_id
   const canArchive = softDeleteReady && (['super_admin', 'business_owner'].includes(profile?.role as string) || isOwnerSales)
-  // The database lets the super admin or the owning salesperson edit a client,
-  // so the same two may set its organization. The org_id field only exists once
-  // the migration is applied; hide the control until then.
+  // Setting a client's organization is a client UPDATE. Live RLS (20260812210000)
+  // allows super_admin/coordinator/operations/business_owner + the owning sales rep.
+  // The org_id field only exists once the S6/customer migrations are applied; hide
+  // the control until then.
   const orgReady = c.org_id !== undefined
-  const canSetOrg = orgReady && (profile?.role === 'super_admin' || isOwnerSales)
+  const canSetOrg = orgReady && (['super_admin', 'coordinator', 'operations', 'business_owner'].includes(profile?.role as string) || isOwnerSales)
   const orgName = (orgOptions.data || []).find((o: any) => o.org_id === c.org_id)?.name
 
   const setOrg = async (orgId: string | null) => {

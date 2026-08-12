@@ -55,7 +55,7 @@ export const NAV: NavItem[] = [
 
   // CRM — the commercial pipeline (Sales / Coordinator facing).
   { path: '/inquiries', label: 'Inquiries', roles: ['super_admin', 'sales', 'coordinator', 'sales_manager', ...OVERSIGHT], icon: 'inquiries', group: 'CRM' },
-  { path: '/quotations', label: 'Quotations', roles: ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', 'management'], icon: 'quotes', group: 'CRM' },
+  { path: '/quotations', label: 'Quotations', roles: ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor'], icon: 'quotes', group: 'CRM' },
   { path: '/sales-entry', label: 'New order', roles: ['super_admin', 'sales', 'coordinator'], icon: 'plus', group: 'CRM' },
   { path: '/orders', label: 'Orders', roles: ALL, icon: 'orders', group: 'CRM' },
 

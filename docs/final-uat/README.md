@@ -4,9 +4,11 @@ Final live-product validation pass for the TÜV Rheinland Academy Training Opera
 
 **Method note:** this pass ran in the **code-review session (no Supabase access, no authenticated browser)**. Workflows were validated by tracing the actual screens/hooks on `main` and the migrations in-repo; live schema state, the 8-role RLS simulation, and the advisors were validated in the **separate Supabase session** (recorded in `docs/implementation/role-crud-matrix.md`) and are cited here, not re-executed.
 
-## Overall verdict: **CONDITIONAL GO** — GO once one blocker clears.
+## Overall verdict: **GO** — blocker cleared.
 
-The product is coherent, light, and role-appropriate at the code level; `tsc` + build pass; no unsafe delete; handoff works; health is consistent. The **one blocker is operational, not code**: two migrations are merged but recorded as **not yet applied to production**, and one of them closes a live security hole.
+> **Update:** the two pending migrations were **applied and verified in the Supabase session**, and the coupled UI widening shipped — see `09-post-apply-alignment.md`. The verdict is now **GO** for normal business use. The sections below are preserved as the pre-apply record.
+
+The product is coherent, light, and role-appropriate at the code level; `tsc` + build pass; no unsafe delete; handoff works; health is consistent. The one blocker (now cleared) was operational, not code: two migrations were merged but not yet applied to production, one of which closes a live security hole.
 
 | Area | Status |
 |---|---|
