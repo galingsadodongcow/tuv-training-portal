@@ -41,7 +41,7 @@ function Section({
   children?: ReactNode
 }) {
   return (
-    <div style={{ marginBottom: 22 }}>
+    <div className="section">
       <div className="k-label" style={{ marginBottom: 8 }}>
         {title}
         {typeof count === 'number' ? ` (${count})` : ''}
