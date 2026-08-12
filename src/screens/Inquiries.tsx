@@ -3,9 +3,10 @@ import { useMemo, useState, useEffect } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useInquiries, useCourses, useSalespeople, useInvalidate } from '../hooks/data'
+import { useInquiries, useCourses, useSalespeople, useClients, useInvalidate } from '../hooks/data'
 import { useSort } from '../hooks/useSort'
 import { Combobox } from '../components/inputs/Combobox'
+import { ClientTypeahead } from '../components/inputs/ClientTypeahead'
 import { useFormErrors, Field } from '../components/inputs/Field'
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
@@ -20,7 +21,7 @@ const OPEN_STAGES = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedbac
 const OFFERINGS = ['Public', 'In-house']
 const SOURCES = ['Website', 'Referral', 'Event', 'Repeat client', 'Cold outreach', 'Other']
 
-const emptyForm = { company: '', contact: '', email: '', phone: '', course_id: '', pax: '', offering_type: 'Public', sales_id: '', est_value: '', probability: '', expected_close: '', source: '' }
+const emptyForm = { company: '', contact: '', email: '', phone: '', course_id: '', client_id: '', pax: '', offering_type: 'Public', sales_id: '', est_value: '', probability: '', expected_close: '', source: '' }
 
 // The inquiry pipeline. Rendered as the "Pipeline" tab of the CRM shell
 // (`embedded`), where the shell owns the heading + tab strip.
@@ -32,6 +33,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   const inquiries = useInquiries()
   const courses = useCourses()
   const people = useSalespeople()
+  const clients = useClients()
   const invalidate = useInvalidate()
   const toast = useToast()
   const confirm = useConfirm()
@@ -55,6 +57,18 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
     email: form.email.trim() && !emailRe.test(form.email.trim()) ? 'Enter a valid email.' : null,
     sales: isAdmin && !form.sales_id ? 'Pick a salesperson.' : null,
   }
+  // #120: an existing client whose company or email matches what was typed but
+  // isn't linked — surfaced as a soft warning with a one-click link, so the same
+  // customer isn't logged twice.
+  const dupClient = useMemo(() => {
+    if (form.client_id) return null
+    const co = form.company.trim().toLowerCase()
+    const em = form.email.trim().toLowerCase()
+    if (!co && !em) return null
+    return ((clients.data || []) as any[]).find((c: any) =>
+      (co && (c.company || '').toLowerCase() === co) || (em && em.length > 4 && (c.email || '').toLowerCase() === em)
+    ) || null
+  }, [form.company, form.email, form.client_id, clients.data])
   // Deal-sizing fields (value, probability, close, source, …) fold away — logging
   // an inbound lead only needs the company and a contact; qualification comes later.
   const [dealDetails, setDealDetails] = useState(false)
@@ -91,6 +105,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
       contact: form.contact.trim() || null,
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
+      client_id: form.client_id || null,
       course_id: form.course_id || null,
       pax: form.pax === '' ? null : Number(form.pax),
       offering_type: form.offering_type,
@@ -291,8 +306,16 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
         <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 720 }}>
           {/* Essentials — enough to log the lead and start working it. */}
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <Field label="Company" required error={createErrors.company} show={fe.shows('company')}>
-              <input value={form.company} onChange={set('company')} {...fe.inputProps('company', createErrors.company)} />
+            <Field label="Company" required error={createErrors.company} show={fe.shows('company')}
+              hint={form.client_id ? 'Linked to an existing client — contact and email filled in.' : undefined}>
+              <ClientTypeahead ariaLabel="Company" placeholder="Search existing clients or type a new company…"
+                value={form.company} clients={(clients.data || []) as any[]} linked={!!form.client_id}
+                inputProps={fe.inputProps('company', createErrors.company)}
+                onTextChange={(text) => setForm((f: any) => ({ ...f, company: text, client_id: '' }))}
+                onPick={(c) => setForm((f: any) => ({
+                  ...f, client_id: c.client_id, company: c.company || c.name || '',
+                  contact: f.contact.trim() || c.name || c.contact || '', email: f.email.trim() || c.email || '',
+                }))} />
             </Field>
             <label className="field"><span>Contact</span><input value={form.contact} onChange={set('contact')} /></label>
             <Field label="Email" error={createErrors.email} show={fe.shows('email')}>
@@ -312,6 +335,16 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
               </Field>
             )}
           </div>
+
+          {dupClient && (
+            <div className="notice notice-warn" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>Looks like an existing client: <strong>{dupClient.company || dupClient.name}</strong>{dupClient.email ? ` · ${dupClient.email}` : ''}.</span>
+              <button type="button" className="btn btn-sm" onClick={() => setForm((f: any) => ({
+                ...f, client_id: dupClient.client_id, company: dupClient.company || dupClient.name || '',
+                contact: f.contact.trim() || dupClient.name || dupClient.contact || '', email: f.email.trim() || dupClient.email || '',
+              }))}>Link this client</button>
+            </div>
+          )}
 
           {/* Deal sizing / qualification — optional, folded by default. */}
           {!dealDetails ? (

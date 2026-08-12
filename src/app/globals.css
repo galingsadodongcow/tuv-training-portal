@@ -658,6 +658,8 @@ tr.stripe-done    > td:first-child { box-shadow: inset 3px 0 0 var(--border); }
 .combobox-item[aria-selected="true"] { color: var(--accent); font-weight: 600; }
 .combobox-sub { font-size: 12px; color: var(--text-muted); }
 .combobox-empty { padding: 8px 9px; color: var(--text-muted); font-size: 13px; }
+.combobox-field input.is-linked { padding-right: 26px; }
+.combobox-linked { position: absolute; right: 8px; font-size: 13px; pointer-events: none; }
 
 /* Tooltip */
 .tooltip-wrap { position: relative; display: inline-flex; }
