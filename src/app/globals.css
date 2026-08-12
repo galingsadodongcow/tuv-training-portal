@@ -590,6 +590,29 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .health-done    { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
 /* small dot form for dense calendars */
 
+/* Dashboard "Needs you now" band (#132) — the non-zero alert cards, lifted above
+   the quieter metrics grid so the urgent item is unmissable. */
+.needs-now-label { display: flex; align-items: center; gap: 7px; color: var(--warning); }
+.needs-now-label::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--warning); display: inline-block;
+}
+.needs-now .kpi { border-left: 3px solid var(--warning); }
+
+/* My Work rows (#132): a per-type left severity stripe on the shared attention
+   scale + a leading verb, so "what is this and is it mine?" reads at a glance.
+   The stripe rides the first cell (the verb cell) as an inset shadow. */
+.mywork-lead { width: 1%; white-space: nowrap; vertical-align: top; padding-left: 12px !important; }
+.mywork-lead .verb {
+  display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px;
+}
+tr.stripe-blocked > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+tr.stripe-risk    > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+tr.stripe-ok      > td:first-child { box-shadow: inset 3px 0 0 var(--success); }
+tr.stripe-done    > td:first-child { box-shadow: inset 3px 0 0 var(--border); }
+
 /* Notification center */
 .notif-wrap { position: relative; display: inline-flex; margin-left: 8px; }
 .notif-bell {

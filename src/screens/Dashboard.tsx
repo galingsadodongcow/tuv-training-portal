@@ -293,6 +293,12 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
   const bandError = deps.map((d) => d.error).find(Boolean)
   const showCharts = !!role && CHART_ROLES.includes(role)
 
+  // "Needs you now": the alert cards whose count is non-zero, lifted above the
+  // quieter metrics so the one thing that needs the user is unmissable (#132).
+  const isHot = (c: CardDef) => !!c.alert && typeof c.value === 'number' && c.value > 0
+  const needsNow = cards.filter(isHot)
+  const quietCards = cards.filter((c) => !isHot(c))
+
   const HEAD: Partial<Record<Role, { title: string; sub: string }>> = {
     sales: { title: 'Dashboard', sub: 'Your pipeline and the work that is slipping.' },
     sales_manager: { title: 'Team dashboard', sub: 'Team pipeline, conversion, and where to step in.' },
@@ -321,9 +327,19 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
       ) : !role || bandLoading ? (
         <KpiSkeleton count={cards.length || 6} />
       ) : (
-        <div className="grid kpis">
-          {cards.map((c) => (<DashCard key={c.label} c={c} />))}
-        </div>
+        <>
+          {needsNow.length > 0 && (
+            <div className="section needs-now">
+              <div className="k-label needs-now-label" style={{ marginBottom: 8 }}>Needs you now</div>
+              <div className="grid kpis">
+                {needsNow.map((c) => (<DashCard key={c.label} c={c} />))}
+              </div>
+            </div>
+          )}
+          <div className="grid kpis">
+            {quietCards.map((c) => (<DashCard key={c.label} c={c} />))}
+          </div>
+        </>
       )}
 
       {showCharts && (
