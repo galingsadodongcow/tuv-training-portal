@@ -2951,3 +2951,293 @@ revoke execute on function public.fn_role_intake_write() from public, anon;
 -- RPCs / read helpers (authenticated-only by intent).
 revoke execute on function public.fn_order_completeness(text) from public, anon;
 revoke execute on function public.fn_audit_search(text, text, text, timestamptz, timestamptz, text, integer) from public, anon;
+
+
+-- ############################################################################
+-- ## 20260812170000_ros01_participant_status.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- ROS01 — participant lifecycle status for soft-delete + transfer.
+--
+-- Adds participant.status ('Active' | 'Removed' | 'Transferred') so a participant
+-- is never physically deleted (which destroyed attendance/assessment/certificate
+-- history). Removal is a soft flag; transfer moves the person to another
+-- session's roster. The session roster and health signals ignore 'Removed'.
+--
+-- Idempotent. Booked-seat counts derive from order_line.seats, not participant
+-- rows, so status does not affect fill counts or go/no-go.
+-- ===========================================================================
+
+alter table public.participant add column if not exists status text not null default 'Active';
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'participant_status_chk') then
+    alter table public.participant
+      add constraint participant_status_chk check (status in ('Active','Removed','Transferred'));
+  end if;
+end $$;
+
+-- Soft-delete: keep the row + its history, flag it Removed. Ops/coordinator/admin.
+create or replace function public.fn_remove_participant(p_participant uuid, p_reason text default null)
+returns void language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text;
+begin
+  if r is null or r not in ('operations','coordinator','super_admin') then
+    raise exception 'Only operations, coordinator or super_admin may remove a participant' using errcode = '42501';
+  end if;
+  perform set_config('app.audit_reason', coalesce('removed: ' || p_reason, 'removed'), true);
+  update participant set status = 'Removed' where participant_id = p_participant;
+  if not found then raise exception 'Participant % not found', p_participant using errcode = 'P0002'; end if;
+end $$;
+revoke execute on function public.fn_remove_participant(uuid, text) from public, anon;
+grant execute on function public.fn_remove_participant(uuid, text) to authenticated;
+
+-- Transfer: move the participant onto another session's roster (must be visible
+-- and not soft-deleted). Ops/coordinator/admin.
+create or replace function public.fn_transfer_participant(p_participant uuid, p_new_schedule uuid, p_reason text default null)
+returns void language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text;
+begin
+  if r is null or r not in ('operations','coordinator','super_admin') then
+    raise exception 'Only operations, coordinator or super_admin may transfer a participant' using errcode = '42501';
+  end if;
+  if not exists (select 1 from schedule where schedule_id = p_new_schedule and deleted_at is null) then
+    raise exception 'Target session not found' using errcode = 'P0002';
+  end if;
+  perform set_config('app.audit_reason', coalesce('transferred: ' || p_reason, 'transferred'), true);
+  update participant set schedule_id = p_new_schedule, status = 'Active' where participant_id = p_participant;
+  if not found then raise exception 'Participant % not found', p_participant using errcode = 'P0002'; end if;
+end $$;
+revoke execute on function public.fn_transfer_participant(uuid, uuid, text) from public, anon;
+grant execute on function public.fn_transfer_participant(uuid, uuid, text) to authenticated;
+
+-- Roster hides soft-removed participants (return type unchanged).
+create or replace function public.fn_session_roster(p_schedule uuid)
+returns table(participant_id uuid, full_name text, email text, position_title text, company text,
+              order_id text, channel channel_t, seats integer, payment_status payment_status_t,
+              attendance_status text, cert_number text, cert_issued_date date, cert_expiry_date date,
+              score numeric, result text)
+language sql stable security definer set search_path to 'public' as $$
+  select p.participant_id, p.full_name, p.email, p.position_title,
+         cl.company, o.order_id, o.channel, l.seats, o.payment_status,
+         p.attendance_status, p.cert_number, p.cert_issued_date, p.cert_expiry_date,
+         p.score, p.result
+    from participant p
+    join order_line l on l.line_id = p.line_id
+    join orders o on o.order_id = l.order_id
+    left join client cl on cl.client_id = o.client_id
+   where p.schedule_id = p_schedule and l.line_status <> 'Cancelled'
+     and coalesce(p.status, 'Active') <> 'Removed'
+   order by cl.company nulls last, p.full_name;
+$$;
+
+
+-- ############################################################################
+-- ## 20260812180000_srch01_global_search.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- SRCH01 — global-search coverage.
+--
+-- Extends fn_global_search so it finds a customer by email OR phone and a
+-- participant by name or email (Phase F exit criterion), in addition to the
+-- existing order / client / session / organization / course / inquiry hits.
+-- Return shape (kind, id, title, subtitle) is unchanged, so the CommandPalette
+-- consumer needs no change. SECURITY DEFINER with the existing auth guard.
+-- ===========================================================================
+
+create or replace function public.fn_global_search(p_q text)
+returns table(kind text, id text, title text, subtitle text)
+language plpgsql stable security definer set search_path to 'public' as $function$
+begin
+  if fn_current_role() is null then
+    raise exception 'authentication required' using errcode = '28000';
+  end if;
+
+  return query
+  with q as (select '%' || btrim(p_q) || '%' as pat)
+  select * from (
+    (select 'order'::text, o.order_id, coalesce(c.company, c.name, o.order_id),
+            o.fulfillment_stage::text
+       from orders o left join client c on c.client_id = o.client_id, q
+      where o.order_id ilike q.pat or c.company ilike q.pat or c.name ilike q.pat
+      order by o.order_date desc limit 6)
+    union all
+    (select 'client'::text, c.client_id::text, coalesce(c.company, c.name),
+            coalesce(c.email, c.phone)
+       from client c, q
+      where c.company ilike q.pat or c.name ilike q.pat
+         or c.email ilike q.pat or c.phone ilike q.pat
+      order by c.company nulls last limit 6)
+    union all
+    -- Participant hits navigate to their order (always present); the title is
+    -- the person so the searcher sees who they matched.
+    (select 'participant'::text, p.order_id, p.full_name,
+            coalesce(cl.company, p.email, p.order_id)
+       from participant p
+       join orders o on o.order_id = p.order_id
+       left join client cl on cl.client_id = o.client_id, q
+      where (p.full_name ilike q.pat or p.email ilike q.pat)
+        and coalesce(p.status, 'Active') <> 'Removed'
+      order by p.full_name limit 6)
+    union all
+    (select 'session'::text, s.schedule_id::text, co.course_name,
+            to_char(s.start_date, 'YYYY-MM-DD') || ' · ' || s.status::text
+       from schedule s join course co on co.course_id = s.course_id, q
+      where co.course_name ilike q.pat
+      order by s.start_date desc limit 6)
+    union all
+    (select 'organization'::text, og.org_id::text, og.name, og.industry
+       from organization og, q
+      where og.name ilike q.pat
+      order by og.name limit 6)
+    union all
+    (select 'course'::text, co.course_id::text, co.course_name, co.training_type::text
+       from course co, q
+      where co.course_name ilike q.pat and co.active
+      order by co.course_name limit 6)
+    union all
+    (select 'inquiry'::text, iq.inquiry_id::text, iq.company, iq.status::text
+       from inquiry iq, q
+      where iq.company ilike q.pat or iq.email ilike q.pat
+      order by iq.inquiry_date desc limit 6)
+  ) hits;
+end;
+$function$;
+revoke execute on function public.fn_global_search(text) from public, anon;
+grant execute on function public.fn_global_search(text) to authenticated;
+
+
+-- ############################################################################
+-- ## 20260812190000_sv01_saved_views.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- SV01 — server-persisted saved views.
+--
+-- A per-user, per-surface saved filter/sort/column set, so a view survives
+-- across devices and sessions. `config` is opaque jsonb owned by the client.
+-- Personal views belong to their owner; a super_admin may publish role-default
+-- views (owner_id null, shared_role set) that everyone in that role can read.
+--
+-- Idempotent; RLS enabled.
+-- ===========================================================================
+
+create table if not exists public.saved_view (
+  view_id     uuid primary key default gen_random_uuid(),
+  owner_id    uuid references public.profiles(user_id) on delete cascade,
+  surface     text not null,                        -- 'orders','worklist','my_work',...
+  name        text not null,
+  config      jsonb not null default '{}'::jsonb,   -- {filters, sort, columns}
+  is_default  boolean not null default false,
+  shared_role public.user_role,                     -- non-null => a role-wide default
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- At most one personal default per (owner, surface).
+create unique index if not exists saved_view_owner_default_uq
+  on public.saved_view (owner_id, surface) where is_default and owner_id is not null;
+-- At most one shared default per (role, surface).
+create unique index if not exists saved_view_shared_default_uq
+  on public.saved_view (shared_role, surface) where is_default and shared_role is not null;
+
+alter table public.saved_view enable row level security;
+
+-- Read: your own views, plus any role-default published for your role.
+drop policy if exists p_savedview_r on public.saved_view;
+create policy p_savedview_r on public.saved_view for select to authenticated
+  using (owner_id = auth.uid()
+         or (shared_role is not null and shared_role = fn_current_role()));
+
+-- Write your own personal views (never a shared one through this policy).
+drop policy if exists p_savedview_own on public.saved_view;
+create policy p_savedview_own on public.saved_view for all to authenticated
+  using (owner_id = auth.uid() and shared_role is null)
+  with check (owner_id = auth.uid() and shared_role is null);
+
+-- Super admin manages the published role-default views.
+drop policy if exists p_savedview_shared on public.saved_view;
+create policy p_savedview_shared on public.saved_view for all to authenticated
+  using (fn_current_role() = 'super_admin')
+  with check (fn_current_role() = 'super_admin');
+
+grant select, insert, update, delete on public.saved_view to authenticated;
+
+drop trigger if exists trg_savedview_touch on public.saved_view;
+create trigger trg_savedview_touch before update on public.saved_view
+  for each row execute function public.fn_touch_updated_at();
+
+
+-- ############################################################################
+-- ## 20260812200000_sal01_create_order.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- SAL01 — atomic order creation.
+--
+-- fn_create_order writes the order, its lines, and the sales assignment in a
+-- single transaction, replacing the client-side sequence (insert order → insert
+-- lines → on failure DELETE the order → upsert assignment) that could leave a
+-- half-created order behind. The order reference (p_order_id) is the external
+-- webshop/SAP number supplied by the caller.
+--
+-- SECURITY DEFINER with an explicit role + channel gate mirroring the orders
+-- RLS (sales may only open Inside/Field Sales). Idempotent (create-or-replace).
+-- Enum CASEs are cast explicitly (text→enum has no implicit assignment cast).
+-- ===========================================================================
+
+create or replace function public.fn_create_order(
+  p_order_id  text,
+  p_channel   text,
+  p_order_date date,
+  p_client_id uuid,
+  p_lines     jsonb,
+  p_sales_id  uuid default null,
+  p_country   text default 'PH'
+) returns text
+language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text; v_line jsonb; v_no int := 0;
+begin
+  if r is null or r not in ('sales','coordinator','operations','super_admin') then
+    raise exception 'Your role may not create orders' using errcode = '42501';
+  end if;
+  if r = 'sales' and p_channel not in ('Inside Sales','Field Sales') then
+    raise exception 'Sales may only create Inside Sales or Field Sales orders' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_order_id),'') = '' then
+    raise exception 'An order reference is required' using errcode = '22004';
+  end if;
+  if exists (select 1 from orders where order_id = p_order_id) then
+    raise exception 'Order % already exists', p_order_id using errcode = '23505';
+  end if;
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
+    raise exception 'At least one line is required' using errcode = '22004';
+  end if;
+
+  insert into orders (order_id, order_date, channel, modality, seats, amount_php,
+                      client_id, created_by, country, fulfillment_stage)
+  values (p_order_id, coalesce(p_order_date, current_date), p_channel::channel_t,
+          (p_lines->0->>'modality')::modality_t, 1, 0, p_client_id, auth.uid(),
+          coalesce(p_country,'PH')::country_t, 'New');
+
+  for v_line in select * from jsonb_array_elements(p_lines) loop
+    v_no := v_no + 1;
+    insert into order_line (order_id, line_no, course_id, schedule_id, modality,
+                            seats, amount_php, line_status)
+    values (p_order_id, v_no, (v_line->>'course_id')::uuid,
+            nullif(v_line->>'schedule_id','')::uuid, (v_line->>'modality')::modality_t,
+            coalesce((v_line->>'seats')::int, 1), coalesce((v_line->>'amount_php')::numeric, 0),
+            coalesce(nullif(v_line->>'line_status',''), 'New')::order_status_t);
+  end loop;
+
+  if p_sales_id is not null then
+    insert into order_assignment (order_id, sales_id) values (p_order_id, p_sales_id)
+      on conflict (order_id) do nothing;
+  end if;
+
+  return p_order_id;
+end $$;
+revoke execute on function public.fn_create_order(text, text, date, uuid, jsonb, uuid, text) from public, anon;
+grant execute on function public.fn_create_order(text, text, date, uuid, jsonb, uuid, text) to authenticated;

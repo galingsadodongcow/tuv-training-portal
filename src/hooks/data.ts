@@ -986,6 +986,65 @@ export function useRoster(scheduleId?: string) {
   })
 }
 
+// ROS01: soft-remove a participant (keeps history) and transfer to another
+// session. Both are DB-enforced to ops/coordinator/super_admin.
+export function useRemoveParticipant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ participantId, reason }: { participantId: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_remove_participant', { p_participant: participantId, p_reason: reason ?? null })
+      if (error) throw error
+    },
+    onSuccess: () => ['roster', 'session_orders', 'schedules'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+export function useTransferParticipant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ participantId, newScheduleId, reason }: { participantId: string; newScheduleId: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_transfer_participant', { p_participant: participantId, p_new_schedule: newScheduleId, p_reason: reason ?? null })
+      if (error) throw error
+    },
+    onSuccess: () => ['roster', 'session_orders', 'schedules'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// SV01: server-persisted saved views. Returns the caller's own views for a
+// surface plus any role-default published for their role.
+export function useSavedViews(surface?: string) {
+  return useQuery({
+    queryKey: ['saved_views', surface],
+    enabled: !!surface,
+    queryFn: () => okOr(
+      supabase.from('saved_view').select('*').eq('surface', surface).order('is_default', { ascending: false }).order('name'),
+      []
+    ),
+  })
+}
+
+export function useUpsertSavedView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (view: { view_id?: string; owner_id: string; surface: string; name: string; config: any; is_default?: boolean }) => {
+      const { error } = await supabase.from('saved_view').upsert(view, { onConflict: 'view_id' })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_views'] }),
+  })
+}
+
+export function useDeleteSavedView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (viewId: string) => {
+      const { error } = await supabase.from('saved_view').delete().eq('view_id', viewId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_views'] }),
+  })
+}
+
 export function useSessionOrders(scheduleId?: string) {
   return useQuery({
     queryKey: ['session_orders', scheduleId],
