@@ -56,7 +56,7 @@ function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => voi
         placeholder="Reason (optional)" style={{ marginTop: 8 }} />
       {err && <div className="notice notice-error" style={{ margin: '8px 0' }}>{err}</div>}
       <div className="toolbar" style={{ marginTop: 8 }}>
-        <button className="btn btn-sm" disabled={!target || busy} onClick={go}>Transfer</button>
+        <button className="btn btn-sm" disabled={!target || busy} onClick={go}>Move booking</button>
         <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
       </div>
     </div>

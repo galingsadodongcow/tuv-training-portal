@@ -122,7 +122,6 @@ export default function ClientDetail() {
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'orders', label: `Orders (${orders.length})` },
-    { key: 'sessions', label: `Sessions (${sessions.length})` },
     { key: 'contacts', label: 'Contacts' },
     { key: 'files', label: 'Files' },
     { key: 'activity', label: 'Activity' },
@@ -186,6 +185,7 @@ export default function ClientDetail() {
       )}
 
       {tab === 'orders' && (
+      <>
       <RecordSection title={`Orders (${orders.length})`}>
         {hist.isLoading ? <Spinner /> : orders.length === 0 ? (
           <div className="card"><div className="empty">No orders on record.</div></div>
@@ -216,31 +216,30 @@ export default function ClientDetail() {
           </div>
         )}
       </RecordSection>
-      )}
 
-      {tab === 'sessions' && (
+      {/* Sessions booked — folded in from the retired Sessions tab (they hang off
+          the same orders, so they belong on the commercial view, not a 6th tab). */}
+      {sessions.length > 0 && (
       <RecordSection title={`Sessions booked (${sessions.length})`}>
-        {sessions.length === 0 ? (
-          <div className="card"><div className="empty">No sessions booked.</div></div>
-        ) : (
-          <div className="card">
-            <table>
-              <thead><tr><th>Course</th><th>Dates</th></tr></thead>
-              <tbody>
-                {sessions.map((s: any) => (
-                  <tr key={s.schedule_id}>
-                    <td><Link href={`/session/${s.schedule_id}`} style={{ fontWeight: 600 }}>{s.course || 'Session'}</Link></td>
-                    <td className="fill-label">
-                      {s.schedule ? formatSegments(s.schedule.date_segments, s.schedule.start_date, s.schedule.end_date) : 'E-learning'}
-                      {s.schedule?.status ? ` · ${s.schedule.status}` : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div className="card">
+          <table>
+            <thead><tr><th>Course</th><th>Dates</th></tr></thead>
+            <tbody>
+              {sessions.map((s: any) => (
+                <tr key={s.schedule_id}>
+                  <td><Link href={`/session/${s.schedule_id}`} style={{ fontWeight: 600 }}>{s.course || 'Session'}</Link></td>
+                  <td className="fill-label">
+                    {s.schedule ? formatSegments(s.schedule.date_segments, s.schedule.start_date, s.schedule.end_date) : 'E-learning'}
+                    {s.schedule?.status ? ` · ${s.schedule.status}` : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </RecordSection>
+      )}
+      </>
       )}
 
       {tab === 'contacts' && (
