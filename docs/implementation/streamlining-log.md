@@ -33,6 +33,13 @@ Implementation-focused record of the simplification work (the "make it lighter /
 - **Result:** trainer/venue/confirm happen without leaving the calendar. `useSchedules` now also selects `trainer_id`/`venue_id` so the drawer can pre-select. **Clicks:** assign a trainer went from ~4 (open session → edit → pick → save → back) to 1 in the drawer.
 - **Files:** `src/screens/Calendar.tsx`, `src/hooks/data.ts` (added `trainer_id`/`venue_id` to `useSchedules`).
 
+### S3 — Leaner session creation (progressive disclosure)
+- **Previous:** the New-session form showed all 11 inputs at once — course, learning type, fee, dates, min pax, max pax, sales owner, trainer, venue, status, private-run — even though only a course and a date block are actually needed to schedule a run, and every other field already has a working default.
+- **Problem:** a wall of fields on the most common creation path, most of which the operator leaves at their default. It reads as "all of this is required," and the trainer/venue pickers duplicate the assign-in-place actions S2 added to the calendar drawer (so they no longer need to be set at creation).
+- **Decision — Simplify (progressive disclosure).** The form now leads with the three essentials — **Course · Learning type · Dates** — and folds the rest behind a **"More options"** disclosure with a one-line summary of the defaults it hides (pax `MIN_PAX`–course-max, fee from catalog, status Tentative, trainer & venue assignable from the calendar). Nothing changed about what gets submitted: pax still seed from the course on pick, blanks still resolve to the course/`MIN_PAX` defaults, status still defaults Tentative. The disclosure starts **open when editing or cloning** so a deliberate change never hides a field, and closed for a brand-new session.
+- **Result:** creating a session is a 3-field task by default (course, type, dates) instead of an 11-field one; the optional/assign-later details are one click away and clearly labelled as defaulted. No new required fields, no behaviour change to the double-booking check or the pax/status guards.
+- **Files:** `src/screens/SessionForm.tsx` (`showMore` state + folded advanced grid).
+
 ### S5 — Participant lifecycle (retire hard delete; add transfer)
 - **Previous:** RosterPanel could add/import/mark attendance/issue certs and **hard-delete** a participant (destroying attendance/assessment/cert history).
 - **Problem:** a hard delete on an operational, audit-relevant record — contradicts the app's soft-delete stance and is a PII/history hazard. No way to move a participant to another session short of delete + re-add.
@@ -43,7 +50,6 @@ Implementation-focused record of the simplification work (the "make it lighter /
 ---
 
 ## Planned next entries (this phase)
-- S3 — Create-session workflow: progressive disclosure; course-derived defaults confirmed (min/max already default from course); reduce required-at-creation fields.
 - S4 — Session detail: tighten to the standard header + attention + summary + minimal tabs (already tabbed via REC-standard; audit tab count).
 - S5 — Participants: lifecycle (soft-cancel / transfer / substitute) on the new `participant.status` column instead of hard delete.
 - S6 — Categories/subcategories: **DB-dependent** (today `course.category` is free-text; a real hierarchy needs tables + RLS) → Supabase session; meanwhile keep category as a managed free-text list in Course management.
