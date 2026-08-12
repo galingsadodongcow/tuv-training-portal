@@ -188,8 +188,8 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
       body: 'This removes them from the session roster. Their attendance, assessment, and certificate history is preserved for audit — the record is flagged removed, not deleted.',
       confirmLabel: 'Remove',
       tone: 'danger',
-      reason: 'optional',
-      reasonLabel: 'Reason',
+      reason: 'required',
+      reasonLabel: 'Reason (required)',
     })
     if (!res.ok) return
     const { error } = await supabase.rpc('fn_remove_participant', { p_participant: pid, p_reason: res.reason?.trim() || null })

@@ -27,8 +27,9 @@ export default function Approvals() {
       body: a.object_type,
       confirmLabel: decision === 'Approved' ? 'Approve' : 'Reject',
       tone: decision === 'Rejected' ? 'danger' : 'default',
-      reason: 'optional',
-      reasonLabel: 'Decision note',
+      // A rejection must carry a rationale (audit trail); an approval note stays optional.
+      reason: decision === 'Rejected' ? 'required' : 'optional',
+      reasonLabel: decision === 'Rejected' ? 'Reason for rejection (required)' : 'Decision note',
     })
     if (!res.ok) return
     setMsg(null)

@@ -29,7 +29,8 @@ export default function Duplicates() {
       body: `Order ${dup} and all of its lines will be CANCELLED — freeing its seats and revenue — and order ${keep} will be kept as the surviving booking. This fixes the double-count and cannot be undone here.`,
       confirmLabel: 'Merge & cancel duplicate',
       tone: 'danger',
-      reason: 'optional',
+      reason: 'required',
+      reasonLabel: 'Reason (required)',
     })
     if (!res.ok) return
     try {
