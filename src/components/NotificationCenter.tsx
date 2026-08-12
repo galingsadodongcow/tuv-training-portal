@@ -33,6 +33,18 @@ function ago(ts?: string): string {
   return `${Math.floor(d / 86400)}d ago`
 }
 
+// Per-kind icon + whether it's something the user must act on. The
+// notification.kind CHECK is {mention, assignment, approval, system, info};
+// mentions/assignments/approvals go in "Needs action", the rest are FYI (#131).
+const KIND_META: Record<string, { icon: string; label: string; action: boolean }> = {
+  mention: { icon: '💬', label: 'Mention', action: true },
+  assignment: { icon: '📥', label: 'Assigned', action: true },
+  approval: { icon: '✅', label: 'Approval', action: true },
+  system: { icon: '⚙️', label: 'System', action: false },
+  info: { icon: 'ℹ️', label: 'Info', action: false },
+}
+const kindMeta = (k?: string) => KIND_META[k || ''] || { icon: '🔔', label: 'Update', action: false }
+
 export default function NotificationCenter() {
   const { profile } = useAuth()
   const uid = profile?.user_id
@@ -54,6 +66,40 @@ export default function NotificationCenter() {
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
+
+  const renderRow = (r: any) => {
+    const meta = kindMeta(r.kind)
+    const href = entityHref(r.entity_type, r.entity_id)
+    const onOpen = () => { if (!r.is_read) markRead.mutate(r.notif_id); setOpen(false) }
+    const body = (
+      <>
+        <span className="notif-kind" aria-hidden="true">{meta.icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="notif-row-top">
+            <span className={`notif-dot ${r.is_read ? 'read' : ''}`} aria-hidden="true" />
+            <span className="notif-title">{r.title}</span>
+            <span className="notif-time">{ago(r.created_at)}</span>
+          </div>
+          {r.body && <div className="notif-text" style={{ marginLeft: 0 }}>{r.body}</div>}
+        </div>
+      </>
+    )
+    return href ? (
+      <Link key={r.notif_id} href={href} className={`notif-row notif-flex ${r.is_read ? 'is-read' : ''}`} onClick={onOpen}>{body}</Link>
+    ) : (
+      <button key={r.notif_id} className={`notif-row notif-flex ${r.is_read ? 'is-read' : ''}`} onClick={onOpen}>{body}</button>
+    )
+  }
+
+  // A titled group of notifications; renders nothing when the group is empty so
+  // the header never sits over a blank section.
+  const renderGroup = (title: string, items: any[]) =>
+    items.length === 0 ? null : (
+      <div className="notif-group">
+        <div className="notif-group-head">{title} <span className="notif-group-count">{items.length}</span></div>
+        {items.map(renderRow)}
+      </div>
+    )
 
   if (!uid) return null
 
@@ -88,29 +134,10 @@ export default function NotificationCenter() {
             ) : rows.length === 0 ? (
               <div className="notif-empty">You’re all caught up.</div>
             ) : (
-              rows.map((r) => {
-                const href = entityHref(r.entity_type, r.entity_id)
-                const body = (
-                  <>
-                    <div className="notif-row-top">
-                      <span className={`notif-dot ${r.is_read ? 'read' : ''}`} aria-hidden="true" />
-                      <span className="notif-title">{r.title}</span>
-                      <span className="notif-time">{ago(r.created_at)}</span>
-                    </div>
-                    {r.body && <div className="notif-text">{r.body}</div>}
-                  </>
-                )
-                const onOpen = () => { if (!r.is_read) markRead.mutate(r.notif_id); setOpen(false) }
-                return href ? (
-                  <Link key={r.notif_id} href={href} className={`notif-row ${r.is_read ? 'is-read' : ''}`} onClick={onOpen}>
-                    {body}
-                  </Link>
-                ) : (
-                  <button key={r.notif_id} className={`notif-row ${r.is_read ? 'is-read' : ''}`} onClick={onOpen}>
-                    {body}
-                  </button>
-                )
-              })
+              <>
+                {renderGroup('Needs action', rows.filter((r) => kindMeta(r.kind).action))}
+                {renderGroup('For your information', rows.filter((r) => !kindMeta(r.kind).action))}
+              </>
             )}
           </div>
         </div>

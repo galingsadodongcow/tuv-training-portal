@@ -776,6 +776,19 @@ tr.row-focus > td { animation: row-flash 2.4s ease-out; }
 .notif-title { font-weight: 600; font-size: 13px; flex: 1 1 auto; }
 .notif-time { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); flex: 0 0 auto; }
 .notif-text { font-size: 12px; color: var(--text-muted); margin: 3px 0 0 15px; }
+/* Grouped notifications (#131): "Needs action" vs "For your information", each
+   row prefixed with a per-kind type icon. */
+.notif-group-head {
+  display: flex; align-items: center; gap: 6px; padding: 8px 14px 4px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+}
+.notif-group-count {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 0 6px;
+}
+.notif-group:first-child .notif-group-head { padding-top: 4px; }
+.notif-flex { display: flex; align-items: flex-start; gap: 9px; }
+.notif-kind { font-size: 15px; line-height: 1.3; flex: 0 0 auto; }
 @media (max-width: 860px) { .notif-panel { position: fixed; top: 52px; right: 8px; left: 8px; width: auto; } }
 
 /* WCAG 2.5.5 target size (#135): on coarse (touch) pointers, raise the small
