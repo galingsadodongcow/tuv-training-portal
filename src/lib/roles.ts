@@ -31,7 +31,7 @@ export const NAV: NavItem[] = [
   { path: '/sales-entry', label: 'New sales order', roles: ['super_admin', 'sales'], icon: 'plus', group: 'Sales' },
   { path: '/orders', label: 'Orders', roles: ALL, icon: 'orders', group: 'Sales' },
   { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'operations', 'business_owner', 'sales'], icon: 'fulfillment', group: 'Sales' },
-  { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'sales'], icon: 'duplicates', group: 'Sales' },
+  { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'operations'], icon: 'duplicates', group: 'Operations' },
 
   { path: '/calendar', label: 'Calendar', roles: ALL, icon: 'calendar', group: 'Operations' },
   { path: '/resources', label: 'Trainers and venues', roles: ['super_admin', 'operations', 'business_owner'], icon: 'resources', group: 'Operations' },

@@ -2,13 +2,14 @@
 import Link from 'next/link'
 import {
   useFulfillmentQueue,
-  useSchedules,
+  useSessionHealth,
   useUnstaffed,
   useDuplicates,
 } from '../hooks/data'
 import { KpiSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { isUnowned, isStalled, isOverdue } from '../lib/orderState'
+import { healthNeedsAction } from '../lib/health'
 
 // Days-out threshold for calling an unstaffed session urgent.
 const SOON_DAYS = 21
@@ -39,24 +40,23 @@ function CheckCard({ c }: { c: Check }) {
 // no schema change.
 export default function DataQuality() {
   const queue = useFulfillmentQueue()
-  const sched = useSchedules()
+  const health = useSessionHealth()
   const unstaffed = useUnstaffed()
   const dups = useDuplicates()
 
-  const loading = queue.isLoading || sched.isLoading || unstaffed.isLoading || dups.isLoading
-  const error = queue.error || sched.error || unstaffed.error || dups.error
+  const loading = queue.isLoading || health.isLoading || unstaffed.isLoading || dups.isLoading
+  const error = queue.error || health.error || unstaffed.error || dups.error
 
   const q: any[] = queue.data || []
-  const today = new Date(new Date().toDateString())
-  const belowMin = (sched.data || []).filter(
-    (r: any) => ['Tentative', 'Confirmed'].includes(r.status) && r.booked_participants < r.min_participants && new Date(r.start_date) >= today
-  ).length
+  // Authoritative session-risk signal: the computed health view (v_session_health),
+  // same source My Work and the calendar read. Count the actionable sessions.
+  const needsAttentionSessions = (health.data || []).filter((r: any) => healthNeedsAction(r.health)).length
 
   const checks: Check[] = [
     { label: 'Orders without an owner', value: q.filter(isUnowned).length, sub: 'Assign a salesperson', href: '/worklist?who=unassigned' },
     { label: 'Stalled orders', value: q.filter(isStalled).length, sub: 'Over 14 days in stage', href: '/worklist?view=stalled' },
     { label: 'Overdue collections', value: q.filter(isOverdue).length, sub: 'Unpaid past 30 days', href: '/worklist?view=overdue' },
-    { label: 'Sessions below minimum', value: belowMin, sub: 'Upcoming, need pax', href: '/calendar?month=all&sort=fill&dir=asc' },
+    { label: 'Sessions needing attention', value: needsAttentionSessions, sub: 'At risk, below minimum, or blocked', href: '/calendar?month=all&sort=fill&dir=asc' },
     { label: 'Unstaffed sessions', value: (unstaffed.data || []).filter((u: any) => u.days_out <= SOON_DAYS).length, sub: 'No trainer within 3 weeks', href: '/calendar?month=all' },
     { label: 'Duplicate candidates', value: (dups.data || []).length, sub: 'Review and merge', href: '/duplicates' },
   ]

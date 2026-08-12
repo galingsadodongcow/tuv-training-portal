@@ -8,6 +8,7 @@ import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { shortDate, php } from '../lib/format'
+import { inquiryHealth } from '../lib/leadHealth'
 
 // The lead pipeline, left to right. Matches the inquiry_status enum.
 const STAGES = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback', 'Closed Won', 'Closed Lost']
@@ -159,9 +160,13 @@ export default function Inquiries() {
               {byStage[stage].length === 0 && <div className="pipeline-empty">—</div>}
               {byStage[stage].map((q: any) => {
                 const i = STAGES.indexOf(stage)
+                const h = inquiryHealth(q)
                 return (
                   <div key={q.inquiry_id} className="pipeline-card">
-                    <div style={{ fontWeight: 600 }}>{q.company}</div>
+                    <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{q.company}</span>
+                      {h && <span className={`pill ${h.cls}`}>{h.label}</span>}
+                    </div>
                     <div className="fill-label">{q.course?.course_name || 'No course yet'}</div>
                     <div className="fill-label">
                       {q.contact || '—'}{q.pax ? ` · ${q.pax} pax` : ''} · {q.offering_type}

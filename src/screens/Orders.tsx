@@ -8,6 +8,7 @@ import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
 import { primaryFlag } from '../lib/orderState'
+import { useSort } from '../hooks/useSort'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -34,6 +35,14 @@ export default function Orders() {
 
   const query = useOrdersPaged({ page, pageSize: PAGE_SIZE, q, stage, pay })
   const rows: any[] = query.data?.rows || []
+  // Sort is page-local: it reorders the current page's rows in the browser, not
+  // the whole filtered dataset (the query is paged server-side by order_date).
+  const sort = useSort(rows, (o: any, k: string) => {
+    if (k === 'customer') return o.client?.company || o.client?.name || null
+    if (k === 'total_seats') return Number(o.total_seats) || 0
+    if (k === 'total_amount') return Number(o.total_amount) || 0
+    return o?.[k]
+  })
   const count = query.data?.count ?? 0
   const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const from = count === 0 ? 0 : page * PAGE_SIZE + 1
@@ -43,7 +52,7 @@ export default function Orders() {
     exportCsv(
       `orders-${new Date().toISOString().slice(0, 10)}`,
       ['Order', 'Date', 'Customer', 'Stage', 'Payment', 'SAP', 'Channel', 'Seats', 'Amount'],
-      rows.map((o) => [
+      sort.sorted.map((o) => [
         o.order_id, o.order_date, o.client?.company || o.client?.name || '',
         o.fulfillment_stage, o.payment_status, o.sap_order_no || '', o.channel, o.total_seats, o.total_amount,
       ])
@@ -55,7 +64,7 @@ export default function Orders() {
       <div className="page-head">
         <div>
           <h1>Orders</h1>
-          <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines.</p>
+          <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines. Column sort reorders the current page.</p>
           <span className="k-sub">All amounts in PHP (₱)</span>
         </div>
         <div className="toolbar">
@@ -86,12 +95,19 @@ export default function Orders() {
             <table className="sticky-1">
               <thead>
                 <tr>
-                  <th>Order</th><th>Customer</th><th>Stage</th><th>SAP</th>
-                  <th>Channel</th><th className="right">Seats</th><th className="right">Amount</th><th></th>
+                  {([['order_id', 'Order'], ['customer', 'Customer'], ['fulfillment_stage', 'Stage'], ['sap_order_no', 'SAP'], ['channel', 'Channel'], ['total_seats', 'Seats', 'right'], ['total_amount', 'Amount', 'right']] as const).map(([key, label, align]) => (
+                    <th key={key} className={`clickable${align ? ' ' + align : ''}`} role="button" tabIndex={0}
+                      aria-sort={sort.sort.key === key ? (sort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      onClick={() => sort.toggle(key)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort.toggle(key) } }}>
+                      {label}{sort.indicator(key)}
+                    </th>
+                  ))}
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((o) => (
+                {sort.sorted.map((o) => (
                   <Fragment key={o.order_id}>
                     <tr className="clickable" role="button" tabIndex={0}
                       aria-label={`Open order ${o.order_id}`}
