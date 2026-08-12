@@ -13,7 +13,8 @@
   --card: #ffffff;
   --text: #171717;
   --text-muted: #666666;
-  --text-faint: #8f8f8f;
+  /* Darkened from #8f8f8f (~2.9:1, failed WCAG AA) to ~5.3:1 on white. */
+  --text-faint: #6b6b6b;
   --border: #ebebeb;
   --border-soft: #f2f2f2;
   --border-strong: #d4d4d4;
@@ -31,6 +32,12 @@
   --danger: #e5484d;
   --danger-hover: #c93b40;
   --warning: #b7791f;
+
+  /* Status-chip accents (tokenized so they theme + stay consistent) */
+  --pill-purple: #7c3aed;
+  --pill-purple-fg: #8b5cf6;
+  --pill-pink: #db2777;
+  --pill-pink-fg: #ec4899;
 
   --radius: 10px;
   --radius-sm: 8px;
@@ -216,8 +223,8 @@ tbody tr:hover { background: var(--bg-subtle); }
 .pill-tentative, .pill-inhouse { background: color-mix(in srgb, var(--warning) 16%, transparent); color: var(--warning); }
 .pill-cancelled { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text-muted); }
 .pill-running, .pill-completed, .pill-webshop { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
-.pill-inside { background: color-mix(in srgb, #7c3aed 16%, transparent); color: #8b5cf6; }
-.pill-field { background: color-mix(in srgb, #db2777 16%, transparent); color: #ec4899; }
+.pill-inside { background: color-mix(in srgb, var(--pill-purple) 16%, transparent); color: var(--pill-purple-fg); }
+.pill-field { background: color-mix(in srgb, var(--pill-pink) 16%, transparent); color: var(--pill-pink-fg); }
 
 /* ----------------------------------------------------------- Fill bar */
 .fill { position: relative; height: 6px; border-radius: var(--radius-pill); background: var(--border); overflow: hidden; min-width: 90px; }
@@ -229,6 +236,11 @@ tbody tr:hover { background: var(--bg-subtle); }
 /* -------------------------------------------------------- Forms & buttons */
 label.field { display: block; margin-bottom: 15px; }
 label.field span { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; font-weight: 550; }
+/* Required-field marker + inline (per-field) validation error */
+.req-star { color: var(--danger); margin-left: 2px; }
+.field-error { display: block; margin-top: 5px; font-size: 12px; color: var(--danger); font-weight: 550; }
+input.invalid, select.invalid, textarea.invalid { border-color: var(--danger); }
+input.invalid:focus, select.invalid:focus, textarea.invalid:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent); }
 input, select, textarea {
   width: 100%; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   font-size: 13.5px; font-family: inherit; background: var(--card); color: var(--text);
@@ -254,6 +266,22 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn-danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
 .btn-sm { padding: 5px 11px; font-size: 12.5px; }
+
+/* Shared keyboard-focus ring for interactive controls that previously had none
+   (nav links, record/drawer tabs, link-buttons, segmented toggles, command
+   palette rows, calendar events, back-links, and any bare <button>). */
+.nav-link:focus-visible,
+.tab:focus-visible,
+.linkbtn:focus-visible,
+.seg-btn:focus-visible,
+.cmdk-item:focus-visible,
+.cal-event:focus-visible,
+.back-link:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+button:focus-visible { outline: none; box-shadow: var(--ring); }
 
 /* -------------------------------------------------------------- States */
 .notice { padding: 11px 14px; border-radius: var(--radius-sm); font-size: 13.5px; border: 1px solid transparent; line-height: 1.5; }
@@ -431,6 +459,15 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
   .cal-table td[data-label=""]::before { display: none; }
   .cal-table td[data-label=""] { display: block; }
   .cal-table td.right { justify-content: space-between; text-align: left; }
+}
+
+/* Laptop wide tables: when a table scrolls horizontally on a narrow viewport,
+   keep the identifying first column pinned so rows stay legible while the user
+   scrolls right to the action columns. Opt-in via class="sticky-1" on <table>. */
+@media (max-width: 1200px) {
+  table.sticky-1 thead th:first-child { position: sticky; left: 0; z-index: 2; background: var(--bg-subtle); }
+  table.sticky-1 tbody td:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); }
+  table.sticky-1 tbody tr:hover td:first-child { background: var(--bg-subtle); }
 }
 
 /* ================================================= Forced theme (toggle) */

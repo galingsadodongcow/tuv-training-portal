@@ -206,6 +206,7 @@ export default function Worklist() {
             {view !== 'all' ? ` · ${orderView(view).label.toLowerCase()}` : ''}
             {who === 'unassigned' ? ' · unassigned, ready to claim' : ''}. Oldest first.
           </p>
+          <span className="k-sub">All amounts in PHP (₱)</span>
         </div>
       </div>
 
@@ -267,7 +268,7 @@ export default function Worklist() {
       )}
 
       <div className="card">
-        <table>
+        <table className="sticky-1">
           <thead>
             <tr>
               <th style={{ width: 32 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" /></th>

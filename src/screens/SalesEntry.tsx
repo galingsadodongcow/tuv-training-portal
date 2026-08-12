@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useCourses, useCourseFees, useClients, useInvalidate } from '../hooks/data'
+import { useCourses, useCourseFees, useClients, useInvalidate, usePossibleDuplicateClients } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
@@ -30,6 +31,14 @@ export default function SalesEntry() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [result, setResult] = useState<any>(null)
+  // Whether a submit has been attempted — gates inline per-field validation so
+  // the form doesn't nag before the rep has had a chance to fill it in.
+  const [tried, setTried] = useState(false)
+
+  // At-source duplicate check: existing clients that already carry this email
+  // (RLS-scoped). Only meaningful for a new customer; passing '' when picking an
+  // existing client self-disables the hook. Called unconditionally at top level.
+  const dupClients = usePossibleDuplicateClients(client.mode === 'new' ? client.email : '')
 
   // preselected session from the calendar Book link
   useEffect(() => {
@@ -96,8 +105,25 @@ export default function SalesEntry() {
   const total = lines.reduce((n, l) => n + (Number(l.amount) || 0) * (Number(l.seats) || 0), 0)
   const totalSeats = lines.reduce((n, l) => n + (Number(l.seats) || 0), 0)
 
+  // ---- Capture-time validation (surface only; the submit path below is the
+  // authoritative gate and is left untouched). Errors show once submit is tried.
+  const orderIdError = tried && !head.order_id.trim() ? 'Order number is required.' : null
+  const emailError = tried && client.mode === 'new' && !client.email.trim() ? 'Client email is required.' : null
+  const noLineError = tried && lines.filter((l) => l.course_id).length === 0 ? 'Add at least one training line.' : null
+  const lineFeeError = (l: any) => tried && l.course_id && !l.amount && l.amount !== 0 ? 'Set a fee for this line.' : null
+  const lineSessionError = (l: any) =>
+    tried && l.course_id && l.modality !== 'E-learning' && !l.schedule_id ? 'Pick a session for this line.' : null
+  // Non-blocking format sanity check on the reference/SAP order number. Catches
+  // obvious typos (spaces, wrong length, illegal chars) without imposing a
+  // specific corporate format — a warning only, it never blocks the save.
+  const orderIdRef = head.order_id.trim()
+  const orderIdWarn = orderIdRef && !/^[A-Za-z0-9-]{3,30}$/.test(orderIdRef)
+    ? 'Check this reference — expected 3–30 letters, digits or dashes (no spaces).'
+    : null
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setTried(true)
     setBusy(true); setMsg(null)
     try {
       if (!head.order_id.trim()) throw new Error('Enter the webshop or reference order number.')
@@ -250,8 +276,26 @@ export default function SalesEntry() {
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <input aria-label="Contact name" placeholder="Contact name" value={client.name} onChange={(e) => setClient({ ...client, name: e.target.value })} />
               <input aria-label="Company" placeholder="Company (blank for individuals)" value={client.company} onChange={(e) => setClient({ ...client, company: e.target.value })} />
-              <input aria-label="Email" placeholder="Email" type="email" value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} />
+              <div>
+                <input aria-label="Email" placeholder="Email" type="email" className={emailError ? 'invalid' : undefined} value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} />
+                {emailError && <span className="field-error">{emailError}</span>}
+              </div>
               <input aria-label="Phone" placeholder="Phone" value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} />
+            </div>
+          )}
+          {client.mode === 'new' && dupClients.data && dupClients.data.length > 0 && (
+            <div className="notice notice-warn" style={{ marginTop: 10 }}>
+              A client with this email already exists — this may be a duplicate. Continue only if this is a separate order.
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                {dupClients.data.map((c: any) => (
+                  <li key={c.client_id}>
+                    {c.client_id
+                      ? <Link href={`/clients/${c.client_id}`}>{c.name || c.email}</Link>
+                      : (c.name || c.email)}
+                    {c.company ? ` (${c.company})` : ''}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
@@ -259,8 +303,10 @@ export default function SalesEntry() {
         <div className="card card-pad" style={{ marginBottom: 16 }}>
           <div className="k-label" style={{ marginBottom: 10 }}>Order</div>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-            <label className="field"><span>Order number</span>
-              <input value={head.order_id} onChange={(e) => setHead({ ...head, order_id: e.target.value })} placeholder="60806000000xxx" required />
+            <label className="field"><span>Order number<span className="req-star">*</span></span>
+              <input value={head.order_id} onChange={(e) => setHead({ ...head, order_id: e.target.value })} placeholder="60806000000xxx" required className={orderIdError ? 'invalid' : undefined} />
+              {orderIdError && <span className="field-error">{orderIdError}</span>}
+              {!orderIdError && orderIdWarn && <span className="field-error" style={{ color: 'var(--warning)' }}>{orderIdWarn}</span>}
             </label>
             <label className="field"><span>Order date</span>
               <input type="date" value={head.order_date} onChange={(e) => setHead({ ...head, order_date: e.target.value })} required />
@@ -301,11 +347,11 @@ export default function SalesEntry() {
                       {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
                     </select>
                   </label>
-                  <label className="field"><span>Session</span>
+                  <label className="field"><span>Session{l.modality !== 'E-learning' && <span className="req-star">*</span>}</span>
                     {l.modality === 'E-learning' ? (
                       <input value="No session — access granted after payment" disabled />
                     ) : (
-                      <select value={l.schedule_id} onChange={(e) => {
+                      <select className={lineSessionError(l) ? 'invalid' : undefined} value={l.schedule_id} onChange={(e) => {
                         const s = l.sessions.find((x: any) => x.schedule_id === e.target.value)
                         setLine(i, {
                           schedule_id: e.target.value,
@@ -326,12 +372,14 @@ export default function SalesEntry() {
                         })}
                       </select>
                     )}
+                    {lineSessionError(l) && <span className="field-error">{lineSessionError(l)}</span>}
                   </label>
                   <label className="field"><span>Seats</span>
                     <input type="number" min="1" value={l.seats} onChange={(e) => setLine(i, { seats: e.target.value })} />
                   </label>
-                  <label className="field"><span>Fee per seat {cat != null && `(catalog ${php(cat)})`}</span>
-                    <input type="number" min="0" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} />
+                  <label className="field"><span>Fee per seat<span className="req-star">*</span> {cat != null && `(catalog ${php(cat)})`}</span>
+                    <input type="number" min="0" className={lineFeeError(l) ? 'invalid' : undefined} value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} />
+                    {lineFeeError(l) && <span className="field-error">{lineFeeError(l)}</span>}
                   </label>
                 </div>
                 {l.course_id && l.modality !== 'E-learning' && l.sessions.length === 0 && (
@@ -351,6 +399,7 @@ export default function SalesEntry() {
           <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 14 }} onClick={() => setLines([...lines, blankLine()])}>
             + Add another training
           </button>
+          {noLineError && <span className="field-error">{noLineError}</span>}
         </div>
 
         {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}

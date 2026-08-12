@@ -56,6 +56,7 @@ export default function Orders() {
         <div>
           <h1>Orders</h1>
           <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines.</p>
+          <span className="k-sub">All amounts in PHP (₱)</span>
         </div>
         <div className="toolbar">
           <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}
@@ -82,7 +83,7 @@ export default function Orders() {
       ) : (
         <>
           <div className="card" style={{ opacity: query.isFetching ? 0.6 : 1, transition: 'opacity 0.15s' }}>
-            <table>
+            <table className="sticky-1">
               <thead>
                 <tr>
                   <th>Order</th><th>Customer</th><th>Stage</th><th>SAP</th>

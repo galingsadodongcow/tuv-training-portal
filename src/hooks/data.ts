@@ -488,6 +488,29 @@ const CLIENT_DETAIL_SELECT =
 
 // Single client for the Customer 360 route. Reads updated_at and deleted_at
 // when present, falling back to the base columns before the migration.
+// Possible-duplicate lookup for SalesEntry: existing clients that already carry
+// this email. RLS-scoped, so it only returns customers the user may already see;
+// it warns at capture time without blocking (the batch duplicate_candidate job
+// remains the authoritative cross-order detector). Disabled until an email that
+// looks complete is entered, and kept cheap with a small limit.
+export function usePossibleDuplicateClients(email?: string) {
+  const clean = (email || '').trim().toLowerCase()
+  const enabled = clean.length > 4 && clean.includes('@')
+  return useQuery({
+    queryKey: ['dup_clients', clean],
+    enabled,
+    queryFn: () =>
+      okOr(
+        supabase
+          .from('client')
+          .select('client_id, name, company, email, owner_sales_id, salesperson:owner_sales_id(name, code)')
+          .ilike('email', clean)
+          .limit(5),
+        []
+      ),
+  })
+}
+
 export function useClient(clientId?: string) {
   return useQuery({
     queryKey: ['client', clientId],
