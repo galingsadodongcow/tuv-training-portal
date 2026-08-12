@@ -15,7 +15,7 @@ import { useConfirm } from '../components/Confirm'
 import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
-import { collectionState, collectionTone } from '../lib/orderState'
+import { collectionState, collectionTone, stageLabel } from '../lib/orderState'
 
 // Customer 360: one page that gathers everything about a client. Contacts,
 // orders, the sessions those orders booked, and the money position, all read
@@ -275,7 +275,7 @@ export default function ClientDetail() {
                     <tr key={o.order_id}>
                       <td>
                         <Link href={`/orders/${o.order_id}`} style={{ fontWeight: 600 }}>{o.order_id}</Link>
-                        <div className="fill-label">{shortDate(o.order_date)} · {o.fulfillment_stage}</div>
+                        <div className="fill-label">{shortDate(o.order_date)} · {stageLabel(o.fulfillment_stage)}</div>
                       </td>
                       <td className="fill-label">{o.lines?.map((l: any) => l.course?.course_name).filter(Boolean).join(', ') || '—'}</td>
                       <td>

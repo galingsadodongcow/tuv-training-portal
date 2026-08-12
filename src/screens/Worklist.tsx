@@ -10,7 +10,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
-import { primaryFlag, ORDER_VIEWS, orderView } from '../lib/orderState'
+import { primaryFlag, ORDER_VIEWS, orderView, stageLabel } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback']
 const NEXT: Record<string, string> = {
@@ -247,7 +247,7 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
         ))}
         <select aria-label="Filter by stage" value={stage} onChange={(e) => setParam('stage', e.target.value)} style={{ marginLeft: 'auto' }}>
           <option value="all">All stages ({Object.values(stageCounts).reduce((a, b) => a + b, 0)})</option>
-          {STAGES.map((s) => (<option key={s} value={s}>{s} ({stageCounts[s] || 0})</option>))}
+          {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)} ({stageCounts[s] || 0})</option>))}
         </select>
       </div>
 
@@ -300,7 +300,7 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
                   <div className="fill-label">{o.email}</div>
                 </td>
                 <td>
-                  <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                  <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                   {(() => {
                     const f = primaryFlag(o)
                     return f ? (
@@ -337,10 +337,10 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
                     canAct ? (
                       <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
                         onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
-                        → {NEXT[o.fulfillment_stage]}
+                        → {stageLabel(NEXT[o.fulfillment_stage])}
                       </button>
                     ) : (
-                      <span className="fill-label">→ {NEXT[o.fulfillment_stage]}</span>
+                      <span className="fill-label">→ {stageLabel(NEXT[o.fulfillment_stage])}</span>
                     )
                   ) : (
                     <span className="fill-label">Awaiting collection</span>

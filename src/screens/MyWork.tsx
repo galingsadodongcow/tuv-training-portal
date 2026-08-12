@@ -26,6 +26,7 @@ import {
   isOverdue,
   isPaidUnendorsed,
   isNoFeedback,
+  stageLabel,
 } from '../lib/orderState'
 import { healthMeta, healthNeedsAction, Health } from '../lib/health'
 
@@ -367,7 +368,7 @@ export default function MyWork() {
                     </div>
                   </td>
                   <td>
-                    <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                    <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                     {flag && (
                       <div className="fill-label" style={{ marginTop: 4, color: toneColor(flag.tone) }}>
                         {flag.label}
@@ -440,7 +441,7 @@ export default function MyWork() {
                   </div>
                 </td>
                 <td>
-                  <span className="pill pill-webshop">{b.fulfillment_stage}</span>
+                  <span className="pill pill-webshop">{stageLabel(b.fulfillment_stage)}</span>
                 </td>
                 <td className="right fill-label">
                   <span style={{ color: 'var(--tr-red)', fontWeight: 600 }}>{b.days_over}d over</span>
