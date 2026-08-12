@@ -88,6 +88,30 @@ export function useCourseFees() {
   })
 }
 
+// S6: Category → Subcategory hierarchy for the course form. Degrades to [] when
+// the tables are not live yet (okOr swallows the missing-object error), so the
+// course form falls back to the free-text category field.
+export function useCategoryTree() {
+  return useQuery({
+    queryKey: ['category_tree'],
+    queryFn: async () => {
+      const cats = await okOr(
+        supabase.from('category').select('category_id, name, sort, active').eq('active', true).order('sort').order('name'),
+        null
+      )
+      if (cats === null) return [] // tables not applied yet
+      const subs = await okOr(
+        supabase.from('subcategory').select('subcategory_id, category_id, name, sort, active').eq('active', true).order('sort').order('name'),
+        []
+      )
+      return (cats || []).map((c: any) => ({
+        ...c,
+        subcategories: (subs || []).filter((s: any) => s.category_id === c.category_id),
+      }))
+    },
+  })
+}
+
 export function useActiveYear() {
   return useQuery({
     queryKey: ['active_year'],

@@ -68,10 +68,17 @@ Implementation-focused record of the simplification work (the "make it lighter /
 
 ---
 
-## Planned next entries (this phase)
-- S6 — Categories/subcategories: **DB-dependent** (today `course.category` is free-text; a real hierarchy needs tables + RLS) → Supabase session; meanwhile keep category as a managed free-text list in Course management.
+## Phase 2 (DB) — done in a Supabase-enabled session
 
-## Deferred to a Supabase-enabled session (DB/RLS)
-- Category → subcategory hierarchy (new tables, RLS, migrate `course.category`).
-- Runtime CRUD/RLS validation for every role (the "RLS validated" column in `role-crud-matrix.md`).
-- Any write-path/permission change surfaced during CRUD review.
+### S6 — Real Category → Subcategory hierarchy (retire free-text `course.category`)
+- **Previous:** `course.category` was a free-text field with a datalist of previously-typed values — no structure, easy to drift ("OSH" vs "Occupational Health and Safety"), and no subcategory concept.
+- **Decision — Rebuild (DB hierarchy).** New `category` (name unique, sort, active) and `subcategory` (category_id FK, name, sort, active; unique per category) tables + `course.subcategory_id` FK. `course.category` is **kept for now** (dropped later once nothing reads it). Backfill turns every distinct `course.category` into a category with a default **'General'** subcategory and links each course to it. Course management now offers **dependent Category → Subcategory selects**, and keeps `course.category` in sync with the chosen category name during the transition.
+- **RLS:** both tables read-all-authenticated, write **super_admin / operations** only (matrix Categories row) — verified by role simulation on the live DB.
+- **Degradation:** `useCategoryTree` returns `[]` if the tables aren't live yet (okOr swallows the missing-object error) and the form falls back to the free-text field; the save strips `subcategory_id` on a `42703`. So the frontend works before *and* after the migration lands.
+- **Migration:** `supabase/migrations/20260812220000_s6_category_hierarchy.sql` (idempotent; validated on a throwaway PG17 — backfill + double-apply).
+- **Files:** the migration; `src/hooks/data.ts` (`useCategoryTree`); `src/screens/CourseForm.tsx` (dependent selects + fallback).
+
+### Phase 2 — Full CRUD/RLS validation for all 8 roles
+- **What:** simulated every role (`BEGIN … set request.jwt.claims + SET LOCAL role authenticated … ROLLBACK`) against the **live** DB and probed each entity/RPC. Filled the authoritative **RLS** column in `role-crud-matrix.md` PASS/FAIL. RLS is **enabled on all 52 tables**. Highest-risk checks all PASS: **management + auditor are read-only** (denied on every table *and* every SECURITY DEFINER RPC), the sales payment_status/sap guard fires (42501), refund/void are BO/super_admin-only, coordinator intake + operations Accept/Return authority hold, payments are un-deletable.
+- **Divergences found & fixed at the DB** (RLS is authoritative; the customer-entity write policies predated Phase B): coordinator/operations/business_owner could not write clients/contacts/organizations the matrix grants them, and two least-privilege **holes** let read-only roles write (contacts of *unowned* clients; quotes via `created_by = self`). Fixed in `supabase/migrations/20260812210000_rls_customer_authority.sql` and re-verified live-in-rollback.
+- **Deliverable:** see `role-crud-matrix.md` (RLS column filled; findings section).
