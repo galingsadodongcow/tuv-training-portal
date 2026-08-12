@@ -15,6 +15,7 @@ import {
   useInquiries,
   useQuotes,
   useDuplicates,
+  useReturnedHandoffs,
 } from '../hooks/data'
 import { inquiryHealth, quoteHealth } from '../lib/leadHealth'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
@@ -172,6 +173,17 @@ export default function MyWork() {
     [approvals.data]
   )
 
+  // Orders returned-for-correction (#129) — a distinct queue, not just "stalled".
+  // Join the handoff rows to the fulfilment queue we already hold for order detail.
+  const returnedQ = useReturnedHandoffs()
+  const returnedRows = useMemo(() => {
+    const byId = new Map<string, any>()
+    for (const o of queue.data || []) byId.set(o.order_id, o)
+    return (returnedQ.data || [])
+      .map((h: any) => ({ ...h, order: byId.get(h.order_id) }))
+      .filter((r: any) => !selfScoped || !r.order || r.order.owner_code === myCode)
+  }, [returnedQ.data, queue.data, selfScoped, myCode])
+
   // Orders needing attention, kept to the current user's scope where the data
   // supports it, ordered most severe first.
   const attentionOrders = useMemo(() => {
@@ -227,6 +239,32 @@ export default function MyWork() {
           <p>Everything waiting on you — tasks, orders, sessions and exceptions in one place.</p>
         </div>
       </div>
+
+      {/* Returned for correction — orders Operations sent back. Surfaced as its own
+          band (not buried in "stalled") so a return is never silently lost (#129). */}
+      {returnedRows.length > 0 && (
+        <Section
+          title="Returned for correction"
+          count={returnedRows.length}
+          isEmpty={false}
+          emptyLabel="No returned orders."
+        >
+          <table><tbody>
+            {returnedRows.map((r: any) => (
+              <tr key={r.order_id} className="stripe-blocked">
+                <LeadCell verb="Fix" />
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <Link href={`/orders/${r.order_id}`}>{r.order_id}</Link>
+                  <div className="fill-label">
+                    {r.order?.company || r.order?.contact || '—'}{r.returned_at ? ` · returned ${shortDate(r.returned_at)}` : ''}
+                  </div>
+                </td>
+                <td className="fill-label" style={{ color: 'var(--tr-red)' }}>{r.return_reason || 'Returned for correction'}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        </Section>
+      )}
 
       {/* Sales queues — surfaced only for sales-facing roles so a rep gets the same
           "what needs me" completeness ops already has. */}

@@ -43,9 +43,18 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
   }
 
   const removeContact = async (cid: string) => {
-    const res = await confirm({ title: 'Remove this contact?', confirmLabel: 'Remove', tone: 'danger' })
+    const res = await confirm({
+      title: 'Remove this contact?',
+      body: 'The contact is flagged removed and hidden from the list — the record is kept for audit, not deleted.',
+      confirmLabel: 'Remove', tone: 'danger', reason: 'optional',
+    })
     if (!res.ok) return
-    const { error } = await supabase.from('contact').delete().eq('contact_id', cid)
+    // Soft-remove (#129): fn_remove_contact flags the row Removed, with a
+    // graceful fallback to a hard delete before the migration is applied.
+    let { error } = await supabase.rpc('fn_remove_contact', { p_contact: cid, p_reason: res.reason?.trim() || null })
+    if (error && (error.code === '42883' || /function .* does not exist/i.test(error.message || ''))) {
+      ;({ error } = await supabase.from('contact').delete().eq('contact_id', cid))
+    }
     if (error) toast.error(error.message); else { toast.success('Contact removed.'); invalidate(['contacts']) }
   }
 
