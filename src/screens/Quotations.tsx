@@ -21,7 +21,7 @@ export default function Quotations() {
   const invalidate = useInvalidate()
   const toast = useToast()
   const isAdmin = profile?.role === 'super_admin'
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  const canEdit = ['super_admin', 'sales', 'coordinator'].includes(profile?.role as string)
 
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>({ client_id: '', valid_until: '', sales_id: '' })

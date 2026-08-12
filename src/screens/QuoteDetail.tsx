@@ -25,7 +25,7 @@ export default function QuoteDetail() {
   const total = useQuoteTotal(id)
   const courses = useCourses()
   const fees = useCourseFees()
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  const canEdit = ['super_admin', 'sales', 'coordinator'].includes(profile?.role as string)
 
   const [row, setRow] = useState<any>({ course_id: '', modality: 'Face-to-face', seats: 1, unit_price: '' })
   const [busy, setBusy] = useState(false)

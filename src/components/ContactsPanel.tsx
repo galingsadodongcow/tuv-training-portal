@@ -16,7 +16,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
   const invalidate = useInvalidate()
   const contacts = useContacts(clientId)
   const interactions = useClientInteractions(clientId)
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  const canEdit = ['super_admin', 'sales', 'coordinator', 'operations', 'business_owner'].includes(profile?.role as string)
 
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState<any>({ name: '', title: '', email: '', phone: '', is_primary: false })
