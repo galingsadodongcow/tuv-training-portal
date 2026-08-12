@@ -77,7 +77,10 @@ export default function Courses() {
           </thead>
           <tbody>
             {rows.map((c: any) => (
-              <tr key={c.course_id} onClick={() => openEdit(c.course_id)} style={{ cursor: 'pointer' }}>
+              <tr key={c.course_id} className="clickable" role="button" tabIndex={0}
+                aria-label={`Edit ${c.course_name}`}
+                onClick={() => openEdit(c.course_id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(c.course_id) } }}>
                 <td>
                   <div style={{ fontWeight: 600 }}>{c.course_name}</div>
                   <div className="fill-label">{c.category || '—'}</div>

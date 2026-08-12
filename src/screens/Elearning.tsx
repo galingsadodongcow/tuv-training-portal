@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useElearningPending } from '../hooks/data'
@@ -77,7 +78,7 @@ export default function Elearning({ embedded }: { embedded?: boolean } = {}) {
                 const paid = o.order?.payment_status === 'Paid'
                 return (
                 <tr key={o.line_id}>
-                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order?.order_id}</td>
+                  <td style={{ fontVariantNumeric: 'tabular-nums' }}><Link href={`/orders/${o.order?.order_id}`} style={{ fontWeight: 600 }}>{o.order?.order_id}</Link></td>
                   <td>{shortDate(o.order?.order_date)}</td>
                   <td>{o.order?.client?.company || o.order?.client?.name || '—'}</td>
                   <td>{o.course?.course_name || '—'}</td>
@@ -120,7 +121,7 @@ export default function Elearning({ embedded }: { embedded?: boolean } = {}) {
               <tbody>
                 {granted.map((o) => (
                   <tr key={o.line_id}>
-                    <td style={{ fontVariantNumeric: 'tabular-nums' }}>{o.order?.order_id}</td>
+                    <td style={{ fontVariantNumeric: 'tabular-nums' }}><Link href={`/orders/${o.order?.order_id}`} style={{ fontWeight: 600 }}>{o.order?.order_id}</Link></td>
                     <td>{shortDate(o.order?.order_date)}</td>
                     <td>{o.order?.client?.company || o.order?.client?.name || '—'}</td>
                     <td>{o.course?.course_name || '—'}</td>
