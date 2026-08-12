@@ -167,9 +167,14 @@ export default function ClientDetail() {
           </>
         }
         actions={
-          canArchive && (archived
-            ? <button className="btn btn-ghost btn-sm" onClick={() => setDeleted(null)} disabled={saving}>Restore</button>
-            : <button className="btn btn-danger btn-sm" onClick={archive} disabled={saving}>Archive</button>)
+          <>
+            {['super_admin', 'sales', 'coordinator'].includes(profile?.role as string) && (
+              <Link href={`/sales-entry?client=${id}`} className="btn btn-ghost btn-sm">+ New order</Link>
+            )}
+            {canArchive && (archived
+              ? <button className="btn btn-ghost btn-sm" onClick={() => setDeleted(null)} disabled={saving}>Restore</button>
+              : <button className="btn btn-danger btn-sm" onClick={archive} disabled={saving}>Archive</button>)}
+          </>
         }
       />
 

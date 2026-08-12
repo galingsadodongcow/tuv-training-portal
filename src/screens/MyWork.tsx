@@ -52,8 +52,8 @@ const orderNeedsAttention = (o: any) =>
 // Best-effort drill-through from a task entity to a screen. (mirrors Home)
 function entityHref(entityType?: string, entityId?: string): string | null {
   if (!entityType) return null
-  if (entityType === 'order') return entityId ? `/orders/${encodeURIComponent(entityId)}` : '/orders'
-  if (entityType === 'order_line') return entityId ? `/orders?q=${encodeURIComponent(entityId)}` : '/orders'
+  if (entityType === 'order') return entityId ? `/orders/${encodeURIComponent(entityId)}` : '/crm?tab=orders'
+  if (entityType === 'order_line') return entityId ? `/crm?tab=orders&q=${encodeURIComponent(entityId)}` : '/crm?tab=orders'
   if (entityType === 'schedule') return entityId ? `/session/${encodeURIComponent(entityId)}` : '/calendar?month=all'
   if (entityType === 'client') return entityId ? `/clients/${encodeURIComponent(entityId)}` : '/clients'
   if (entityType === 'organization') return '/clients'
@@ -212,7 +212,7 @@ export default function MyWork() {
                 <tr key={q.inquiry_id}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{q.company}</div>
-                    <div className="fill-label">{q.course?.course_name || 'No course yet'} · <Link href="/inquiries">open pipeline</Link></div>
+                    <div className="fill-label">{q.course?.course_name || 'No course yet'} · <Link href="/crm?tab=pipeline">open pipeline</Link></div>
                   </td>
                   <td className="fill-label">{q.status}</td>
                   <td>{h && <span className={`pill ${h.cls}`}>{h.label}</span>}</td>

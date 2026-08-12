@@ -12,7 +12,9 @@ import { quoteHealth } from '../lib/leadHealth'
 
 const STATUS_TONE: Record<string, string> = { Draft: 'pill-tentative', Sent: 'pill-webshop', Accepted: 'pill-go', Declined: 'pill-cancelled', Expired: 'pill-cancelled' }
 
-export default function Quotations() {
+// The quotations book. Rendered as the "Quotes" tab of the CRM shell
+// (`embedded`), where the shell owns the heading + tab strip.
+export default function Quotations({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter()
   const { profile } = useAuth()
   const quotes = useQuotes()
@@ -47,10 +49,12 @@ export default function Quotations() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1>Quotations</h1>
-          <p>Formal quotes with line items and a validity date. Turn an accepted quote into an order.</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h1>Quotations</h1>
+            <p>Formal quotes with line items and a validity date. Turn an accepted quote into an order.</p>
+          </div>
+        )}
         {canEdit && <div className="toolbar"><button className="btn" onClick={() => setCreating((c) => !c)}>{creating ? 'Close' : '+ New quote'}</button></div>}
       </div>
 

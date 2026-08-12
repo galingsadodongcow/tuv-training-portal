@@ -13,7 +13,10 @@ import { useSort } from '../hooks/useSort'
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
 
-export default function Orders() {
+// The orders book. Rendered as the "Orders" tab of the CRM shell (`embedded`),
+// where the shell owns the heading + tab strip. Reads its own q/stage/pay params
+// from the URL, which coexist with the shell's ?tab=.
+export default function Orders({ embedded }: { embedded?: boolean } = {}) {
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -62,11 +65,13 @@ export default function Orders() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1>Orders</h1>
-          <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines. Column sort reorders the current page.</p>
-          <span className="k-sub">All amounts in PHP (₱)</span>
-        </div>
+        {!embedded && (
+          <div>
+            <h1>Orders</h1>
+            <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines. Column sort reorders the current page.</p>
+            <span className="k-sub">All amounts in PHP (₱)</span>
+          </div>
+        )}
         <div className="toolbar">
           <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}
             title="Exports only the orders on the current page, not all matches.">Export this page</button>
