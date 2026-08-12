@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useInquiries, useCourses, useSalespeople, useInvalidate } from '../hooks/data'
 import { useSort } from '../hooks/useSort'
+import { Combobox } from '../components/inputs/Combobox'
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
@@ -56,6 +57,12 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   const [editId, setEditId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>(emptyForm)
   const setE = (k: string) => (e: any) => setEditForm((f: any) => ({ ...f, [k]: e.target.value }))
+
+  // Course options for the searchable course picker (the catalogue is long).
+  const courseOptions = useMemo(
+    () => (courses.data || []).map((c: any) => ({ value: c.course_id, label: c.course_name })),
+    [courses.data]
+  )
 
   const byStage = useMemo(() => {
     const m: Record<string, any[]> = {}
@@ -239,10 +246,9 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
             <label className="field"><span>Email</span><input type="email" value={editForm.email} onChange={setE('email')} /></label>
             <label className="field"><span>Phone</span><input value={editForm.phone} onChange={setE('phone')} /></label>
             <label className="field"><span>Course of interest</span>
-              <select value={editForm.course_id} onChange={setE('course_id')}>
-                <option value="">Not specified</option>
-                {courses.data?.map((c: any) => (<option key={c.course_id} value={c.course_id}>{c.course_name}</option>))}
-              </select>
+              <Combobox ariaLabel="Course of interest" placeholder="Search a course…"
+                options={courseOptions} value={editForm.course_id}
+                onChange={(v) => setEditForm((f: any) => ({ ...f, course_id: v }))} />
             </label>
             <label className="field"><span>Offering</span>
               <select value={editForm.offering_type} onChange={setE('offering_type')}>
@@ -275,10 +281,9 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
             <label className="field"><span>Contact</span><input value={form.contact} onChange={set('contact')} /></label>
             <label className="field"><span>Email</span><input type="email" value={form.email} onChange={set('email')} /></label>
             <label className="field"><span>Course of interest</span>
-              <select value={form.course_id} onChange={set('course_id')}>
-                <option value="">Not specified</option>
-                {courses.data?.map((c: any) => (<option key={c.course_id} value={c.course_id}>{c.course_name}</option>))}
-              </select>
+              <Combobox ariaLabel="Course of interest" placeholder="Search a course…"
+                options={courseOptions} value={form.course_id}
+                onChange={(v) => setForm((f: any) => ({ ...f, course_id: v }))} />
             </label>
             {isAdmin && (
               <label className="field"><span>Salesperson</span>
