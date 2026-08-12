@@ -1,12 +1,12 @@
 'use client'
 import Link from 'next/link'
 import { useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useClient, useClientHistory, useEntityActivity, useAuditTrail, useInvalidate, useOrgOptions } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
-import { RecordHeader, RecordSection, KeyVal, Badge } from '../components/record'
+import { RecordHeader, RecordTabs, RecordSection, KeyVal, Badge } from '../components/record'
 import ActivityTimeline from '../components/ActivityTimeline'
 import AttachmentsPanel from '../components/AttachmentsPanel'
 import ContactsPanel from '../components/ContactsPanel'
@@ -23,6 +23,16 @@ import { collectionState, collectionTone } from '../lib/orderState'
 export default function ClientDetail() {
   const params = useParams()
   const id = String(params.id)
+  const router = useRouter()
+  const pathname = usePathname()
+  const search = useSearchParams()
+  const tab = search.get('tab') || 'overview'
+  const setTab = (t: string) => {
+    const n = new URLSearchParams(search.toString())
+    if (t === 'overview') n.delete('tab')
+    else n.set('tab', t)
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
   const { profile } = useAuth()
   const toast = useToast()
   const confirm = useConfirm()
@@ -108,10 +118,19 @@ export default function ClientDetail() {
     return [...map.values()].sort((a, b) => +new Date(b.schedule?.start_date || 0) - +new Date(a.schedule?.start_date || 0))
   })()
 
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'orders', label: `Orders (${orders.length})` },
+    { key: 'sessions', label: `Sessions (${sessions.length})` },
+    { key: 'contacts', label: 'Contacts' },
+    { key: 'files', label: 'Files' },
+    { key: 'activity', label: 'Activity' },
+  ]
+
   return (
     <>
       <RecordHeader
-        back={{ href: '/clients', label: 'Clients' }}
+        crumbs={[{ href: '/home', label: 'Home' }, { href: '/clients', label: 'Clients' }, { label: c.company || c.name || 'Customer' }]}
         title={c.company || c.name || 'Customer'}
         subtitle={[c.name, c.industry].filter(Boolean).join(' · ') || undefined}
         badges={
@@ -140,7 +159,10 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
+      <RecordTabs tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === 'overview' && (
+      <div className="card card-pad">
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
           <KeyVal label="Contact">{c.contact || c.name || '—'}</KeyVal>
           <KeyVal label="Email">{c.email || '—'}</KeyVal>
@@ -160,7 +182,9 @@ export default function ClientDetail() {
           )}
         </div>
       </div>
+      )}
 
+      {tab === 'orders' && (
       <RecordSection title={`Orders (${orders.length})`}>
         {hist.isLoading ? <Spinner /> : orders.length === 0 ? (
           <div className="card"><div className="empty">No orders on record.</div></div>
@@ -191,7 +215,9 @@ export default function ClientDetail() {
           </div>
         )}
       </RecordSection>
+      )}
 
+      {tab === 'sessions' && (
       <RecordSection title={`Sessions booked (${sessions.length})`}>
         {sessions.length === 0 ? (
           <div className="card"><div className="empty">No sessions booked.</div></div>
@@ -214,15 +240,21 @@ export default function ClientDetail() {
           </div>
         )}
       </RecordSection>
+      )}
 
+      {tab === 'contacts' && (
       <RecordSection title="Contacts and interactions">
         <div className="card card-pad"><ContactsPanel clientId={id} /></div>
       </RecordSection>
+      )}
 
+      {tab === 'files' && (
       <RecordSection title="Files">
         <div className="card card-pad"><AttachmentsPanel entityType="client" entityId={id} /></div>
       </RecordSection>
+      )}
 
+      {tab === 'activity' && (
       <RecordSection title="Activity">
         <ActivityTimeline
           events={mergeActivity(
@@ -233,6 +265,7 @@ export default function ClientDetail() {
           loading={activity.isLoading}
         />
       </RecordSection>
+      )}
     </>
   )
 }
