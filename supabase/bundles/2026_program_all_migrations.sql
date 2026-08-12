@@ -3819,3 +3819,22 @@ create index if not exists idx_orders_course_id          on public.orders (cours
 create index if not exists idx_attribution_sales_id      on public.attribution (sales_id);
 create index if not exists idx_attribution_schedule_id   on public.attribution (schedule_id);
 create index if not exists idx_feedback_participant_id   on public.feedback (participant_id);
+
+-- ===========================================================================
+-- 20260812310000_qte01_quote_line_course_fk.sql
+-- QTE01 — add the missing quote_line.course_id → course FK so the PostgREST
+-- embed course:course_id(course_name) in useQuoteLines resolves (the quote Lines
+-- section errored without it). 0 orphans verified. Idempotent.
+-- ===========================================================================
+
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.quote_line'::regclass
+      and conname  = 'quote_line_course_id_fkey'
+  ) then
+    alter table public.quote_line
+      add constraint quote_line_course_id_fkey
+      foreign key (course_id) references public.course (course_id);
+  end if;
+end $$;
