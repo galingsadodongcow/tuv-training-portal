@@ -130,21 +130,25 @@ export default function SessionDetail() {
     setBusy('')
   }
 
-  const setStatus = async (status: string) => {
-    // Completing a session affects its bookings and roster: confirm first.
-    if (status === 'Completed') {
-      const res = await confirm({
-        title: 'Mark this session Completed?',
-        body: 'This affects its bookings and roster and cannot be undone from here.',
-        confirmLabel: 'Mark completed',
-        reason: 'optional',
-      })
-      if (!res.ok) return
-    }
+  // #133: the raw status write is no longer a confirmation path — Go/No-Go is.
+  // It survives only as a super-admin correction tool: reason-gated, and the
+  // reason is recorded on the session timeline so a manual override is never
+  // silent or divergent from the audit trail.
+  const correctStatus = async (status: string) => {
+    const res = await confirm({
+      title: `Force status to ${status}?`,
+      body: 'Super-admin correction only. This bypasses the Go / No-Go decision and its approval trail — use it solely to fix a wrong status. The reason is recorded on the session timeline.',
+      confirmLabel: `Set ${status}`, tone: 'danger', reason: 'required', reasonLabel: 'Reason for the correction',
+    })
+    if (!res.ok) return
     setBusy('status'); setMsg(null)
     const { error } = await supabase.from('schedule').update({ status }).eq('schedule_id', schedule.schedule_id)
-    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message) }
-    else { setMsg({ ok: true, t: `Status set to ${status}.` }); invalidate(['schedule', 'schedules']); toast.success(`Status set to ${status}.`) }
+    if (error) { setMsg({ ok: false, t: error.message }); toast.error(error.message); setBusy(''); return }
+    await supabase.from('session_note').insert({
+      schedule_id: schedule.schedule_id, author: profile?.user_id,
+      note: `Status corrected to ${status}, bypassing Go/No-Go: ${res.reason}`,
+    })
+    setMsg({ ok: true, t: `Status set to ${status}.` }); invalidate(['schedule', 'schedules', 'notes']); toast.success(`Status set to ${status}.`)
     setBusy('')
   }
 
@@ -268,25 +272,35 @@ export default function SessionDetail() {
 
           {canOps(role) && (
             <RecordSection title="Session status (operations)">
-              {/* One primary action by state (Confirm while Tentative, else Close);
-                  the raw status overrides / cancel / clone live under More actions. */}
+              {/* Confirmation is the Go / No-Go decision above — the single path
+                  (#133). Here ops closes, cancels or clones; the raw status
+                  override is a super-admin correction tool only. */}
               <div className="toolbar">
                 {schedule.status === 'Tentative' ? (
-                  <button className="btn" disabled={busy === 'status'} onClick={() => setStatus('Confirmed')}>Confirm session</button>
+                  <span className="fill-label">Confirm this session with the <strong>Go / No-Go decision</strong> above.</span>
                 ) : schedule.status !== 'Completed' ? (
                   <button className="btn" onClick={() => setClosing(true)}>Close session</button>
                 ) : null}
                 <button className="btn btn-ghost btn-sm" onClick={() => setStatusMore((v) => !v)}>{statusMore ? 'Fewer actions' : 'More actions'}</button>
               </div>
               {statusMore && (
-                <div className="toolbar" style={{ marginTop: 8 }}>
-                  {['Tentative', 'Confirmed', 'Running', 'Completed'].map((s) => (
-                    <button key={s} className="btn btn-ghost btn-sm" disabled={busy === 'status' || schedule.status === s} onClick={() => setStatus(s)}>{s}</button>
-                  ))}
-                  {schedule.status !== 'Completed' && <button className="btn btn-ghost btn-sm" onClick={() => setClosing(true)}>Close session</button>}
-                  <button className="btn btn-ghost btn-sm" onClick={() => setCancelling(true)}>Cancel with dispositions</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => router.push(`/session/new?clone=${schedule.schedule_id}`)}>Clone</button>
-                </div>
+                <>
+                  <div className="toolbar" style={{ marginTop: 8 }}>
+                    {schedule.status !== 'Completed' && <button className="btn btn-ghost btn-sm" onClick={() => setClosing(true)}>Close session</button>}
+                    <button className="btn btn-ghost btn-sm" onClick={() => setCancelling(true)}>Cancel with dispositions</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => router.push(`/session/new?clone=${schedule.schedule_id}`)}>Clone</button>
+                  </div>
+                  {role === 'super_admin' && (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="fill-label" style={{ marginBottom: 4 }}>Correct status (super-admin, reason-gated — bypasses Go/No-Go):</div>
+                      <div className="toolbar">
+                        {['Tentative', 'Confirmed', 'Running', 'Completed'].map((s) => (
+                          <button key={s} className="btn btn-ghost btn-sm" disabled={busy === 'status' || schedule.status === s} onClick={() => correctStatus(s)}>{s}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               <div className="fill-label" style={{ marginTop: 6 }}>
                 Cancellation needs business owner approval before the session closes.
