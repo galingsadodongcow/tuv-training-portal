@@ -9,6 +9,7 @@ import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
+import SavedViews from '../components/SavedViews'
 import { php, shortDate } from '../lib/format'
 import { primaryFlag, ORDER_VIEWS, orderView, stageLabel } from '../lib/orderState'
 
@@ -257,6 +258,10 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
             {v.label} ({viewCounts[v.key] || 0})
           </button>
         ))}
+      </div>
+
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="worklist" paramKeys={['who', 'view', 'stage']} />
       </div>
 
       {selectedVisible.length > 0 && (
