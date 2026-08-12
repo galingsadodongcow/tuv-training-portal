@@ -26,6 +26,9 @@ export default function CourseForm() {
   const [msg, setMsg] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(!editing)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Certification / assessment / seat-cap / URL are advanced config — folded on a
+  // new course (they all default), opened when editing so populated values show.
+  const [advanced, setAdvanced] = useState(editing)
 
   useEffect(() => {
     if (!editing) return
@@ -161,6 +164,12 @@ export default function CourseForm() {
               </select>
             </label>
           </div>
+          <div className="field">
+            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={advanced} onClick={() => setAdvanced((v) => !v)}>
+              {advanced ? 'Hide advanced' : 'Advanced — certification, assessment, seat cap, URL'}
+            </button>
+          </div>
+          {advanced && (<>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', alignItems: 'end' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={f.is_certification} style={{ width: 'auto' }}
@@ -194,6 +203,7 @@ export default function CourseForm() {
           <label className="field"><span>Webshop URL</span>
             <input type="url" value={f.url} onChange={set('url')} placeholder="https://academy-ph.tuv.com/product/…" />
           </label>
+          </>)}
 
           <div className="k-label" style={{ margin: '6px 0 8px' }}>Learning types and fees (PHP, excl. VAT)</div>
           {MODS.map((m) => (

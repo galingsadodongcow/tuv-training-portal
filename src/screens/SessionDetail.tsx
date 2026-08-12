@@ -69,6 +69,7 @@ export default function SessionDetail() {
   const [transferring, setTransferring] = useState<any>(null)
   const [closing, setClosing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [statusMore, setStatusMore] = useState(false)
 
   // Seed the forecast inputs once the record arrives — in an effect, not during
   // render, so we never call setState mid-render.
@@ -267,14 +268,26 @@ export default function SessionDetail() {
 
           {canOps(role) && (
             <RecordSection title="Session status (operations)">
+              {/* One primary action by state (Confirm while Tentative, else Close);
+                  the raw status overrides / cancel / clone live under More actions. */}
               <div className="toolbar">
-                {['Tentative', 'Confirmed', 'Running', 'Completed'].map((s) => (
-                  <button key={s} className="btn btn-ghost btn-sm" disabled={busy === 'status' || schedule.status === s} onClick={() => setStatus(s)}>{s}</button>
-                ))}
-                {schedule.status !== 'Completed' && <button className="btn btn-sm" onClick={() => setClosing(true)}>Close session</button>}
-                <button className="btn btn-ghost btn-sm" onClick={() => setCancelling(true)}>Cancel with dispositions</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => router.push(`/session/new?clone=${schedule.schedule_id}`)}>Clone</button>
+                {schedule.status === 'Tentative' ? (
+                  <button className="btn" disabled={busy === 'status'} onClick={() => setStatus('Confirmed')}>Confirm session</button>
+                ) : schedule.status !== 'Completed' ? (
+                  <button className="btn" onClick={() => setClosing(true)}>Close session</button>
+                ) : null}
+                <button className="btn btn-ghost btn-sm" onClick={() => setStatusMore((v) => !v)}>{statusMore ? 'Fewer actions' : 'More actions'}</button>
               </div>
+              {statusMore && (
+                <div className="toolbar" style={{ marginTop: 8 }}>
+                  {['Tentative', 'Confirmed', 'Running', 'Completed'].map((s) => (
+                    <button key={s} className="btn btn-ghost btn-sm" disabled={busy === 'status' || schedule.status === s} onClick={() => setStatus(s)}>{s}</button>
+                  ))}
+                  {schedule.status !== 'Completed' && <button className="btn btn-ghost btn-sm" onClick={() => setClosing(true)}>Close session</button>}
+                  <button className="btn btn-ghost btn-sm" onClick={() => setCancelling(true)}>Cancel with dispositions</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => router.push(`/session/new?clone=${schedule.schedule_id}`)}>Clone</button>
+                </div>
+              )}
               <div className="fill-label" style={{ marginTop: 6 }}>
                 Cancellation needs business owner approval before the session closes.
               </div>
