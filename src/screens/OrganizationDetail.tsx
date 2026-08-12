@@ -64,7 +64,7 @@ export default function OrganizationDetail() {
   return (
     <>
       <RecordHeader
-        crumbs={[{ href: '/home', label: 'Home' }, { href: '/organizations', label: 'Organizations' }, { label: o.name }]}
+        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/organizations', label: 'Organizations' }, { label: o.name }]}
         title={o.name}
         subtitle={[o.industry, o.country].filter(Boolean).join(' · ') || undefined}
         badges={<Badge tone="info">{members.data?.length || 0} contact{(members.data?.length || 0) === 1 ? '' : 's'}</Badge>}

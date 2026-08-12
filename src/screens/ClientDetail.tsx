@@ -130,7 +130,7 @@ export default function ClientDetail() {
   return (
     <>
       <RecordHeader
-        crumbs={[{ href: '/home', label: 'Home' }, { href: '/clients', label: 'Clients' }, { label: c.company || c.name || 'Customer' }]}
+        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/clients', label: 'Clients' }, { label: c.company || c.name || 'Customer' }]}
         title={c.company || c.name || 'Customer'}
         subtitle={[c.name, c.industry].filter(Boolean).join(' · ') || undefined}
         badges={
