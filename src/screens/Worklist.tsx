@@ -355,11 +355,19 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
+        {rows.length === 0 ? (
           <div className="empty">
-            {who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
+            {view !== 'all' || stage !== 'all' ? (
+              <>Nothing matches the current filters{whoScoped.length > 0 ? ` — ${whoScoped.length} hidden` : ''}.{' '}
+                <button className="linkbtn" onClick={() => { setParam('view', 'all'); setParam('stage', 'all') }}>Clear filters</button></>
+            ) : who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
           </div>
-        )}
+        ) : (whoScoped.length - rows.length > 0 && (view !== 'all' || stage !== 'all')) ? (
+          <div className="fill-label" style={{ padding: '10px 12px' }}>
+            {whoScoped.length - rows.length} hidden by the current filters —{' '}
+            <button className="linkbtn" onClick={() => { setParam('view', 'all'); setParam('stage', 'all') }}>Clear filters</button>
+          </div>
+        ) : null}
       </div>
     </>
   )

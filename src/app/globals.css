@@ -705,6 +705,33 @@ tr.stripe-done    > td:first-child { box-shadow: inset 3px 0 0 var(--border); }
 }
 .filter-chip-x:hover { color: var(--danger); }
 
+/* Status legend "?" popover (#139) */
+.legend { position: relative; display: inline-flex; }
+.legend-btn {
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--border); background: var(--card); color: var(--text-muted);
+  font-size: 13px; font-weight: 600; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+}
+.legend-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.legend-panel {
+  position: absolute; z-index: 45; top: calc(100% + 6px); right: 0; width: 300px; max-width: 84vw;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md); padding: 12px;
+}
+.legend-title { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.legend-list { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.legend-row { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 10px; align-items: start; }
+.legend-row dt { margin: 0; }
+.legend-row dd { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+/* Deep-link focus flash — a row a notification linked to, briefly highlighted so
+   the eye lands on it (#139). */
+@keyframes row-flash {
+  0%, 40% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background: transparent; }
+}
+tr.row-focus > td { animation: row-flash 2.4s ease-out; }
+
 /* Notification center */
 .notif-wrap { position: relative; display: inline-flex; margin-left: 8px; }
 .notif-bell {

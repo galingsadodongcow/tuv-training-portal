@@ -10,6 +10,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import SavedViews from '../components/SavedViews'
 import { MultiSelect } from '../components/inputs/MultiSelect'
+import { Legend } from '../components/Legend'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
@@ -379,7 +380,7 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows:
             <HealthChip h={healthMap?.get(r.schedule_id)} />
           </div>
         </td>
-        <td data-label="Go" className="hide-m"><GoPill value={r.go_status} /></td>
+        <td data-label="Go"><GoPill value={r.go_status} /></td>
         <td data-label="Fee" className="right hide-m">{php(r.price)}</td>
         <td data-label="Links" className="right" onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -435,7 +436,14 @@ export default function Calendar() {
     [health.data]
   )
   const { profile } = useAuth()
-  const [drawer, setDrawer] = useState<any | null>(null)
+  // The open session drawer lives in the URL (?session=<schedule_id>) so a
+  // specific session's drawer is shareable and survives a reload (#139). Derived
+  // from the unfiltered schedule set, so a deep link opens even when the current
+  // filters would hide the row.
+  const drawerId = params.get('session') || ''
+  const drawer = useMemo(() => (sched.data || []).find((s: any) => s.schedule_id === drawerId) || null, [sched.data, drawerId])
+  const openDrawer = (s: any) => setParam('session', s.schedule_id)
+  const closeDrawer = () => setParam('session', '')
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
   const canSell = ['sales', 'super_admin'].includes(profile?.role as string)
 
@@ -532,7 +540,7 @@ export default function Calendar() {
         {sortBtn('date', 'Dates')}
         <th className="hide-m">Learning type</th>
         {sortBtn('fill', 'Fill')}
-        <th className="hide-m">Channels</th><th>Status</th><th className="hide-m">Go</th>
+        <th className="hide-m">Channels</th><th>Status</th><th>Go</th>
         {sortBtn('fee', 'Fee', 'right hide-m')}
         <th className="right">Links</th>
       </tr>
@@ -595,6 +603,16 @@ export default function Calendar() {
           <option value="all">All learning types</option>
           {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
         </select>
+        <div style={{ marginLeft: 'auto' }}>
+          <Legend title="What session health means" ariaLabel="What session health means"
+            items={[
+              { label: <span className="pill health-blocked">Blocked</span>, desc: 'Can’t proceed — needs action now.' },
+              { label: <span className="pill health-risk">At risk</span>, desc: 'Undersold with the start date approaching.' },
+              { label: <span className="pill health-risk">Needs attention</span>, desc: 'Something on the session needs a look.' },
+              { label: <span className="pill health-ok">Healthy</span>, desc: 'On track — no action needed.' },
+              { label: <span className="pill health-done">Completed / Cancelled</span>, desc: 'Closed — no action.' },
+            ]} />
+        </div>
       </div>
 
       <div className="filters" style={{ marginTop: -6 }}>
@@ -603,7 +621,7 @@ export default function Calendar() {
 
       {cal === 'grid' && (
         <>
-          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={setDrawer} healthMap={healthMap} />
+          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={openDrawer} healthMap={healthMap} />
           {gridCount === 0 && (
             <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions in {gridMonth} {year}. Use the arrows or switch month.</div></div>
           )}
@@ -612,7 +630,7 @@ export default function Calendar() {
 
       {cal === 'week' && (
         <>
-          <WeekGrid days={weekDays} sessions={base} onOpen={setDrawer} healthMap={healthMap} />
+          <WeekGrid days={weekDays} sessions={base} onOpen={openDrawer} healthMap={healthMap} />
           {weekCount === 0 && (
             <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions this week. Use the arrows or jump to Today.</div></div>
           )}
@@ -622,7 +640,7 @@ export default function Calendar() {
       {cal === 'day' && (
         dayRows.length > 0 ? (
           <div className="card cal-card">
-            <table className="cal-table">{head}<tbody><SessionRows rows={dayRows} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={dayRows} pax={pax.data} onOpen={openDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
           </div>
         ) : (
           <div className="card"><div className="empty">No sessions on {dayLabel}. Use the arrows or jump to Today.</div></div>
@@ -634,7 +652,7 @@ export default function Calendar() {
           // One combined list — the Training-type column already distinguishes
           // PersCert vs Professional, so the two split tables collapse into one.
           <div className="card cal-card">
-            <table className="cal-table">{head}<tbody><SessionRows rows={rows} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={rows} pax={pax.data} onOpen={openDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
           </div>
         ) : (
           <div className="card"><div className="empty">
@@ -643,7 +661,7 @@ export default function Calendar() {
         )
       )}
 
-      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} canEdit={canEdit} onClose={() => setDrawer(null)} />}
+      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} canEdit={canEdit} onClose={closeDrawer} />}
     </>
   )
 }

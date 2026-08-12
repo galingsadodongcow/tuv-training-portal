@@ -16,8 +16,10 @@ function entityHref(type?: string, id?: string): string | null {
     case 'client': return `/clients/${id}`
     case 'organization': return `/organizations/${id}`
     case 'quote': return `/quotations/${id}`
-    case 'inquiry': return `/crm?tab=pipeline`
-    case 'approval': return `/approvals`
+    // No standalone detail route for these two — deep-link to the list and let
+    // the screen scroll to + highlight the specific record via ?focus= (#139).
+    case 'inquiry': return `/crm?tab=pipeline&focus=${id}`
+    case 'approval': return `/approvals?focus=${id}`
     default: return null
   }
 }
