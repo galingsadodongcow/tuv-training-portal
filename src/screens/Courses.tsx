@@ -1,37 +1,40 @@
 'use client'
-import { useMemo, useState } from 'react'
-import Link from 'next/link'
-import { supabase } from '../lib/supabase'
-import { useCourses, useCourseFees, useInvalidate } from '../hooks/data'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { useCourses, useCourseFees } from '../hooks/data'
 import { ErrorNote } from '../components/ui'
 import { TableSkeleton } from '../components/Skeleton'
-import { useToast } from '../components/Toast'
-import { useConfirm } from '../components/Confirm'
 import { php } from '../lib/format'
 import { lt } from '../lib/labels'
+import CourseForm from './CourseForm'
 
 const MODS = ['Live Online Training', 'Face-to-face', 'E-learning']
 
-// Course catalog: every course with its price per learning type, editable in
-// place. Prices live in course_fee, one row per course and learning type, so a
-// course can carry a different fee for classroom, virtual, and e-learning.
+// Training catalogue: every course with its fee per learning type (read-only in
+// the directory). Creating and editing — including the fees — happen in one
+// right-side edit-drawer that hosts the course form, so there is a single
+// fee-editing path (#13, was: inline grid here + the form). Deep-linkable via
+// ?new / ?edit=<id>; the old /course/new and /course/[id]/edit routes redirect
+// in.
 export default function Courses() {
   const courses = useCourses()
   const fees = useCourseFees()
-  const invalidate = useInvalidate()
-  const toast = useToast()
-  const confirm = useConfirm()
+  const search = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [q, setQ] = useState('')
-  const [draft, setDraft] = useState<Record<string, Record<string, string>>>({})
-  const [busy, setBusy] = useState<string | null>(null)
+
+  const editId = search.get('edit') || undefined
+  const isNew = search.has('new')
+  const drawerOpen = isNew || !!editId
+  const openNew = () => router.replace(`${pathname}?new`, { scroll: false })
+  const openEdit = (id: string) => router.replace(`${pathname}?edit=${id}`, { scroll: false })
+  const closeDrawer = () => router.replace(pathname, { scroll: false })
 
   // feeMap[course_id][modality] = fee
   const feeMap = useMemo(() => {
     const m: Record<string, Record<string, number>> = {}
-    for (const f of fees.data || []) {
-      m[f.course_id] = m[f.course_id] || {}
-      m[f.course_id][f.modality] = f.fee_php
-    }
+    for (const f of fees.data || []) { (m[f.course_id] ||= {})[f.modality] = f.fee_php }
     return m
   }, [fees.data])
 
@@ -43,65 +46,6 @@ export default function Courses() {
       c.course_name?.toLowerCase().includes(t) || c.category?.toLowerCase().includes(t))
   }, [courses.data, q])
 
-  const cellValue = (cid: string, m: string) =>
-    draft[cid]?.[m] ?? (feeMap[cid]?.[m] != null ? String(feeMap[cid][m]) : '')
-
-  const setCell = (cid: string, m: string, v: string) =>
-    setDraft((d) => ({ ...d, [cid]: { ...(d[cid] || {}), [m]: v } }))
-
-  const dirty = (cid: string) => {
-    const d = draft[cid]
-    if (!d) return false
-    return Object.keys(d).some((m) => (d[m] ?? '') !== (feeMap[cid]?.[m] != null ? String(feeMap[cid][m]) : ''))
-  }
-
-  const saveRow = async (cid: string) => {
-    const upserts: any[] = []
-    const removeMods: string[] = []
-    try {
-      for (const m of MODS) {
-        const raw = cellValue(cid, m).trim()
-        if (raw === '') {
-          if (feeMap[cid]?.[m] != null) removeMods.push(m)
-          continue
-        }
-        const n = Number(raw)
-        if (!Number.isFinite(n) || n < 0) throw new Error(`Set a valid price for ${lt(m)}.`)
-        upserts.push({ course_id: cid, modality: m, fee_php: n })
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-      return
-    }
-    // Blanking a cell deletes a previously-set fee — confirm before removing it.
-    if (removeMods.length) {
-      const res = await confirm({
-        title: `Remove ${removeMods.length} saved price${removeMods.length === 1 ? '' : 's'}?`,
-        body: `Clearing a price deletes that fee for ${removeMods.map(lt).join(', ')}. The course will show no price for that learning type.`,
-        confirmLabel: 'Remove prices',
-        tone: 'danger',
-      })
-      if (!res.ok) return
-    }
-    setBusy(cid)
-    try {
-      if (upserts.length) {
-        const { error } = await supabase.from('course_fee').upsert(upserts, { onConflict: 'course_id,modality' })
-        if (error) throw error
-      }
-      if (removeMods.length) {
-        const { error } = await supabase.from('course_fee').delete().eq('course_id', cid).in('modality', removeMods)
-        if (error) throw error
-      }
-      setDraft((d) => { const next = { ...d }; delete next[cid]; return next })
-      invalidate(['course_fees'])
-      toast.success('Prices saved.')
-    } catch (err: any) {
-      toast.error(err.message)
-    }
-    setBusy(null)
-  }
-
   if (courses.isLoading || fees.isLoading) return <TableSkeleton rows={10} cols={6} />
   if (courses.error) return <ErrorNote error={courses.error} />
 
@@ -109,11 +53,11 @@ export default function Courses() {
     <>
       <div className="page-head">
         <div>
-          <h1>Courses and pricing</h1>
-          <p>Every course and its fee per learning type, excl. VAT. Edit a price in place and save the row.</p>
+          <h1>Training catalogue</h1>
+          <p>Every course and its fee per learning type, excl. VAT. Open a course to edit its details and prices.</p>
         </div>
         <div className="toolbar">
-          <Link className="btn" href="/course/new">+ New course</Link>
+          <button className="btn" onClick={openNew}>+ New course</button>
         </div>
       </div>
 
@@ -121,7 +65,7 @@ export default function Courses() {
         <input placeholder="Search course or category…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 240 }} />
       </div>
 
-      {fees.error && <ErrorNote error={new Error('Prices could not be loaded — blank cells below do not mean a course has no fee.')} />}
+      {fees.error && <ErrorNote error={new Error('Prices could not be loaded — a dash below does not mean a course has no fee.')} />}
 
       <div className="card">
         <table>
@@ -129,40 +73,59 @@ export default function Courses() {
             <tr>
               <th>Course</th><th>Type</th>
               {MODS.map((m) => (<th key={m} className="right">{lt(m)}</th>))}
-              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((c: any) => (
-              <tr key={c.course_id}>
+              <tr key={c.course_id} onClick={() => openEdit(c.course_id)} style={{ cursor: 'pointer' }}>
                 <td>
                   <div style={{ fontWeight: 600 }}>{c.course_name}</div>
                   <div className="fill-label">{c.category || '—'}</div>
                 </td>
                 <td><span className={`pill ${c.training_type === 'PersCert' ? 'pill-inside' : 'pill-webshop'}`}>{c.training_type}</span></td>
                 {MODS.map((m) => (
-                  <td key={m} className="right">
-                    <input type="number" min="0" value={cellValue(c.course_id, m)}
-                      aria-label={`${c.course_name} — ${lt(m)} fee`}
-                      onChange={(e) => setCell(c.course_id, m, e.target.value)}
-                      placeholder="—" style={{ maxWidth: 100, textAlign: 'right' }} />
-                  </td>
+                  <td key={m} className="right">{feeMap[c.course_id]?.[m] != null ? php(feeMap[c.course_id][m]) : '—'}</td>
                 ))}
-                <td className="right">
-                  <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
-                    <button className="btn btn-sm" disabled={!dirty(c.course_id) || busy === c.course_id}
-                      onClick={() => saveRow(c.course_id)}>
-                      {busy === c.course_id ? 'Saving…' : 'Save'}
-                    </button>
-                    <Link className="linkbtn" href={`/course/${c.course_id}/edit`}>Edit</Link>
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {rows.length === 0 && <div className="empty">No courses match.</div>}
       </div>
+
+      {drawerOpen && <CourseDrawer courseId={editId} onClose={closeDrawer} />}
     </>
+  )
+}
+
+// Right-side drawer that hosts the course form for create/edit (the shared
+// house drawer pattern: scrim → drawer, role=dialog, Escape / scrim to close).
+function CourseDrawer({ courseId, onClose }: { courseId?: string; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => { ref.current?.focus() }, [])
+  return (
+    <div className="drawer-scrim" onClick={onClose}>
+      <div
+        className="drawer"
+        ref={ref}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={courseId ? 'Edit course' : 'New course'}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
+      >
+        <div className="drawer-head">
+          <div>
+            <h3 style={{ margin: 0 }}>{courseId ? 'Edit course' : 'New course'}</h3>
+            <p className="muted" style={{ margin: '2px 0 0' }}>A course holds many sessions and sells in one or more learning types, each with its own fee.</p>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="drawer-body">
+          <CourseForm courseId={courseId} onDone={onClose} />
+        </div>
+      </div>
+    </div>
   )
 }

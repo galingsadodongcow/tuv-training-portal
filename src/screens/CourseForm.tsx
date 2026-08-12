@@ -10,9 +10,14 @@ import { lt } from '../lib/labels'
 const MODS = ['Live Online Training', 'Face-to-face', 'E-learning']
 type ModState = Record<string, { on: boolean; price: string }>
 
-export default function CourseForm() {
+// The course create/edit form. Standalone at /course/new and /course/[id]/edit,
+// and hosted in the Training Catalogue edit-drawer (`onDone` + `courseId`) — the
+// single fee-editing path (#13). When embedded, the drawer owns the heading and
+// chrome and save/cancel just close it.
+export default function CourseForm({ courseId, onDone }: { courseId?: string; onDone?: () => void } = {}) {
   const params = useParams()
-  const id = (params?.id as string | undefined) || undefined
+  const embedded = !!onDone
+  const id = (courseId ?? (params?.id as string | undefined)) || undefined
   const editing = !!id
   const courses = useCourses()
   const tree = useCategoryTree()
@@ -110,7 +115,8 @@ export default function CourseForm() {
       }
       invalidate(['courses', 'course_fees'])
       toast.success(editing ? 'Course saved.' : 'Course created.')
-      router.push(editing ? '/calendar' : '/courses')
+      if (onDone) onDone()
+      else router.push(editing ? '/calendar' : '/courses')
     } catch (err: any) {
       setMsg(err.message)
       toast.error(err.message)
@@ -121,16 +127,7 @@ export default function CourseForm() {
   if (courses.isLoading || !loaded) return <Spinner label="Loading" />
   if (loadError) return <ErrorNote error={loadError} />
 
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>{editing ? 'Edit course' : 'New course'}</h1>
-          <p>A course holds many sessions and sells in one or more learning types, each with its own fee.</p>
-        </div>
-      </div>
-
-      <div className="card card-pad" style={{ maxWidth: 620 }}>
+  const form = (
         <form onSubmit={submit}>
           <label className="field"><span>Training title</span>
             <input value={f.course_name} onChange={set('course_name')} required />
@@ -221,10 +218,22 @@ export default function CourseForm() {
           {msg && <div className="notice notice-error" style={{ margin: '12px 0' }}>{msg}</div>}
           <div className="toolbar" style={{ marginTop: 10 }}>
             <button className="btn" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create course'}</button>
-            <button type="button" className="btn btn-ghost" onClick={() => router.push('/calendar')}>Cancel</button>
+            <button type="button" className="btn btn-ghost" onClick={() => (onDone ? onDone() : router.push('/calendar'))}>Cancel</button>
           </div>
         </form>
+  )
+
+  if (embedded) return form
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>{editing ? 'Edit course' : 'New course'}</h1>
+          <p>A course holds many sessions and sells in one or more learning types, each with its own fee.</p>
+        </div>
       </div>
+      <div className="card card-pad" style={{ maxWidth: 620 }}>{form}</div>
     </>
   )
 }

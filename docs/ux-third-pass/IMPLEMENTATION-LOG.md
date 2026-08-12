@@ -84,3 +84,11 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - **Nav:** the **Duplicates** and **E-learning access** items are removed from the Operations group.
   - Capability-preserving: same screens, same grant/merge actions, same role gating (the e-learning saved view is gated to the old `/elearning` roles; RLS authoritative).
 - Files: `src/screens/{MyWork,Elearning,CRM}.tsx`, `src/lib/roles.ts`, `src/app/(app)/elearning/page.tsx`.
+
+## Wave 13 — Training Catalogue
+- **#13 Training Catalogue** — the Courses screen and the course form merge into **one directory + edit-drawer**, unifying the **two `course_fee` editors** into a single path.
+  - **Directory** (`Courses.tsx`): a clean course list — Course · Type · a read-only fee per learning type. The **inline fee-grid editor was removed** (it was one of the two duplicate `course_fee` upsert/delete paths). A row (or "+ New course") opens a **right-side edit-drawer** hosting the course form; the form is now the *only* place fees are edited.
+  - **Drawer**: reuses the house `.drawer-scrim`/`.drawer` pattern (role=dialog, Escape / scrim to close). `CourseForm` gained `{ courseId, onDone }` props — when hosted, it renders bare (the drawer owns the chrome) and save/cancel just close the drawer; standalone rendering is preserved.
+  - **Routes**: `/course/new` → `/courses?new`, `/course/[id]/edit` → `/courses?edit=<id>` (redirects; the drawer is deep-linkable). Calendar's "New course"/"Course" edit links resolve through these. Nav item relabelled **Training catalogue**.
+  - Capability-preserving: same fields, same category/hierarchy handling, same create/edit, same fee upsert-then-delete-removed logic — now in one editor. (The old inline "confirm before clearing a price" gate is superseded by unchecking a learning type in the form.)
+- Files: `src/screens/{Courses,CourseForm}.tsx`, `src/lib/roles.ts`, `src/app/(app)/course/new/page.tsx`, `src/app/(app)/course/[id]/edit/page.tsx`.
