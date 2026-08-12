@@ -21,7 +21,11 @@ const NEXT: Record<string, string> = {
   'No Feedback': 'In Communication',
 }
 
-export default function Worklist() {
+// The fulfillment queue (advance / assign / bulk controls). Rendered as the
+// "Needs fulfillment" saved view of the CRM Orders tab (`embedded`), where the
+// shell owns the heading; reachable via /worklist (redirects in). Reads its own
+// who/view/stage params, which coexist with the shell's tab/queue.
+export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
   const { profile } = useAuth()
   const queue = useFulfillmentQueue()
   const people = useSalespeople()
@@ -201,17 +205,19 @@ export default function Worklist() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Fulfillment</h1>
-          <p>
-            {rows.length} order{rows.length === 1 ? '' : 's'} · {php(value)}
-            {view !== 'all' ? ` · ${orderView(view).label.toLowerCase()}` : ''}
-            {who === 'unassigned' ? ' · unassigned, ready to claim' : ''}. Oldest first.
-          </p>
-          <span className="k-sub">All amounts in PHP (₱)</span>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>Fulfillment</h1>
+            <p>
+              {rows.length} order{rows.length === 1 ? '' : 's'} · {php(value)}
+              {view !== 'all' ? ` · ${orderView(view).label.toLowerCase()}` : ''}
+              {who === 'unassigned' ? ' · unassigned, ready to claim' : ''}. Oldest first.
+            </p>
+            <span className="k-sub">All amounts in PHP (₱)</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {stalled > 0 && (
         <div className="notice notice-info" style={{ marginBottom: 14 }}>
