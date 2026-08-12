@@ -26,3 +26,7 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
 - **#15 Inquiries default table view** — added a **Table / Board** toggle (Table is the default). The table shows the daily-work columns — Customer · Training interest · Owner · Stage · Health · Est. value · Expected close — sorted open-first (stage order) then by expected close, with inline Edit / Advance / Lost / Reopen (canEdit-gated). Kanban board kept as the toggle for pipeline-movement. This makes "who to work / what's overdue" scannable without reading the board.
 - **#18 (already satisfied)** — config (Courses/Pricing/Communications/Rollover/Data-quality/Users/Audit) already sits under one **Admin** nav group; no change needed.
 - Files: `src/screens/Inquiries.tsx`.
+
+## Wave 5 — Calendar list view
+- **#12 (partial) Calendar** — the List view's two split tables (PersCert / Professional Training) collapse into **one combined Sessions table**; the Training-type column already distinguishes them. Removed the `perscert`/`professional` subset derivations. *(Carried: filter-bar reduction 7→4 — deferred with the S6 category-source change so the Category filter reads the hierarchy rather than free-text.)*
+- Files: `src/screens/Calendar.tsx`.

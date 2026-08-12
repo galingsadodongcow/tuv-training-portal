@@ -478,8 +478,6 @@ export default function Calendar() {
     return out
   }, [base, month, sortKey, sortDir])
 
-  const perscert = rows.filter((r: any) => r.course?.training_type === 'PersCert')
-  const professional = rows.filter((r: any) => r.course?.training_type !== 'PersCert')
   const gridCount = base.filter((r: any) => {
     const d = new Date(r.start_date)
     return d.getFullYear() === year && d.getMonth() === MONTHS.indexOf(gridMonth)
@@ -632,29 +630,17 @@ export default function Calendar() {
       )}
 
       {cal === 'list' && (
-        <>
-          {perscert.length > 0 && (
-            <>
-              <h3 style={{ margin: '4px 0 8px' }}>PersCert ({perscert.length})</h3>
-              <div className="card cal-card" style={{ marginBottom: 20 }}>
-                <table className="cal-table">{head}<tbody><SessionRows rows={perscert} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
-              </div>
-            </>
-          )}
-          {professional.length > 0 && (
-            <>
-              <h3 style={{ margin: '4px 0 8px' }}>Professional Training ({professional.length})</h3>
-              <div className="card cal-card">
-                <table className="cal-table">{head}<tbody><SessionRows rows={professional} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
-              </div>
-            </>
-          )}
-          {rows.length === 0 && (
-            <div className="card"><div className="empty">
-              No sessions match. {month !== 'all' && 'Try All months, the arrows, or clear the search.'}
-            </div></div>
-          )}
-        </>
+        rows.length > 0 ? (
+          // One combined list — the Training-type column already distinguishes
+          // PersCert vs Professional, so the two split tables collapse into one.
+          <div className="card cal-card">
+            <table className="cal-table">{head}<tbody><SessionRows rows={rows} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+          </div>
+        ) : (
+          <div className="card"><div className="empty">
+            No sessions match. {month !== 'all' && 'Try All months, the arrows, or clear the search.'}
+          </div></div>
+        )
       )}
 
       {drawer && <SessionDrawer r={drawer} healthMap={healthMap} canEdit={canEdit} onClose={() => setDrawer(null)} />}
