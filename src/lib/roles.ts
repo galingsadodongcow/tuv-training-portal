@@ -65,9 +65,10 @@ export const NAV: NavItem[] = [
 
   { path: '/approvals', label: 'Approvals', roles: ['super_admin', 'operations', 'business_owner'], icon: 'approvals', group: 'Oversight' },
 
-  { path: '/dashboard', label: 'Dashboard', roles: ALL, icon: 'dashboard', group: 'Insights' },
-  { path: '/reports', label: 'Reports', roles: ['super_admin', 'operations', 'business_owner', 'management', 'auditor'], icon: 'reports', group: 'Insights' },
-  { path: '/quality', label: 'Feedback and quality', roles: ['super_admin', 'operations', 'business_owner', 'management'], icon: 'quality-star', group: 'Insights' },
+  // One Analytics area: the nav lands on the Overview (Dashboard); a shared tab
+  // strip (AnalyticsTabs) reaches Reports and Feedback where the role allows.
+  // The /reports and /quality routes remain for deep links.
+  { path: '/dashboard', label: 'Analytics', roles: ALL, icon: 'dashboard', group: 'Insights' },
 
   { path: '/courses', label: 'Courses and pricing', roles: ['super_admin', 'operations'], icon: 'courses', group: 'Admin' },
   { path: '/pricing', label: 'Pricing rules', roles: ['super_admin', 'operations', 'business_owner'], icon: 'pricing', group: 'Admin' },

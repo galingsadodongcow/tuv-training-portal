@@ -1,4 +1,5 @@
 'use client'
+import AnalyticsTabs from '../components/AnalyticsTabs'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
@@ -210,6 +211,7 @@ export default function Reports() {
 
   return (
     <>
+      <AnalyticsTabs />
       <div className="page-head">
         <div>
           <h1>Reports</h1>

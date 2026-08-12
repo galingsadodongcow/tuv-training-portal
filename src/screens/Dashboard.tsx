@@ -1,4 +1,5 @@
 'use client'
+import AnalyticsTabs from '../components/AnalyticsTabs'
 import { useMemo, useState, ReactNode } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import Link from 'next/link'
@@ -305,6 +306,7 @@ export default function Dashboard() {
 
   return (
     <>
+      <AnalyticsTabs />
       <div className="page-head">
         <div>
           <h1>{head.title}</h1>
