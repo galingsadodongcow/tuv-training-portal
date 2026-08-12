@@ -69,3 +69,10 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - **Inbound links repointed** to the tabs (Dashboard cards, My Work, Command palette, Notifications, Quote record crumbs) so common navigation avoids a redirect hop; the redirects remain the safety net for the rest.
   - Orders keeps its own `q`/`stage`/`pay` URL params, which coexist with the shell's `?tab=` (its `setParam` preserves `tab`; the shell starts a tab clean on switch).
 - Files: `src/screens/{CRM,Inquiries,Quotations,Orders,ClientDetail,QuoteDetail}.tsx`, `src/components/{CommandPalette,NotificationCenter}.tsx`, `src/screens/{Dashboard,MyWork}.tsx`, `src/lib/roles.ts`, `src/app/(app)/{crm,inquiries,quotations,orders}/page.tsx`.
+
+## Wave 11 — Fulfillment → Orders saved view
+- **#5 Fulfillment → Orders saved view** — the standalone Fulfillment queue (Worklist) folds into the **CRM Orders tab** as a **"Needs fulfillment"** saved view, beside "All orders".
+  - The CRM Orders tab now carries a saved-view sub-toggle (`?queue=fulfillment`, distinct from the shell's `?tab` so the queue keeps its own `who`/`view`/`stage` params): **All orders** renders the orders book, **Needs fulfillment** renders the full Worklist queue (advance / assign / bulk controls) `embedded`.
+  - **Nav:** the **Fulfillment** item is removed from the Operations group. `/worklist` now **redirects** to `/crm?tab=orders&queue=fulfillment`, **forwarding** the queue's `who`/`view`/`stage` filters so every drill-through (Dashboard/DataQuality `/worklist?who=…&view=…`) lands on the right filtered queue in one hop.
+  - Capability-preserving: same queue, same controls, same role gating (management/auditor stay read-only via Worklist's existing `canAct`; RLS authoritative). My Work's "orders needing attention" queue already existed and is untouched.
+- Files: `src/screens/{CRM,Worklist}.tsx`, `src/lib/roles.ts`, `src/app/(app)/worklist/page.tsx`.

@@ -66,8 +66,9 @@ export const NAV: NavItem[] = [
   { path: '/clients', label: 'Customers', roles: ALL, icon: 'clients', group: 'Customers' },
 
   // Operations — delivery and fulfillment. (Operations today retired: its
-  // aggregator sections live in My Work + Calendar; /operations-today redirects.)
-  { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', ...OVERSIGHT], icon: 'fulfillment', group: 'Operations' },
+  // aggregator sections live in My Work + Calendar; /operations-today redirects.
+  // Fulfillment folded into the CRM Orders tab as the "Needs fulfillment" saved
+  // view (#5); /worklist redirects there and My Work carries the exceptions.)
   { path: '/resources', label: 'Trainers and venues', roles: ['super_admin', 'operations', 'business_owner', 'management'], icon: 'resources', group: 'Operations' },
   { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'operations', 'coordinator'], icon: 'duplicates', group: 'Operations' },
   { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations', 'coordinator'], icon: 'elearning', group: 'Operations' },
