@@ -38,6 +38,11 @@ export default function SessionForm() {
   const [conflicts, setConflicts] = useState<any[]>([])
   const [checking, setChecking] = useState(false)
   const [loaded, setLoaded] = useState(!editing && !cloneId)
+  // Progressive disclosure: a brand-new session only needs a course + dates —
+  // everything else defaults (pax from the course, status Tentative, trainer/
+  // venue assignable later from the calendar drawer). Editing/cloning opens the
+  // full form so nothing is hidden from a deliberate change.
+  const [showMore, setShowMore] = useState(editing || !!cloneId)
   const set = (k: string) => (e: any) => setF((s: any) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   // Picking a course seeds the per-session pax defaults from that course. The
   // operator can still override either number in the fields below.
@@ -206,24 +211,38 @@ export default function SessionForm() {
             </select>
           </label>
 
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <label className="field"><span>Learning type</span>
-              {/* E-learning has no scheduled session (submit rejects it), so keep it out of the picker. */}
-              <select value={f.modality} onChange={set('modality')}>
-                {LEARNING_TYPES.filter((m) => m !== 'E-learning').map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
-              </select>
-            </label>
-            <label className="field"><span>Fee (blank uses catalog: {feeForPick != null ? php(feeForPick) : 'no fee set'})</span>
-              <input type="number" min="0" value={f.price} onChange={set('price')} placeholder={feeForPick ?? ''} />
-            </label>
-          </div>
+          <label className="field"><span>Learning type</span>
+            {/* E-learning has no scheduled session (submit rejects it), so keep it out of the picker. */}
+            <select value={f.modality} onChange={set('modality')}>
+              {LEARNING_TYPES.filter((m) => m !== 'E-learning').map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
+            </select>
+          </label>
 
           <div className="field">
             <span style={{ display: 'block', fontSize: 12, color: 'var(--tr-slate)', marginBottom: 5, fontWeight: 600 }}>Dates</span>
             <DateSegments segments={segments} onChange={setSegments} errors={segErrors} />
           </div>
 
+          {/* Everything below has a working default, so it stays folded for a new
+              session (a course + dates is enough to schedule a run). */}
+          {!showMore ? (
+            <div className="field">
+              <button type="button" className="btn btn-ghost btn-sm" aria-expanded={false} onClick={() => setShowMore(true)}>
+                More options — fee, pax, trainer, venue, owner, status
+              </button>
+              <div className="fill-label" style={{ marginTop: 6 }}>
+                Defaults: pax {MIN_PAX}–{maxPax}{f.course_id ? ` (${irca ? 'IRCA' : 'professional'})` : ''}, fee from catalog, status Tentative, trainer &amp; venue assignable from the calendar.
+              </div>
+            </div>
+          ) : (
+          <>
+          <div className="toolbar" style={{ marginBottom: 8 }}>
+            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={true} onClick={() => setShowMore(false)}>Hide options</button>
+          </div>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <label className="field" style={{ gridColumn: '1 / -1' }}><span>Fee (blank uses catalog: {feeForPick != null ? php(feeForPick) : 'no fee set'})</span>
+              <input type="number" min="0" value={f.price} onChange={set('price')} placeholder={feeForPick ?? ''} />
+            </label>
             <label className="field"><span>Minimum pax (Go threshold)</span>
               <input type="number" min="1" value={f.min_participants} onChange={set('min_participants')} />
             </label>
@@ -280,6 +299,8 @@ export default function SessionForm() {
               <span style={{ margin: 0 }}>Private run (closed in-house)</span>
             </label>
           </div>
+          </>
+          )}
 
           {editing && (
             <div className="drawer-section" style={{ marginBottom: 12 }}>
