@@ -30,3 +30,7 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
 ## Wave 5 — Calendar list view
 - **#12 (partial) Calendar** — the List view's two split tables (PersCert / Professional Training) collapse into **one combined Sessions table**; the Training-type column already distinguishes them. Removed the `perscert`/`professional` subset derivations. *(Carried: filter-bar reduction 7→4 — deferred with the S6 category-source change so the Category filter reads the hierarchy rather than free-text.)*
 - Files: `src/screens/Calendar.tsx`.
+
+## Wave 6 — Sales My Work queues
+- **#11 Sales My Work queues** — added two sales-facing action queues to My Work (shown only to sales/sales_manager/coordinator/super_admin; data already RLS-scoped): **Follow-ups due** (open inquiries carrying a lead-health flag — ageing/stalled) and **My quotes** (Draft/Sent, with quote-health). Gives Sales the same "what needs me" completeness Operations has, and makes the eventual Sales nav reduction safe. Additive; nothing removed. *(Carried: a distinct "returned orders" flag needs handoff-return data on the order row — deferred.)*
+- Files: `src/screens/MyWork.tsx`.

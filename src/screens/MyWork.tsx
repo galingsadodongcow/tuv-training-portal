@@ -12,7 +12,10 @@ import {
   useOpenSchedules,
   useSlaBreaches,
   useInvalidate,
+  useInquiries,
+  useQuotes,
 } from '../hooks/data'
+import { inquiryHealth, quoteHealth } from '../lib/leadHealth'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { shortDate, php } from '../lib/format'
 import {
@@ -119,6 +122,21 @@ export default function MyWork() {
   const health = useSessionHealth()
   const schedules = useOpenSchedules()
   const sla = useSlaBreaches()
+  // Sales-facing queues: give sales the same "what's on my plate" completeness ops
+  // has. Data is already RLS-scoped to own/team. Read-only roles skip these.
+  const isSalesRole = ['sales', 'sales_manager', 'coordinator', 'super_admin'].includes(profile?.role as string)
+  const inquiries = useInquiries()
+  const quotes = useQuotes()
+  const inquiryFollowups = useMemo(
+    () => isSalesRole
+      ? (inquiries.data || []).filter((q: any) => ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback'].includes(q.status) && inquiryHealth(q))
+      : [],
+    [inquiries.data, isSalesRole]
+  )
+  const quoteFollowups = useMemo(
+    () => isSalesRole ? (quotes.data || []).filter((q: any) => ['Draft', 'Sent'].includes(q.status)) : [],
+    [quotes.data, isSalesRole]
+  )
 
   const pending = useMemo(
     () => (approvals.data || []).filter((a: any) => a.decision === 'Pending'),
@@ -175,6 +193,63 @@ export default function MyWork() {
           <p>Everything waiting on you — tasks, orders, sessions and exceptions in one place.</p>
         </div>
       </div>
+
+      {/* Sales queues — surfaced only for sales-facing roles so a rep gets the same
+          "what needs me" completeness ops already has. */}
+      {isSalesRole && (
+        <Section
+          title="Follow-ups due"
+          count={inquiryFollowups.length}
+          isLoading={inquiries.isLoading}
+          error={inquiries.error}
+          isEmpty={inquiryFollowups.length === 0}
+          emptyLabel="No inquiries need a follow-up."
+        >
+          <table><tbody>
+            {inquiryFollowups.map((q: any) => {
+              const h = inquiryHealth(q)
+              return (
+                <tr key={q.inquiry_id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{q.company}</div>
+                    <div className="fill-label">{q.course?.course_name || 'No course yet'} · <Link href="/inquiries">open pipeline</Link></div>
+                  </td>
+                  <td className="fill-label">{q.status}</td>
+                  <td>{h && <span className={`pill ${h.cls}`}>{h.label}</span>}</td>
+                  <td className="right fill-label">{q.expected_close ? shortDate(q.expected_close) : ''}</td>
+                </tr>
+              )
+            })}
+          </tbody></table>
+        </Section>
+      )}
+      {isSalesRole && (
+        <Section
+          title="My quotes"
+          count={quoteFollowups.length}
+          isLoading={quotes.isLoading}
+          error={quotes.error}
+          isEmpty={quoteFollowups.length === 0}
+          emptyLabel="No open quotes."
+        >
+          <table><tbody>
+            {quoteFollowups.map((q: any) => {
+              const h = quoteHealth(q)
+              return (
+                <tr key={q.quote_id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{q.quote_number}</div>
+                    <div className="fill-label">{q.client?.company || q.client?.name || '—'} · <Link href={`/quotations/${q.quote_id}`}>open quote</Link></div>
+                  </td>
+                  <td className="fill-label">{q.status}</td>
+                  <td>{h && <span className={`pill ${h.cls}`}>{h.label}</span>}</td>
+                  <td className="right fill-label">{q.valid_until ? shortDate(q.valid_until) : ''}</td>
+                </tr>
+              )
+            })}
+          </tbody></table>
+        </Section>
+      )}
 
       {/* 1. Tasks assigned to me — someone must act. */}
       <Section
