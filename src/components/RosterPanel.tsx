@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useRoster, useSessionOrders, useInvalidate } from '../hooks/data'
+import { useRoster, useSessionOrders, useSessionsForCourse, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from './ui'
 import { useToast } from './Toast'
 import { useConfirm } from './Confirm'
@@ -86,11 +86,13 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
   const confirm = useConfirm()
   const roster = useRoster(schedule.schedule_id)
   const orders = useSessionOrders(schedule.schedule_id)
+  const sessions = useSessionsForCourse(schedule.course_id)
   const invalidate = useInvalidate()
   const [form, setForm] = useState({ line_id: '', full_name: '', email: '', position_title: '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [importText, setImportText] = useState('')
+  const [xfer, setXfer] = useState({ pid: null, target: '', reason: '' })
 
   const canEdit = ['operations', 'super_admin', 'sales'].includes(profile?.role)
   const canCert = ['operations', 'super_admin'].includes(profile?.role)
@@ -101,6 +103,9 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
   const preview = importText.trim() ? parseImport(importText) : []
   const validRows = preview.filter((r) => r.valid)
   const overflow = validRows.length > 0 && names + validRows.length > seatsSold
+  // Other sessions of the same course a participant can move to (the hook already
+  // limits to Tentative/Confirmed); drop the session we're already on.
+  const xferTargets = (sessions.data || []).filter((s) => s.schedule_id !== schedule.schedule_id)
 
   const add = async () => {
     if (!form.line_id || !form.full_name.trim()) { setMsg('Pick the booking and enter a name.'); return }
@@ -192,6 +197,22 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
     else { invalidate(['roster']); toast.success('Participant removed from the roster.') }
   }
 
+  const transfer = async () => {
+    const pid = xfer.pid
+    if (!pid || !xfer.target) { setMsg('Pick a session to transfer to.'); return }
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.rpc('fn_transfer_participant', { p_participant: pid, p_new_schedule: xfer.target, p_reason: xfer.reason.trim() || null })
+    setBusy(false)
+    if (error) {
+      const m = error.code === '42501' ? "You're not allowed to transfer participants." : error.message
+      setMsg(m); toast.error(m)
+    } else {
+      setXfer({ pid: null, target: '', reason: '' })
+      invalidate(['roster', 'schedule', 'schedules', 'channel_pax'])
+      toast.success('Participant transferred.')
+    }
+  }
+
   const setResult = async (pid, result) => {
     setMsg(null)
     const { error } = await supabase.from('participant').update({ result, assessed_date: new Date().toISOString().slice(0, 10) }).eq('participant_id', pid)
@@ -269,7 +290,8 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
           <thead><tr><th>Name</th><th>Company</th><th>Attendance</th><th>Assessment</th><th>Certificate</th><th></th></tr></thead>
           <tbody>
             {roster.data.map((r) => (
-              <tr key={r.participant_id}>
+              <Fragment key={r.participant_id}>
+              <tr>
                 <td>
                   <div style={{ fontWeight: 600 }}>{r.full_name}</div>
                   <div className="fill-label">{r.position_title || r.email || '—'}</div>
@@ -311,9 +333,41 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
                   )}
                 </td>
                 <td className="right">
-                  {canEdit && <button className="linkbtn" onClick={() => remove(r.participant_id)}>Remove</button>}
+                  {canEdit && (
+                    <div className="toolbar" style={{ gap: 8, justifyContent: 'flex-end' }}>
+                      <button className="linkbtn" disabled={xferTargets.length === 0}
+                        title={xferTargets.length === 0 ? 'No other sessions of this course' : undefined}
+                        onClick={() => setXfer(xfer.pid === r.participant_id ? { pid: null, target: '', reason: '' } : { pid: r.participant_id, target: '', reason: '' })}>
+                        Transfer
+                      </button>
+                      <button className="linkbtn" onClick={() => remove(r.participant_id)}>Remove</button>
+                    </div>
+                  )}
                 </td>
               </tr>
+              {canEdit && xfer.pid === r.participant_id && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="drawer-section" style={{ marginTop: 0 }}>
+                      <div className="k-label" style={{ marginBottom: 8 }}>Transfer {r.full_name} to another session</div>
+                      <select aria-label={`Target session for ${r.full_name}`} value={xfer.target} onChange={(e) => setXfer({ ...xfer, target: e.target.value })} style={{ marginBottom: 8 }}>
+                        <option value="">{xferTargets.length ? 'Choose a session…' : 'No other sessions of this course'}</option>
+                        {xferTargets.map((s) => (
+                          <option key={s.schedule_id} value={s.schedule_id}>
+                            {s.start_date} · {s.status} · {s.booked_participants ?? 0}/{s.max_participants ?? '—'} pax
+                          </option>
+                        ))}
+                      </select>
+                      <input aria-label={`Reason for transferring ${r.full_name}`} placeholder="Reason (optional)" value={xfer.reason} onChange={(e) => setXfer({ ...xfer, reason: e.target.value })} style={{ marginBottom: 8 }} />
+                      <div className="toolbar" style={{ gap: 8 }}>
+                        <button className="btn btn-sm" onClick={transfer} disabled={busy || !xfer.target}>{busy ? 'Transferring…' : 'Transfer'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setXfer({ pid: null, target: '', reason: '' })} disabled={busy}>Cancel</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

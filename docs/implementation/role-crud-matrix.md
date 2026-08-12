@@ -45,7 +45,7 @@ The authority every role should have over every major entity, and its validation
 | Management / Auditor read-only | ✅ no write actions surfaced | ⏳ **critical** — confirm no write path via any RPC as `management`/`auditor` |
 | Handoff Accept/Return authority | ✅ OrderDetail gates | ⏳ re-sim as `operations` |
 | Auditor reads `audit_log` w/ values | ✅ nav includes `auditor`; `fn_audit_search` relaxed | ⏳ re-sim as `auditor` (and confirm no writes) |
-| Participant soft-cancel/transfer (`participant.status`) | ⏳ UI not built yet (S5) | ⏳ |
+| Participant soft-remove + transfer (`participant.status`) | ✅ built — `fn_remove_participant` + transfer UI (S5); roster hides Removed | RPC self-gates to ops/coordinator/super_admin (42501); ⏳ confirm via live re-sim |
 
 ## Delete review (prefer non-destructive)
 Entities where a hard `DELETE` should be replaced by Archive/Cancel/Void/Deactivate — to audit in the CRUD pass and fix where a destructive path exists:
