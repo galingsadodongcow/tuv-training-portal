@@ -85,9 +85,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             {opts.reason && (
               <label className="field" style={{ marginTop: 10 }}>
                 <span>{opts.reasonLabel || 'Reason'}{opts.reason === 'required' ? '' : ' (optional)'}</span>
-                <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !reasonMissing) close(true) }}
-                  placeholder="Noted on the record" />
+                {opts.tone === 'danger' ? (
+                  // Danger reasons (void/refund/cancel/return) get room for a real
+                  // rationale; Cmd/Ctrl+Enter submits so multi-line stays possible.
+                  <textarea autoFocus value={reason} onChange={(e) => setReason(e.target.value)} rows={2}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !reasonMissing) close(true) }}
+                    placeholder="Noted on the record" />
+                ) : (
+                  <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !reasonMissing) close(true) }}
+                    placeholder="Noted on the record" />
+                )}
               </label>
             )}
             <div className="toolbar" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
