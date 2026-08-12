@@ -19,13 +19,14 @@
   --border-soft: #f2f2f2;
   --border-strong: #d4d4d4;
 
-  --accent: #0070f3;
-  --accent-hover: #0761d1;
-  --accent-tint: #e8f1ff;
-  --accent-tint-2: #f4f9ff;
+  /* TÜV Rheinland brand blue as the primary/accent colour. */
+  --accent: #00629b;
+  --accent-hover: #004f7e;
+  --accent-tint: #e4eff6;
+  --accent-tint-2: #f1f7fb;
 
-  --btn-bg: #171717;
-  --btn-bg-hover: #383838;
+  --btn-bg: #00629b;
+  --btn-bg-hover: #004f7e;
   --btn-fg: #ffffff;
 
   --success: #17803d;
@@ -45,7 +46,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --ring: 0 0 0 3px rgba(0, 112, 243, 0.25);
+  --ring: 0 0 0 3px rgba(0, 98, 155, 0.30);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -84,14 +85,16 @@
     --border-soft: #1c1c1c;
     --border-strong: #2e2e2e;
 
-    --accent: #3291ff;
-    --accent-hover: #52a8ff;
-    --accent-tint: #10233b;
-    --accent-tint-2: #0d1a2b;
+    /* Lighter TÜV blue for links/accents on dark; the primary button stays brand
+       blue with white text (not the old inverted light button). */
+    --accent: #57a9d8;
+    --accent-hover: #78bce4;
+    --accent-tint: #0e2c3f;
+    --accent-tint-2: #0b2230;
 
-    --btn-bg: #ededed;
-    --btn-bg-hover: #ffffff;
-    --btn-fg: #0a0a0a;
+    --btn-bg: #0a72b0;
+    --btn-bg-hover: #1a86c8;
+    --btn-fg: #ffffff;
 
     --success: #3fb950;
     --danger: #f0616d;
@@ -101,7 +104,7 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
-    --ring: 0 0 0 3px rgba(50, 145, 255, 0.35);
+    --ring: 0 0 0 3px rgba(87, 169, 218, 0.38);
     color-scheme: dark;
   }
 }
@@ -137,7 +140,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   gap: 1px;
 }
 .brand { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px 18px; }
-.brand-mark { font-weight: 700; color: var(--text); letter-spacing: -0.03em; font-size: 17px; }
+.brand-mark { font-weight: 700; color: var(--accent); letter-spacing: -0.03em; font-size: 17px; }
 .brand-sub { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 500; }
 .nav-link {
   display: flex; align-items: center; gap: 10px;
@@ -150,7 +153,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   transition: background 0.13s var(--ease), color 0.13s var(--ease);
 }
 .nav-link:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); text-decoration: none; }
-.nav-link.active { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-weight: 550; }
+.nav-link.active { background: var(--accent-tint); color: var(--accent); font-weight: 550; }
 
 /* --------------------------------------------- Navigation list */
 .nav-list { display: flex; flex-direction: column; gap: 2px; }
@@ -269,7 +272,11 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .btn:hover { background: var(--btn-bg-hover); border-color: var(--btn-bg-hover); }
 .btn:active { transform: translateY(1px); }
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+/* A soft brand-tinted lift on the primary button gives the filled TÜV-blue
+   buttons depth without a hard drop shadow. Ghost/danger keep their flat look. */
+.btn:not(.btn-ghost):not(.btn-danger) { box-shadow: 0 1px 2px color-mix(in srgb, var(--btn-bg) 35%, transparent); }
+.btn:not(.btn-ghost):not(.btn-danger):hover { box-shadow: 0 2px 6px color-mix(in srgb, var(--btn-bg) 32%, transparent); }
 .btn-ghost { background: var(--card); color: var(--text); border-color: var(--border-strong); }
 .btn-ghost:hover { background: var(--bg-subtle); border-color: var(--text-faint); color: var(--text); }
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -337,7 +344,7 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 18px; overflow-x: auto; }
 .tab { background: none; border: none; padding: 9px 13px; font-size: 13px; font-weight: 550; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit; transition: color 0.13s var(--ease); }
 .tab:hover { color: var(--text); }
-.tab-on { color: var(--text); border-bottom-color: var(--text); }
+.tab-on { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* ------------------------------------------- Record detail workspaces */
 .back-link { display: inline-block; font-size: 13px; color: var(--text-muted); text-decoration: none; margin-bottom: 6px; }
@@ -392,7 +399,7 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 /* --------------------------------------------- Segmented toggle */
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg-btn { background: none; border: none; padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 550; color: var(--text-muted); cursor: pointer; }
-.seg-btn.on { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.seg-btn.on { background: var(--accent-tint); color: var(--accent); }
 .seg-btn:not(.on):hover { color: var(--text); }
 
 /* --------------------------------------------- Calendar month grid */
@@ -526,7 +533,7 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .seg-btn { background: var(--card); border: none; padding: 5px 9px; font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: inherit; transition: background 0.12s var(--ease), color 0.12s var(--ease); }
 .seg .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
 .seg-btn:hover { background: var(--bg-subtle); color: var(--text); }
-.seg-btn.on { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.seg-btn.on { background: var(--accent-tint); color: var(--accent); }
 .seg-btn.density { border: 1px solid var(--border); border-radius: var(--radius-sm); }
 
 /* =========================================================== Toaster */
