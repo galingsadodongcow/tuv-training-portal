@@ -1325,6 +1325,63 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
   })
 }
 
+const CLIENTS_SORT_COLUMNS: Record<string, string> = {
+  company: 'company',
+  name: 'name',
+  email: 'email',
+  phone: 'phone',
+}
+
+// Server-paged client book (#128): filtered, sorted and paged in the database
+// across every match, so the list is no longer capped at the first 300 rows.
+// Mirrors useOrdersPaged. deleted_at may not exist before its migration, so the
+// query strips it (select + is-null filter) and retries — the graceful
+// degradation pattern used throughout the data layer.
+export function useClientsPaged({ page = 0, pageSize = 50, q = '', sortKey = 'company', sortDir = 'asc' }: {
+  page?: number
+  pageSize?: number
+  q?: string
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
+}) {
+  return useQuery({
+    queryKey: ['clients_paged', page, pageSize, q, sortKey, sortDir],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const base = 'client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)'
+      const asc = sortDir === 'asc'
+      const build = (withDeleted: boolean) => {
+        let query = supabase
+          .from('client')
+          .select(withDeleted ? base + ', deleted_at' : base, { count: 'exact' })
+        // Hide soft-deleted customers when the column is present.
+        if (withDeleted) query = query.is('deleted_at', null)
+        if (sortKey === 'owner') {
+          // Order the parent rows by the joined salesperson's name (PostgREST
+          // to-one embedded ordering, same form as useOrdersPaged's customer sort).
+          query = query.order('salesperson(name)' as any, { ascending: asc, nullsFirst: false })
+        } else if (CLIENTS_SORT_COLUMNS[sortKey]) {
+          query = query.order(CLIENTS_SORT_COLUMNS[sortKey], { ascending: asc, nullsFirst: false })
+        } else {
+          query = query.order('company', { ascending: true, nullsFirst: false })
+        }
+        query = query.range(page * pageSize, page * pageSize + pageSize - 1)
+        if (q.trim()) {
+          // Strip PostgREST-significant characters before interpolating user input
+          // into an or() filter string (same guard as useOrdersPaged).
+          const t = q.trim().replace(/[,()*%\\]/g, ' ').trim()
+          if (t) query = query.or(`company.ilike.%${t}%,name.ilike.%${t}%,email.ilike.%${t}%`)
+        }
+        return query
+      }
+      let res = await build(true)
+      if (res.error && isMissingColumn(res.error)) res = await build(false)
+      if (res.error) throw res.error
+      return { rows: res.data, count: res.count ?? 0 }
+    },
+  })
+}
+
 // ---- Phase 1/2: session health, order merge, notification center ----
 // Computed health per session (v_session_health). Consumers usually build a
 // Map<schedule_id, health> for O(1) lookup on the calendar / lists.
