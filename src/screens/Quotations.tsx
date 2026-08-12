@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useQuotes, useClients, useSalespeople, useInvalidate } from '../hooks/data'
@@ -32,6 +32,15 @@ export default function Quotations({ embedded }: { embedded?: boolean } = {}) {
   const [form, setForm] = useState<any>({ client_id: '', valid_until: '', sales_id: '' })
   const [busy, setBusy] = useState(false)
   const fe = useFormErrors()
+  const sp = useSearchParams()
+
+  // Open the create form prefilled when arriving from an inquiry conversion
+  // (?new=1&client=<id>&sales=<id>) so the customer is carried, not re-picked.
+  useEffect(() => {
+    if (sp.get('new') !== '1') return
+    setCreating(true)
+    setForm((f: any) => ({ ...f, client_id: sp.get('client') || f.client_id, sales_id: sp.get('sales') || f.sales_id }))
+  }, [sp])
   const errors = { client: !form.client_id ? 'Pick a client.' : null }
 
   const create = async () => {

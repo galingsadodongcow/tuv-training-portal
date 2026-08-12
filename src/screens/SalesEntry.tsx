@@ -46,6 +46,7 @@ export default function SalesEntry() {
   const quoteId = sp.get('quote') || undefined
   const quoteLines = useQuoteLines(quoteId)
   const prefilledRef = useRef(false)
+  const coursePrefilledRef = useRef(false)
   const [quotePrefilled, setQuotePrefilled] = useState(false)
 
   // Map the quote's lines onto SalesEntry line objects once, guarded so a
@@ -82,6 +83,14 @@ export default function SalesEntry() {
   useEffect(() => {
     const cid = sp.get('client')
     if (cid) setClient((c) => ({ ...c, mode: 'existing', client_id: cid }))
+  }, [sp])
+
+  // Prefill a new client from an inquiry that isn't linked yet (convert → order).
+  // SalesEntry's new-client mode still runs its own duplicate-email check on save.
+  useEffect(() => {
+    const company = sp.get('company'); const contact = sp.get('contact'); const email = sp.get('email'); const phone = sp.get('phone')
+    if (sp.get('client') || (!company && !contact && !email && !phone)) return
+    setClient((c) => ({ ...c, mode: 'new', company: company || c.company, name: contact || c.name, email: email || c.email, phone: phone || c.phone }))
   }, [sp])
 
   // load sessions whenever a line's course changes
@@ -128,6 +137,19 @@ export default function SalesEntry() {
     setLine(idx, { modality, schedule_id: '', amount: fee ?? '' })
     loadSessions(idx, l.course_id)
   }
+
+  // Prefill the first line's course from an inquiry's interest (convert → order).
+  // One-shot once fees are loaded so the catalog fee resolves; the rep still picks
+  // the session. Guarded so it can't clobber the rep's own edits on re-render.
+  useEffect(() => {
+    const cid = sp.get('course')
+    if (!cid || coursePrefilledRef.current || !fees.data) return
+    coursePrefilledRef.current = true
+    const fee = feeFor(cid, lines[0]?.modality || blankLine().modality)
+    setLine(0, { course_id: cid, schedule_id: '', amount: fee ?? '' })
+    loadSessions(0, cid)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp, fees.data])
 
   const total = lines.reduce((n, l) => n + (Number(l.amount) || 0) * (Number(l.seats) || 0), 0)
   const totalSeats = lines.reduce((n, l) => n + (Number(l.seats) || 0), 0)

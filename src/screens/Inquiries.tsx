@@ -186,6 +186,68 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
     }
   }
 
+  // Convert a qualified lead into a quote or order, carrying the customer so
+  // identity is entered once (threads #120's client link inquiry → quote/order).
+  const canConvert = ['super_admin', 'coordinator', 'sales'].includes(profile?.role as string)
+  const [converting, setConverting] = useState('')
+
+  const linkInquiryClient = async (inquiryId: string, clientId: string) => {
+    await supabase.from('inquiry').update({ client_id: clientId }).eq('inquiry_id', inquiryId)
+    invalidate(['inquiries'])
+  }
+  // Resolve a client for conversion: the linked client, else an exact
+  // company/email match reused, else a new client created from the inquiry — then
+  // linked back. Used where a client_id is required up front (quotes).
+  const resolveClientId = async (inq: any): Promise<string | null> => {
+    if (inq.client_id) return inq.client_id
+    const co = (inq.company || '').trim().toLowerCase()
+    const em = (inq.email || '').trim().toLowerCase()
+    const match = ((clients.data || []) as any[]).find((c) =>
+      (co && (c.company || '').toLowerCase() === co) || (em && em.length > 4 && (c.email || '').toLowerCase() === em)
+    )
+    if (match) { await linkInquiryClient(inq.inquiry_id, match.client_id); return match.client_id }
+    const { data, error } = await supabase.from('client').insert({
+      company: inq.company || null, name: inq.contact || null, email: inq.email || null,
+      phone: inq.phone || null, owner_sales_id: inq.sales_id || null,
+    }).select('client_id').single()
+    if (error) { toast.error(error.message); return null }
+    await linkInquiryClient(inq.inquiry_id, data.client_id)
+    toast.success('Created a client record for this customer.')
+    return data.client_id
+  }
+  const convertToOrder = async (inq: any) => {
+    setConverting(inq.inquiry_id + ':order')
+    // Orders can start a new client on save (with their own dedup), so pass the
+    // linked client when present, otherwise seed the new-client fields — no
+    // premature client record if the rep abandons the order.
+    const parts = new URLSearchParams()
+    if (inq.client_id) parts.set('client', inq.client_id)
+    else {
+      if (inq.company) parts.set('company', inq.company)
+      if (inq.contact) parts.set('contact', inq.contact)
+      if (inq.email) parts.set('email', inq.email)
+      if (inq.phone) parts.set('phone', inq.phone)
+    }
+    if (inq.course_id) parts.set('course', inq.course_id)
+    router.push(`/sales-entry?${parts.toString()}`)
+  }
+  const convertToQuote = async (inq: any) => {
+    setConverting(inq.inquiry_id + ':quote')
+    const cid = await resolveClientId(inq) // a quote needs a client up front
+    if (!cid) { setConverting(''); return }
+    const parts = new URLSearchParams({ new: '1', client: cid })
+    if (inq.sales_id) parts.set('sales', String(inq.sales_id))
+    router.push(`/crm?tab=quotes&${parts.toString()}`)
+  }
+  const ConvertActions = ({ q, btn }: { q: any; btn?: boolean }) => (canConvert && q.status !== 'Closed Lost') ? (
+    <>
+      <button className={btn ? 'btn btn-ghost btn-sm' : 'linkbtn'} title="Create a quote for this lead"
+        disabled={converting === q.inquiry_id + ':quote'} onClick={() => convertToQuote(q)}>Quote</button>
+      <button className={btn ? 'btn btn-ghost btn-sm' : 'linkbtn'} title="Create an order for this lead"
+        disabled={converting === q.inquiry_id + ':order'} onClick={() => convertToOrder(q)}>Order</button>
+    </>
+  ) : null
+
   const weighted = (inquiries.data || [])
     .filter((q: any) => OPEN_STAGES.includes(q.status))
     .reduce((n: number, q: any) => n + (Number(q.est_value) || 0) * ((Number(q.probability) || 0) / 100), 0)
@@ -457,6 +519,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
                     {canEdit && (
                       <td className="right">
                         <div className="toolbar" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                          <ConvertActions q={q} />
                           <button className="linkbtn" onClick={() => openEdit(q)}>Edit</button>
                           {q.status === 'Closed Lost' ? (
                             <button className="linkbtn" onClick={() => move(q.inquiry_id, 'Received')}>Reopen</button>
@@ -505,7 +568,8 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
                     {stage === 'Closed Lost' && q.lost_reason && <div className="fill-label" style={{ color: 'var(--danger)' }}>Lost: {q.lost_reason}</div>}
                     <div className="fill-label">{q.salesperson?.name || '—'} · {shortDate(q.inquiry_date)}{q.source ? ` · ${q.source}` : ''}</div>
                     {canEdit && (
-                    <div className="toolbar" style={{ gap: 4, marginTop: 6 }}>
+                    <div className="toolbar" style={{ gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                      <ConvertActions q={q} btn />
                       <button className="btn btn-ghost btn-sm" title="Edit inquiry" onClick={() => openEdit(q)}>Edit</button>
                       {stage === 'Closed Lost' ? (
                         <button className="btn btn-ghost btn-sm" title="Reopen" onClick={() => move(q.inquiry_id, 'Received')}>Reopen</button>
