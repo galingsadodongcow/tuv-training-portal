@@ -2063,3 +2063,858 @@ grant select on public.v_session_health to authenticated;
 revoke execute on function public.fn_orders_stage_guard()        from public, anon, authenticated;
 revoke execute on function public.fn_participant_dedup_guard()   from public, anon, authenticated;
 revoke execute on function public.fn_guard_orders_sales_fields() from public, anon, authenticated;
+
+
+-- ############################################################################
+-- ## 20260812100000_phaseb_roles_enum.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Phase B (second-pass) — 1/6: the 8-role model, enum values only.
+--
+-- Adds the four new roles agreed in the Phase A decision session (D1, D4, D7,
+-- D8) to the user_role enum:
+--   coordinator    — owns webshop + manual order intake, dedup, endorsement (D1)
+--   sales_manager  — real team-scoped manager role (D8)
+--   management     — read-only executive role (D4)
+--   auditor        — read-only governance role with audit_log access (D7)
+--
+-- ISOLATED on purpose: `alter type ... add value` commits a new enum label, and
+-- PostgreSQL forbids using a just-added label in the SAME transaction. The CI
+-- bundle is applied by psql in autocommit mode (each statement its own txn), so
+-- adding the labels here and USING them only in the later Phase B migration
+-- files is safe. Do not add anything that references the new labels to this file.
+--
+-- Idempotent: `if not exists` makes re-runs a no-op.
+-- ===========================================================================
+
+alter type public.user_role add value if not exists 'coordinator';
+alter type public.user_role add value if not exists 'sales_manager';
+alter type public.user_role add value if not exists 'management';
+alter type public.user_role add value if not exists 'auditor';
+
+
+-- ############################################################################
+-- ## 20260812110000_phaseb_role_rls.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Phase B (second-pass) — 2/6: RLS for the 8-role model.
+--
+-- Uses the enum labels added in 20260812100000 (separate txn — safe under the
+-- psql-autocommit bundle). Establishes the read/write posture for the four new
+-- roles and folds them into the existing policies:
+--
+--   Read-all (SELECT everywhere): super_admin, operations, business_owner,
+--     coordinator, management, auditor.  (coordinator needs the global view to
+--     own intake + dedup; management/auditor are read-only by decision.)
+--   Team-scoped read: sales (own + team), sales_manager (team + region, like a
+--     supervisor).
+--   Writes: coordinator gets operations-like INTAKE writes (orders, lines,
+--     assignments, inquiries); management + auditor get NO writes anywhere;
+--     auditor additionally reads audit_log.
+--
+-- Payments/refunds authority (D3) and the customer model live in later files.
+-- All idempotent (create-or-replace fn, drop-then-create policy). ::text-free
+-- role comparisons are fine here — role labels are stable enum values.
+-- ===========================================================================
+
+-- ---- Role-group helpers (single source of truth for the posture) ----------
+-- Broad-read roles: see every order / lead / receivable regardless of ownership.
+create or replace function public.fn_role_reads_all()
+returns boolean language sql stable security definer set search_path to 'public' as $$
+  select fn_current_role() in
+    ('super_admin','operations','business_owner','coordinator','management','auditor');
+$$;
+
+-- Team-lead scope: supervisors (legacy is_supervisor flag) and the new
+-- sales_manager role both get region-wide visibility over their team.
+create or replace function public.fn_is_team_lead()
+returns boolean language sql stable security definer set search_path to 'public' as $$
+  select fn_is_supervisor() or fn_current_role() = 'sales_manager';
+$$;
+
+-- Intake-writer roles: who may create/edit orders, lines, assignments, leads.
+create or replace function public.fn_role_intake_write()
+returns boolean language sql stable security definer set search_path to 'public' as $$
+  select fn_current_role() in ('super_admin','operations','coordinator');
+$$;
+
+grant execute on function public.fn_role_reads_all()    to authenticated;
+grant execute on function public.fn_is_team_lead()      to authenticated;
+grant execute on function public.fn_role_intake_write() to authenticated;
+
+-- ---- fn_can_see_order: widen read-all group + add sales_manager scope -------
+create or replace function public.fn_can_see_order(p_order text)
+returns boolean language sql stable security definer set search_path to 'public' as $$
+  select
+    fn_role_reads_all()
+    or exists (select 1 from orders o where o.order_id = p_order and o.created_by = auth.uid())
+    or exists (
+      select 1 from order_assignment oa join salesperson sp on sp.sales_id = oa.sales_id
+       where oa.order_id = p_order
+         and ((fn_current_team() is not null and sp.team is not distinct from fn_current_team())
+           or (fn_is_team_lead() and fn_current_region() is not null
+               and sp.region is not distinct from fn_current_region())));
+$$;
+
+-- ---- orders: SELECT for read-all roles + sales_manager region scope ---------
+drop policy if exists p_orders_r on public.orders;
+create policy p_orders_r on public.orders for select to authenticated using (
+  fn_role_reads_all()
+  or (created_by = auth.uid())
+  or exists (
+    select 1 from order_assignment oa join salesperson sp on sp.sales_id = oa.sales_id
+     where oa.order_id = orders.order_id
+       and ((fn_current_team() is not null and sp.team is not distinct from fn_current_team())
+         or (fn_is_team_lead() and fn_current_region() is not null
+             and sp.region is not distinct from fn_current_region())))
+);
+
+-- Coordinator INTAKE writes on orders (any channel: webshop re-key + manual).
+-- created_by is stamped to the coordinator for traceability on insert.
+drop policy if exists p_orders_coord_i on public.orders;
+create policy p_orders_coord_i on public.orders for insert to authenticated
+  with check (fn_current_role() = 'coordinator' and created_by = auth.uid());
+
+-- Widen the privileged UPDATE to include coordinator (ops/business_owner kept).
+drop policy if exists p_orders_priv_u on public.orders;
+create policy p_orders_priv_u on public.orders for update to authenticated
+  using (fn_current_role() in ('operations','business_owner','coordinator'))
+  with check (fn_current_role() in ('operations','business_owner','coordinator'));
+
+-- ---- order_line: coordinator joins the privileged writer set ----------------
+drop policy if exists order_line_write_priv on public.order_line;
+create policy order_line_write_priv on public.order_line for all to authenticated
+  using (fn_current_role() in ('operations','super_admin','coordinator'))
+  with check (fn_current_role() in ('operations','super_admin','coordinator'));
+
+-- ---- order_assignment: coordinator may assign; sales_manager may reassign ---
+drop policy if exists p_asg_coord on public.order_assignment;
+create policy p_asg_coord on public.order_assignment for all to authenticated
+  using (fn_current_role() = 'coordinator')
+  with check (fn_current_role() = 'coordinator');
+
+-- Refresh the "team lead" assignment policies to include sales_manager. These
+-- exist on the live DB (drop-if-exists is a no-op where they are absent).
+drop policy if exists p_asg_lead_i on public.order_assignment;
+create policy p_asg_lead_i on public.order_assignment for insert to authenticated
+  with check (fn_current_role() = 'business_owner'
+    or (fn_current_role() = 'sales' and fn_is_supervisor())
+    or fn_current_role() = 'sales_manager');
+drop policy if exists p_asg_lead_u on public.order_assignment;
+create policy p_asg_lead_u on public.order_assignment for update to authenticated
+  using (fn_current_role() = 'business_owner'
+    or (fn_current_role() = 'sales' and fn_is_supervisor())
+    or fn_current_role() = 'sales_manager');
+drop policy if exists p_asg_lead_d on public.order_assignment;
+create policy p_asg_lead_d on public.order_assignment for delete to authenticated
+  using (fn_current_role() = 'business_owner'
+    or (fn_current_role() = 'sales' and fn_is_supervisor())
+    or fn_current_role() = 'sales_manager');
+
+-- ---- inquiry: read-all roles + team-lead team view + coordinator intake -----
+-- Existing p_inq_rw (super_admin | own sales) is kept for sales self-service and
+-- write. Add SELECT for the read-all roles, a team view for sales_manager, and
+-- full intake write for coordinator.
+drop policy if exists p_inq_readall on public.inquiry;
+create policy p_inq_readall on public.inquiry for select to authenticated
+  using (fn_role_reads_all());
+
+drop policy if exists p_inq_team_lead on public.inquiry;
+create policy p_inq_team_lead on public.inquiry for select to authenticated
+  using (fn_current_role() = 'sales_manager' and exists (
+    select 1 from salesperson sp where sp.sales_id = inquiry.sales_id
+      and sp.team is not distinct from fn_current_team()));
+
+drop policy if exists p_inq_coord on public.inquiry;
+create policy p_inq_coord on public.inquiry for all to authenticated
+  using (fn_current_role() = 'coordinator')
+  with check (fn_current_role() = 'coordinator');
+
+-- ---- audit_log: add the auditor role (read-only governance) -----------------
+drop policy if exists p_audit_r on public.audit_log;
+create policy p_audit_r on public.audit_log for select to authenticated
+  using (fn_current_role() in ('super_admin','auditor'));
+
+
+-- ############################################################################
+-- ## 20260812120000_phaseb_customer360.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Phase B (second-pass) — 3/6: Customer 360 data model (D5).
+--
+-- Decision: roll the transactional `client` under `organization` (reversible,
+-- low blast radius) — NOT a full collapse of client into organization.
+--
+--  1. Reconcile the client → organization FK drift. The live `client` table
+--     carries TWO FKs to organization (org_id AND organization_id). Make
+--     `organization_id` canonical and keep `org_id` as a synced, deprecated
+--     mirror so any legacy reader/writer still works during the transition.
+--     (A later cleanup migration may DROP org_id once nothing writes it.)
+--  2. Ensure every client with a company name rolls up to an organization:
+--     dedupe by normalized name (fn_norm_org) and backfill organization_id.
+--  3. Resolve leads to customers: add inquiry.client_id (+ inquiry.owner for
+--     O01) and backfill via email, then normalized-company, dedup.
+--  4. Customer-360 read views (org contacts + org rollup), security_invoker so
+--     they respect the caller's RLS.
+--
+-- Idempotent. No column is dropped in this pass. No RLS is loosened: client /
+-- organization / contact SELECT already admit every authenticated role.
+-- ===========================================================================
+
+-- ---- 1. Canonical FK + deprecated mirror ----------------------------------
+comment on column public.client.org_id is
+  'DEPRECATED mirror of organization_id (Customer-360 transition). Kept in sync by trg_client_org_sync; do not write directly. Slated for removal once no app path writes it.';
+
+create or replace function public.fn_client_org_sync()
+returns trigger language plpgsql set search_path to 'public' as $$
+begin
+  -- organization_id is canonical. Promote a legacy-only org_id write, then
+  -- mirror canonical -> org_id so old readers keep working.
+  if new.organization_id is null and new.org_id is not null then
+    new.organization_id := new.org_id;
+  end if;
+  new.org_id := new.organization_id;
+  return new;
+end $$;
+
+drop trigger if exists trg_client_org_sync on public.client;
+create trigger trg_client_org_sync before insert or update on public.client
+  for each row execute function public.fn_client_org_sync();
+
+-- Converge existing rows onto the canonical value (fn_audit skips no-op rows).
+update public.client
+   set organization_id = coalesce(organization_id, org_id),
+       org_id          = coalesce(organization_id, org_id)
+ where (organization_id is not null or org_id is not null)
+   and (organization_id is distinct from org_id
+        or organization_id is null or org_id is null);
+
+-- ---- 2. Roll clients under organizations (dedupe by normalized name) -------
+-- Create an organization for each distinct normalized company name that has no
+-- matching org yet (only for clients not already linked).
+insert into public.organization (name, country)
+select distinct on (fn_norm_org(c.company)) c.company, c.country
+  from public.client c
+ where c.organization_id is null
+   and coalesce(btrim(c.company),'') <> ''
+   and fn_norm_org(c.company) is not null
+   and not exists (
+     select 1 from public.organization o
+      where fn_norm_org(o.name) = fn_norm_org(c.company))
+ order by fn_norm_org(c.company), c.company;
+
+-- Link every unlinked client to its organization by normalized name.
+update public.client c
+   set organization_id = o.org_id
+  from public.organization o
+ where c.organization_id is null
+   and coalesce(btrim(c.company),'') <> ''
+   and fn_norm_org(o.name) = fn_norm_org(c.company);
+
+-- ---- 3. inquiry.client_id + inquiry.owner (lead -> customer, O01) ----------
+alter table public.inquiry add column if not exists client_id uuid references public.client(client_id);
+alter table public.inquiry add column if not exists owner uuid references public.salesperson(sales_id);
+
+-- Backfill client by exact email match first (most reliable), then by
+-- normalized company name for the remainder.
+update public.inquiry i
+   set client_id = c.client_id
+  from public.client c
+ where i.client_id is null
+   and coalesce(btrim(i.email),'') <> ''
+   and lower(c.email) = lower(i.email);
+
+update public.inquiry i
+   set client_id = c.client_id
+  from public.client c
+ where i.client_id is null
+   and coalesce(btrim(i.company),'') <> ''
+   and fn_norm_org(c.company) = fn_norm_org(i.company);
+
+-- Owner defaults to the inquiry's originating sales rep.
+update public.inquiry set owner = sales_id where owner is null;
+
+-- ---- 4. Customer-360 read views -------------------------------------------
+create or replace view public.v_org_contacts with (security_invoker = true) as
+  select o.org_id, o.name as org_name,
+         c.client_id, c.name as client_name,
+         ct.contact_id, ct.name as contact_name, ct.title,
+         ct.email, ct.phone, ct.is_primary
+    from public.organization o
+    join public.client c  on c.organization_id = o.org_id
+    join public.contact ct on ct.client_id = c.client_id;
+grant select on public.v_org_contacts to authenticated;
+
+-- Org-level rollup for the Customer-360 header. Subqueries (not joins) avoid
+-- fan-out double counting; security_invoker means each count only reflects rows
+-- the caller may see.
+create or replace view public.v_customer_360 with (security_invoker = true) as
+  select o.org_id, o.name as org_name, o.country, o.industry, o.owner_sales_id,
+    (select count(*) from public.client c where c.organization_id = o.org_id) as clients,
+    (select count(*) from public.contact ct join public.client c on c.client_id = ct.client_id
+      where c.organization_id = o.org_id) as contacts,
+    (select count(*) from public.orders ord join public.client c on c.client_id = ord.client_id
+      where c.organization_id = o.org_id and ord.order_status <> 'Cancelled') as active_orders,
+    (select coalesce(sum(ord.total_amount),0) from public.orders ord
+       join public.client c on c.client_id = ord.client_id
+      where c.organization_id = o.org_id and ord.order_status <> 'Cancelled') as booked_amount,
+    (select count(*) from public.inquiry q join public.client c on c.client_id = q.client_id
+      where c.organization_id = o.org_id) as linked_inquiries
+  from public.organization o;
+grant select on public.v_customer_360 to authenticated;
+
+
+-- ############################################################################
+-- ## 20260812130000_phaseb_payments_money.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Phase B (second-pass) — 4/6: money model (D3).
+--
+--  * Payments become IMMUTABLE: never deleted, financial fields frozen once
+--    written. A payment lifecycle (Pending -> Confirmed -> Voided) replaces the
+--    old hard-DELETE "refund". Recording/confirming = coordinator / operations /
+--    business_owner / super_admin. VOID and REFUND = business_owner / super_admin
+--    only, each behind a mandatory persisted reason.
+--  * New `refund` and `credit_note` objects give audit-grade financial history.
+--  * fn_ar_recompute now derives AR from CONFIRMED payments − refunds + applied
+--    credit notes (was: sum of all payment rows).
+--
+-- Idempotent. Trigger functions have EXECUTE revoked from the API roles (they
+-- fire on triggers, not as RPCs). Enum CASE is cast to payment_status_t to avoid
+-- the text→enum assignment error (42804) noted in CLAUDE.md.
+-- ===========================================================================
+
+-- ---- Per-payment lifecycle enum (distinct from order-level payment_status_t) --
+do $$ begin
+  if not exists (select 1 from pg_type where typname = 'payment_state_t') then
+    create type public.payment_state_t as enum ('Pending','Confirmed','Voided');
+  end if;
+end $$;
+
+-- ---- Payment lifecycle columns (existing rows are historical Confirmed) -----
+alter table public.payment add column if not exists status public.payment_state_t not null default 'Confirmed';
+alter table public.payment add column if not exists confirmed_by uuid;
+alter table public.payment add column if not exists confirmed_at timestamptz;
+alter table public.payment add column if not exists voided_by uuid;
+alter table public.payment add column if not exists voided_at timestamptz;
+alter table public.payment add column if not exists void_reason text;
+
+-- Stamp confirmation provenance on pre-existing rows (before the guard exists).
+update public.payment
+   set confirmed_at = coalesce(confirmed_at, created_at),
+       confirmed_by = coalesce(confirmed_by, created_by)
+ where status = 'Confirmed' and confirmed_at is null;
+
+-- ---- Immutability guard: no deletes; freeze financial identity -------------
+create or replace function public.fn_payment_immutable_guard()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text;
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'Payments are immutable and cannot be deleted; void or refund instead'
+      using errcode = '42501';
+  end if;
+
+  -- Financial identity is frozen for the life of the row.
+  if new.order_id   is distinct from old.order_id
+  or new.amount     is distinct from old.amount
+  or new.paid_date  is distinct from old.paid_date
+  or new.method     is distinct from old.method
+  or new.reference  is distinct from old.reference
+  or new.created_by is distinct from old.created_by
+  or new.created_at is distinct from old.created_at then
+    raise exception 'Payment financial fields are immutable (only status/confirmation/void may change)'
+      using errcode = '42501';
+  end if;
+
+  -- Legal transitions only.
+  if new.status is distinct from old.status then
+    if not ( (old.status = 'Pending'   and new.status in ('Confirmed','Voided'))
+          or (old.status = 'Confirmed' and new.status = 'Voided') ) then
+      raise exception 'Illegal payment status transition: % -> %', old.status, new.status
+        using errcode = '42501';
+    end if;
+    if new.status = 'Confirmed' then
+      new.confirmed_at := coalesce(new.confirmed_at, now());
+      new.confirmed_by := coalesce(new.confirmed_by, auth.uid());
+    end if;
+    if new.status = 'Voided' then
+      if r is null or r not in ('business_owner','super_admin') then
+        raise exception 'Only business_owner or super_admin may void a payment' using errcode = '42501';
+      end if;
+      if coalesce(btrim(new.void_reason),'') = '' then
+        raise exception 'A void requires a reason' using errcode = '42501';
+      end if;
+      new.voided_at := coalesce(new.voided_at, now());
+      new.voided_by := coalesce(new.voided_by, auth.uid());
+    end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function public.fn_payment_immutable_guard() from public, anon, authenticated;
+
+drop trigger if exists trg_payment_immutable on public.payment;
+create trigger trg_payment_immutable before update or delete on public.payment
+  for each row execute function public.fn_payment_immutable_guard();
+
+-- ---- Payment RLS: split the old ALL policy into record / update, no delete --
+drop policy if exists p_payment_w on public.payment;
+-- p_payment_r (SELECT via fn_can_see_order) is unchanged.
+drop policy if exists p_payment_i on public.payment;
+create policy p_payment_i on public.payment for insert to authenticated
+  with check (fn_current_role() in ('operations','coordinator','business_owner','super_admin')
+              and status in ('Pending','Confirmed'));
+drop policy if exists p_payment_u on public.payment;
+create policy p_payment_u on public.payment for update to authenticated
+  using  (fn_current_role() in ('operations','coordinator','business_owner','super_admin'))
+  with check (fn_current_role() in ('operations','coordinator','business_owner','super_admin'));
+-- No DELETE policy: deletes are denied by RLS and blocked by the guard.
+
+-- ---- Refund object (BO / super_admin only) --------------------------------
+create table if not exists public.refund (
+  refund_id  uuid primary key default gen_random_uuid(),
+  payment_id uuid references public.payment(payment_id),
+  order_id   text not null references public.orders(order_id),
+  amount     numeric not null check (amount > 0),
+  reason     text not null,
+  refunded_by uuid,
+  created_at timestamptz not null default now()
+);
+alter table public.refund enable row level security;
+drop policy if exists p_refund_r on public.refund;
+create policy p_refund_r on public.refund for select to authenticated
+  using (fn_can_see_order(order_id));
+drop policy if exists p_refund_w on public.refund;
+create policy p_refund_w on public.refund for all to authenticated
+  using  (fn_current_role() in ('business_owner','super_admin'))
+  with check (fn_current_role() in ('business_owner','super_admin'));
+
+create or replace function public.fn_refund_touch()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+begin perform fn_ar_recompute(coalesce(new.order_id, old.order_id)); return coalesce(new, old); end $$;
+revoke execute on function public.fn_refund_touch() from public, anon, authenticated;
+drop trigger if exists trg_refund_touch on public.refund;
+create trigger trg_refund_touch after insert or update or delete on public.refund
+  for each row execute function public.fn_refund_touch();
+
+-- ---- Credit note object (BO / super_admin write; read-all + order-visible) --
+create table if not exists public.credit_note (
+  credit_id uuid primary key default gen_random_uuid(),
+  org_id    uuid references public.organization(org_id),
+  order_id  text references public.orders(order_id),
+  amount    numeric not null check (amount > 0),
+  reason    text not null,
+  status    text not null default 'Open',      -- Open | Applied | Cancelled
+  applied_to_order text references public.orders(order_id),
+  created_by uuid,
+  created_at timestamptz not null default now()
+);
+alter table public.credit_note enable row level security;
+drop policy if exists p_credit_r on public.credit_note;
+create policy p_credit_r on public.credit_note for select to authenticated
+  using (fn_role_reads_all()
+         or (order_id is not null and fn_can_see_order(order_id))
+         or (applied_to_order is not null and fn_can_see_order(applied_to_order)));
+drop policy if exists p_credit_w on public.credit_note;
+create policy p_credit_w on public.credit_note for all to authenticated
+  using  (fn_current_role() in ('business_owner','super_admin'))
+  with check (fn_current_role() in ('business_owner','super_admin'));
+
+create or replace function public.fn_credit_touch()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+begin
+  if coalesce(new.applied_to_order, old.applied_to_order) is not null then
+    perform fn_ar_recompute(coalesce(new.applied_to_order, old.applied_to_order));
+  end if;
+  return coalesce(new, old);
+end $$;
+revoke execute on function public.fn_credit_touch() from public, anon, authenticated;
+drop trigger if exists trg_credit_touch on public.credit_note;
+create trigger trg_credit_touch after insert or update or delete on public.credit_note
+  for each row execute function public.fn_credit_touch();
+
+-- ---- AR now nets confirmed payments − refunds + applied credits ------------
+create or replace function public.fn_ar_recompute(p_order text)
+returns void language plpgsql security definer set search_path to 'public' as $$
+declare v_total numeric; v_paid numeric; v_refunded numeric; v_credit numeric; v_net numeric;
+begin
+  select coalesce(total_amount,0) into v_total from orders where order_id = p_order;
+  select coalesce(sum(amount),0) into v_paid
+    from payment where order_id = p_order and status = 'Confirmed';
+  select coalesce(sum(amount),0) into v_refunded
+    from refund where order_id = p_order;
+  select coalesce(sum(amount),0) into v_credit
+    from credit_note where applied_to_order = p_order and status = 'Applied';
+  v_net := v_paid - v_refunded + v_credit;
+  update orders
+     set payment_status = (case
+           when v_net <= 0 then 'Unpaid'
+           when v_net >= v_total then 'Paid'
+           else 'Partial' end)::payment_status_t
+   where order_id = p_order;
+end $$;
+
+-- ---- Sensitive-action RPCs (server-enforced authority) --------------------
+create or replace function public.fn_void_payment(p_payment uuid, p_reason text)
+returns void language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text; v_order text;
+begin
+  if r is null or r not in ('business_owner','super_admin') then
+    raise exception 'Only business_owner or super_admin may void a payment' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_reason),'') = '' then raise exception 'A void requires a reason'; end if;
+  update payment set status = 'Voided', void_reason = p_reason,
+                     voided_by = auth.uid(), voided_at = now()
+   where payment_id = p_payment returning order_id into v_order;
+  if v_order is null then raise exception 'Payment % not found', p_payment; end if;
+  -- AR is recomputed by trg_payment_touch on the update above.
+end $$;
+revoke execute on function public.fn_void_payment(uuid, text) from public, anon;
+grant execute on function public.fn_void_payment(uuid, text) to authenticated;
+
+create or replace function public.fn_refund_payment(p_payment uuid, p_amount numeric, p_reason text)
+returns uuid language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text; v_order text; v_amt numeric; v_id uuid;
+begin
+  if r is null or r not in ('business_owner','super_admin') then
+    raise exception 'Only business_owner or super_admin may refund' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_reason),'') = '' then raise exception 'A refund requires a reason'; end if;
+  if coalesce(p_amount,0) <= 0 then raise exception 'Refund amount must be positive'; end if;
+  select order_id, amount into v_order, v_amt from payment
+    where payment_id = p_payment and status = 'Confirmed';
+  if v_order is null then raise exception 'Confirmed payment % not found', p_payment; end if;
+  if p_amount > v_amt then raise exception 'Refund exceeds the payment amount'; end if;
+  insert into refund (payment_id, order_id, amount, reason, refunded_by)
+    values (p_payment, v_order, p_amount, p_reason, auth.uid())
+    returning refund_id into v_id;
+  return v_id;  -- AR recomputed by trg_refund_touch.
+end $$;
+revoke execute on function public.fn_refund_payment(uuid, numeric, text) from public, anon;
+grant execute on function public.fn_refund_payment(uuid, numeric, text) to authenticated;
+
+grant select, insert, update, delete on public.refund, public.credit_note to authenticated;
+
+
+-- ############################################################################
+-- ## 20260812140000_phaseb_audit_r02.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Phase B (second-pass) — 5/6: audit-grade capture (R02).
+--
+-- The live fn_audit already records old_data / new_data / changed_fields
+-- ({field:{old,new}}). This closes the remaining R02 gaps:
+--   * add a `source` flag (system vs user) so background-job writes are
+--     distinguishable from human writes;
+--   * add a `reason` column, populated from a transaction-local GUC
+--     (app.audit_reason) that RPCs set before a sensitive write;
+--   * extend audit-trigger coverage to the money + lead + contact tables that
+--     were previously unaudited: payment, refund, credit_note, inquiry,
+--     contact, invoice, participant.
+--
+-- Idempotent. fn_audit keeps its existing behaviour; only the two new columns
+-- are added to each row it writes.
+-- ===========================================================================
+
+alter table public.audit_log add column if not exists source text not null default 'user';
+alter table public.audit_log add column if not exists reason text;
+
+-- fn_audit: unchanged capture + source flag + optional reason from GUC.
+create or replace function public.fn_audit()
+returns trigger language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+declare
+  v_pk_col  text := tg_argv[0];
+  v_old     jsonb;
+  v_new     jsonb;
+  v_pk      text;
+  v_changed jsonb;
+  v_actor   uuid;
+  v_role    user_role;
+  v_source  text;
+  v_reason  text;
+begin
+  v_actor  := auth.uid();
+  v_source := case when v_actor is null then 'system' else 'user' end;
+  v_reason := nullif(current_setting('app.audit_reason', true), '');
+  select role into v_role from profiles where user_id = v_actor;
+
+  if tg_op = 'INSERT' then
+    v_new := to_jsonb(new); v_pk := v_new ->> v_pk_col;
+  elsif tg_op = 'DELETE' then
+    v_old := to_jsonb(old); v_pk := v_old ->> v_pk_col;
+  else
+    v_old := to_jsonb(old); v_new := to_jsonb(new);
+    v_pk  := coalesce(v_new ->> v_pk_col, v_old ->> v_pk_col);
+    select jsonb_object_agg(key, jsonb_build_object('old', o.value, 'new', n.value))
+      into v_changed
+      from jsonb_each(v_old) o join jsonb_each(v_new) n using (key)
+      where o.value is distinct from n.value;
+  end if;
+
+  if tg_op = 'UPDATE' and (v_changed is null or v_changed = '{}'::jsonb) then
+    return null;
+  end if;
+
+  insert into audit_log (table_name, row_pk, action, actor_id, actor_role,
+                         old_data, new_data, changed_fields, source, reason)
+  values (tg_table_name, v_pk, tg_op, v_actor, v_role,
+          v_old, v_new, v_changed, v_source, v_reason);
+  return null;
+end;
+$function$;
+revoke execute on function public.fn_audit() from public, anon, authenticated;
+
+-- Extend audit coverage to the money / lead / contact tables.
+drop trigger if exists trg_audit_payment on public.payment;
+create trigger trg_audit_payment after insert or delete or update on public.payment
+  for each row execute function public.fn_audit('payment_id');
+drop trigger if exists trg_audit_refund on public.refund;
+create trigger trg_audit_refund after insert or delete or update on public.refund
+  for each row execute function public.fn_audit('refund_id');
+drop trigger if exists trg_audit_credit_note on public.credit_note;
+create trigger trg_audit_credit_note after insert or delete or update on public.credit_note
+  for each row execute function public.fn_audit('credit_id');
+drop trigger if exists trg_audit_inquiry on public.inquiry;
+create trigger trg_audit_inquiry after insert or delete or update on public.inquiry
+  for each row execute function public.fn_audit('inquiry_id');
+drop trigger if exists trg_audit_contact on public.contact;
+create trigger trg_audit_contact after insert or delete or update on public.contact
+  for each row execute function public.fn_audit('contact_id');
+drop trigger if exists trg_audit_invoice on public.invoice;
+create trigger trg_audit_invoice after insert or delete or update on public.invoice
+  for each row execute function public.fn_audit('invoice_id');
+drop trigger if exists trg_audit_participant on public.participant;
+create trigger trg_audit_participant after insert or delete or update on public.participant
+  for each row execute function public.fn_audit('participant_id');
+
+-- Surface source + reason through the super-admin/auditor audit browser.
+-- Return type changes (added columns) => must drop before recreate.
+drop function if exists public.fn_audit_search(text, text, text, timestamptz, timestamptz, text, integer);
+create or replace function public.fn_audit_search(
+  p_table text default null, p_action text default null, p_role text default null,
+  p_from timestamptz default null, p_to timestamptz default null,
+  p_search text default null, p_limit integer default 200)
+returns table(audit_id bigint, table_name text, row_pk text, action text,
+              actor_role text, actor_id uuid, changed_at timestamptz,
+              changed_fields jsonb, source text, reason text)
+language sql stable security definer set search_path to 'public' as $$
+  select a.audit_id, a.table_name, a.row_pk, a.action, a.actor_role, a.actor_id,
+         a.changed_at, a.changed_fields, a.source, a.reason
+    from audit_log a
+   where fn_current_role() in ('super_admin','auditor')
+     and (p_table  is null or a.table_name = p_table)
+     and (p_action is null or a.action = p_action)
+     and (p_role   is null or a.actor_role::text = p_role)
+     and (p_from   is null or a.changed_at >= p_from)
+     and (p_to     is null or a.changed_at <= p_to)
+     and (p_search is null or a.row_pk ilike '%'||p_search||'%'
+          or a.changed_fields::text ilike '%'||p_search||'%')
+   order by a.changed_at desc
+   limit greatest(1, least(coalesce(p_limit, 200), 1000));
+$$;
+grant execute on function public.fn_audit_search(text, text, text, timestamptz, timestamptz, text, integer) to authenticated;
+
+
+-- ############################################################################
+-- ## 20260812150000_phaseb_handoff.sql
+-- ############################################################################
+
+-- ===========================================================================
+-- Phase B (second-pass) — 6/6: the Sales/Coordinator -> Operations handoff
+-- transaction (H01 completeness gate, H02 Accept/Return, RET01 universal
+-- return-for-correction).
+--
+--  * fn_order_completeness(order) — the D2 required-field contract as data:
+--    HARD blocks (matched client, >=1 line, session-for-scheduled-lines, a fee,
+--    a reference) and WARN items (deposit unpaid). Reusable by UI + endorse.
+--  * fn_endorse_order — coordinator/operations/sales/super_admin; refuses unless
+--    complete (super_admin may override with a reason). Moves the order to
+--    'Endorsed to Ops' and opens an order_handoff row.
+--  * fn_accept_endorsement — operations/super_admin accept; the two-sided close.
+--  * fn_return_for_correction — anyone downstream may bounce it back WITH a
+--    reason; regresses the stage to 'For Order Creation'.
+--
+-- The stage guard (fn_orders_stage_guard) is taught a single controlled bypass
+-- (a txn-local GUC set only by fn_return_for_correction) so a legitimate return
+-- can regress the pipeline without opening backward moves generally.
+-- Idempotent throughout.
+-- ===========================================================================
+
+do $$ begin
+  if not exists (select 1 from pg_type where typname = 'handoff_status_t') then
+    create type public.handoff_status_t as enum ('Endorsed','Accepted','Returned');
+  end if;
+end $$;
+
+create table if not exists public.order_handoff (
+  handoff_id   uuid primary key default gen_random_uuid(),
+  order_id     text not null unique references public.orders(order_id),
+  status       public.handoff_status_t not null default 'Endorsed',
+  endorsed_by  uuid, endorsed_at timestamptz,
+  accepted_by  uuid, accepted_at timestamptz,
+  returned_by  uuid, returned_at timestamptz, return_reason text,
+  completeness jsonb,
+  updated_at   timestamptz not null default now()
+);
+alter table public.order_handoff enable row level security;
+drop policy if exists p_handoff_r on public.order_handoff;
+create policy p_handoff_r on public.order_handoff for select to authenticated
+  using (fn_can_see_order(order_id));
+-- Direct writes are super_admin-only; the normal path is the RPCs below
+-- (SECURITY DEFINER), which enforce their own role gates.
+drop policy if exists p_handoff_w on public.order_handoff;
+create policy p_handoff_w on public.order_handoff for all to authenticated
+  using (fn_current_role() = 'super_admin') with check (fn_current_role() = 'super_admin');
+grant select, insert, update, delete on public.order_handoff to authenticated;
+
+-- ---- Completeness contract (D2) as data ------------------------------------
+create or replace function public.fn_order_completeness(p_order text)
+returns jsonb language plpgsql stable security definer set search_path to 'public' as $$
+declare
+  o record; v_lines int; v_unscheduled int; v_fee numeric; hard jsonb := '[]'::jsonb; warn jsonb := '[]'::jsonb;
+begin
+  if not fn_can_see_order(p_order) then
+    raise exception 'Not allowed to view this order' using errcode = '42501';
+  end if;
+  select * into o from orders where order_id = p_order;
+  if not found then raise exception 'Order % not found', p_order; end if;
+
+  if o.client_id is null then hard := hard || to_jsonb('Matched customer required (order has no client)'::text); end if;
+
+  select count(*) into v_lines from order_line
+    where order_id = p_order and line_status::text <> 'Cancelled';
+  if v_lines = 0 then hard := hard || to_jsonb('At least one active order line required'::text); end if;
+
+  -- Scheduled (non e-learning) lines must be tied to a session.
+  select count(*) into v_unscheduled from order_line
+    where order_id = p_order and line_status::text <> 'Cancelled'
+      and modality::text <> 'E-learning' and schedule_id is null;
+  if v_unscheduled > 0 then
+    hard := hard || to_jsonb((v_unscheduled || ' scheduled line(s) have no session assigned')::text);
+  end if;
+
+  v_fee := coalesce(o.total_amount, 0) + coalesce(o.amount_php, 0)
+           + coalesce((select sum(amount_php) from order_line where order_id = p_order), 0);
+  if v_fee <= 0 then hard := hard || to_jsonb('A fee is required'::text); end if;
+
+  if coalesce(btrim(o.order_id), '') = '' then
+    hard := hard || to_jsonb('A reference is required'::text);
+  end if;
+
+  -- Warning: deposit unpaid at endorsement (advisory, not blocking).
+  if o.payment_status::text = 'Unpaid' then
+    warn := warn || to_jsonb('Deposit/payment not yet recorded'::text);
+  end if;
+
+  return jsonb_build_object('ok', jsonb_array_length(hard) = 0, 'hard', hard, 'warn', warn);
+end $$;
+grant execute on function public.fn_order_completeness(text) to authenticated;
+
+-- ---- Endorse (H01 gate) ----------------------------------------------------
+create or replace function public.fn_endorse_order(p_order text, p_override_reason text default null)
+returns jsonb language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text; v_check jsonb; v_is_admin boolean;
+begin
+  if r is null or r not in ('coordinator','operations','sales','super_admin') then
+    raise exception 'Your role may not endorse orders' using errcode = '42501';
+  end if;
+  if not fn_can_see_order(p_order) then
+    raise exception 'Not allowed to act on this order' using errcode = '42501';
+  end if;
+
+  v_check := fn_order_completeness(p_order);
+  v_is_admin := (r = 'super_admin');
+  if not (v_check->>'ok')::boolean then
+    if not (v_is_admin and coalesce(btrim(p_override_reason),'') <> '') then
+      raise exception 'Order is not complete: %', (v_check->'hard')::text using errcode = '42501';
+    end if;
+    perform set_config('app.audit_reason', 'endorse override: '||p_override_reason, true);
+  end if;
+
+  update orders set fulfillment_stage = 'Endorsed to Ops' where order_id = p_order;
+
+  insert into order_handoff (order_id, status, endorsed_by, endorsed_at, completeness, updated_at)
+    values (p_order, 'Endorsed', auth.uid(), now(), v_check, now())
+  on conflict (order_id) do update
+    set status = 'Endorsed', endorsed_by = auth.uid(), endorsed_at = now(),
+        returned_by = null, returned_at = null, return_reason = null,
+        completeness = excluded.completeness, updated_at = now();
+  return v_check;
+end $$;
+revoke execute on function public.fn_endorse_order(text, text) from public, anon;
+grant execute on function public.fn_endorse_order(text, text) to authenticated;
+
+-- ---- Accept (H02 two-sided close) ------------------------------------------
+create or replace function public.fn_accept_endorsement(p_order text)
+returns void language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text;
+begin
+  if r is null or r not in ('operations','super_admin') then
+    raise exception 'Only operations or super_admin may accept an endorsement' using errcode = '42501';
+  end if;
+  update order_handoff
+     set status = 'Accepted', accepted_by = auth.uid(), accepted_at = now(), updated_at = now()
+   where order_id = p_order and status = 'Endorsed';
+  if not found then
+    raise exception 'No pending endorsement to accept for order %', p_order using errcode = 'P0002';
+  end if;
+end $$;
+revoke execute on function public.fn_accept_endorsement(text) from public, anon;
+grant execute on function public.fn_accept_endorsement(text) to authenticated;
+
+-- ---- Return for correction (H02 / RET01) -----------------------------------
+create or replace function public.fn_return_for_correction(p_order text, p_reason text)
+returns void language plpgsql security definer set search_path to 'public' as $$
+declare r text := fn_current_role()::text;
+begin
+  if r is null or r not in ('operations','coordinator','business_owner','super_admin') then
+    raise exception 'Your role may not return an order for correction' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_reason),'') = '' then
+    raise exception 'A return requires a reason' using errcode = '42501';
+  end if;
+  perform set_config('app.audit_reason', 'returned: '||p_reason, true);
+  -- Controlled, single-purpose bypass of the forward-only stage guard.
+  perform set_config('app.allow_stage_regression', 'on', true);
+  update orders set fulfillment_stage = 'For Order Creation'
+   where order_id = p_order and fulfillment_stage::text <> 'For Order Creation';
+  perform set_config('app.allow_stage_regression', 'off', true);
+
+  insert into order_handoff (order_id, status, returned_by, returned_at, return_reason, updated_at)
+    values (p_order, 'Returned', auth.uid(), now(), p_reason, now())
+  on conflict (order_id) do update
+    set status = 'Returned', returned_by = auth.uid(), returned_at = now(),
+        return_reason = p_reason, updated_at = now();
+end $$;
+revoke execute on function public.fn_return_for_correction(text, text) from public, anon;
+grant execute on function public.fn_return_for_correction(text, text) to authenticated;
+
+-- ---- Teach the stage guard one controlled regression bypass ----------------
+create or replace function public.fn_orders_stage_guard()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+declare r text; oldp int; newp int;
+begin
+  if new.fulfillment_stage is distinct from old.fulfillment_stage then
+    r := fn_current_role()::text;
+    if r is not null and r <> 'super_admin'
+       and coalesce(current_setting('app.allow_stage_regression', true), 'off') <> 'on' then
+      oldp := fn_stage_pos(old.fulfillment_stage::text);
+      newp := fn_stage_pos(new.fulfillment_stage::text);
+      if not (
+            new.fulfillment_stage::text in ('Cancelled','No Feedback','New')
+         or old.fulfillment_stage::text in ('Cancelled','No Feedback')
+         or (newp > oldp and newp > 0 and oldp > 0)
+      ) then
+        raise exception 'Illegal stage change: % -> %',
+          old.fulfillment_stage, new.fulfillment_stage using errcode = '42501';
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function public.fn_orders_stage_guard() from public, anon, authenticated;
