@@ -10,7 +10,10 @@ import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate } from '../lib/format'
 
-export default function Elearning() {
+// E-learning access grants. Rendered as the "Awaiting e-learning" saved view of
+// the CRM Orders tab (`embedded`) for the roles that grant access; reachable via
+// /elearning (redirects in). The shell owns the heading when embedded.
+export default function Elearning({ embedded }: { embedded?: boolean } = {}) {
   const orders = useElearningPending()
   const qc = useQueryClient()
   const toast = useToast()
@@ -49,12 +52,14 @@ export default function Elearning() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>E-learning access</h1>
-          <p>Self-paced orders have no session. Operations grant platform access here after payment.</p>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>E-learning access</h1>
+            <p>Self-paced orders have no session. Operations grant platform access here after payment.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
 

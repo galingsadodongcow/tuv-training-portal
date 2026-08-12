@@ -76,3 +76,11 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
   - **Nav:** the **Fulfillment** item is removed from the Operations group. `/worklist` now **redirects** to `/crm?tab=orders&queue=fulfillment`, **forwarding** the queue's `who`/`view`/`stage` filters so every drill-through (Dashboard/DataQuality `/worklist?who=…&view=…`) lands on the right filtered queue in one hop.
   - Capability-preserving: same queue, same controls, same role gating (management/auditor stay read-only via Worklist's existing `canAct`; RLS authoritative). My Work's "orders needing attention" queue already existed and is untouched.
 - Files: `src/screens/{CRM,Worklist}.tsx`, `src/lib/roles.ts`, `src/app/(app)/worklist/page.tsx`.
+
+## Wave 12 — Duplicates + E-learning → exceptions / views
+- **#14 Duplicates + E-learning off nav** — both standalone modules move to where the work already lives, and their nav items go. Entry points are surfaced in the same change so nothing is orphaned.
+  - **Duplicates → a My Work exception.** My Work gains a **"Possible duplicate orders"** section (count + candidate pairs + match basis) for the roles that resolve them (super_admin/operations/coordinator); each row links to **`/duplicates`** (kept, off-nav) to reconcile. Dashboard/DataQuality duplicate cards still point at `/duplicates`.
+  - **E-learning → a CRM Orders saved view.** The Orders tab gains an **"Awaiting e-learning"** saved view (`?queue=elearning`, shown only to the e-learning roles) that renders the E-learning grant screen `embedded`. `/elearning` **redirects** to `/crm?tab=orders&queue=elearning`.
+  - **Nav:** the **Duplicates** and **E-learning access** items are removed from the Operations group.
+  - Capability-preserving: same screens, same grant/merge actions, same role gating (the e-learning saved view is gated to the old `/elearning` roles; RLS authoritative).
+- Files: `src/screens/{MyWork,Elearning,CRM}.tsx`, `src/lib/roles.ts`, `src/app/(app)/elearning/page.tsx`.

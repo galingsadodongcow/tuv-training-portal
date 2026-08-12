@@ -7,6 +7,7 @@ import Inquiries from './Inquiries'
 import Quotations from './Quotations'
 import Orders from './Orders'
 import Worklist from './Worklist'
+import Elearning from './Elearning'
 
 // One CRM area for the commercial pipeline, replacing four nav destinations
 // (Inquiries, Quotations, New order, Orders). Role-scoped tabs, deep-linkable
@@ -74,28 +75,35 @@ export default function CRM() {
 
       {active === 'pipeline' && <Inquiries embedded />}
       {active === 'quotes' && <Quotations embedded />}
-      {active === 'orders' && <OrdersTab params={params} router={router} pathname={pathname} />}
+      {active === 'orders' && <OrdersTab role={role} params={params} router={router} pathname={pathname} />}
     </>
   )
 }
 
-// The Orders tab carries two saved views: "All orders" (the orders book) and
-// "Needs fulfillment" (the Fulfillment queue, folded in from /worklist — #5).
-// The view is selected by ?queue=fulfillment, distinct from the shell's ?tab so
-// the fulfillment queue keeps its own who/view/stage params.
-function OrdersTab({ params, router, pathname }: { params: ReturnType<typeof useSearchParams>; router: ReturnType<typeof useRouter>; pathname: string }) {
-  const fulfillment = params.get('queue') === 'fulfillment'
-  const go = (q: string | null) =>
-    router.replace(q ? `${pathname}?tab=orders&queue=${q}` : `${pathname}?tab=orders`, { scroll: false })
+// Roles that grant e-learning access (the old /elearning nav gate).
+const ELEARNING: Role[] = ['super_admin', 'operations', 'coordinator']
+
+// The Orders tab carries saved views: "All orders" (the orders book), "Needs
+// fulfillment" (the Fulfillment queue folded in from /worklist — #5), and — for
+// the roles that grant it — "Awaiting e-learning" (folded in from /elearning —
+// #14). The view is selected by ?queue=, distinct from the shell's ?tab so each
+// queue keeps its own params.
+function OrdersTab({ role, params, router, pathname }: { role?: Role; params: ReturnType<typeof useSearchParams>; router: ReturnType<typeof useRouter>; pathname: string }) {
+  const canElearning = !!role && ELEARNING.includes(role)
+  const q = params.get('queue')
+  const queue = q === 'fulfillment' ? 'fulfillment' : q === 'elearning' && canElearning ? 'elearning' : 'orders'
+  const go = (v: string | null) =>
+    router.replace(v ? `${pathname}?tab=orders&queue=${v}` : `${pathname}?tab=orders`, { scroll: false })
   return (
     <>
       <div className="filters" style={{ marginBottom: 12 }}>
         <div className="seg">
-          <button className={`seg-btn ${!fulfillment ? 'on' : ''}`} onClick={() => go(null)}>All orders</button>
-          <button className={`seg-btn ${fulfillment ? 'on' : ''}`} onClick={() => go('fulfillment')}>Needs fulfillment</button>
+          <button className={`seg-btn ${queue === 'orders' ? 'on' : ''}`} onClick={() => go(null)}>All orders</button>
+          <button className={`seg-btn ${queue === 'fulfillment' ? 'on' : ''}`} onClick={() => go('fulfillment')}>Needs fulfillment</button>
+          {canElearning && <button className={`seg-btn ${queue === 'elearning' ? 'on' : ''}`} onClick={() => go('elearning')}>Awaiting e-learning</button>}
         </div>
       </div>
-      {fulfillment ? <Worklist embedded /> : <Orders embedded />}
+      {queue === 'fulfillment' ? <Worklist embedded /> : queue === 'elearning' ? <Elearning embedded /> : <Orders embedded />}
     </>
   )
 }

@@ -70,8 +70,9 @@ export const NAV: NavItem[] = [
   // Fulfillment folded into the CRM Orders tab as the "Needs fulfillment" saved
   // view (#5); /worklist redirects there and My Work carries the exceptions.)
   { path: '/resources', label: 'Trainers and venues', roles: ['super_admin', 'operations', 'business_owner', 'management'], icon: 'resources', group: 'Operations' },
-  { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'operations', 'coordinator'], icon: 'duplicates', group: 'Operations' },
-  { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations', 'coordinator'], icon: 'elearning', group: 'Operations' },
+  // Duplicates surfaced as a My Work exception (resolve on /duplicates, kept
+  // off-nav); E-learning access folded into the CRM Orders tab as a saved view
+  // (/elearning redirects there) — third-pass #14.
 
   // Oversight — decisions and analysis. Approvals retired from nav: the "Approvals
   // to decide" queue on My Work is the entry point; /approvals stays as the surface.
