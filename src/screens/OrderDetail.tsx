@@ -289,6 +289,15 @@ export default function OrderDetail() {
               {hstatus && (
                 <div className="fill-label" style={{ marginBottom: 8 }}>
                   Status: <Badge tone={hstatus === 'Accepted' ? 'ok' : hstatus === 'Returned' ? 'danger' : 'info'}>{hstatus}</Badge>
+                  {' · '}
+                  {/* Make the ownership transfer explicit rather than implied by the
+                      stage — and tell the reader whose court the order is in now (#121). */}
+                  <strong style={{ color: 'var(--text)' }}>
+                    {hstatus === 'Endorsed' ? 'Now with Operations · awaiting acceptance'
+                      : hstatus === 'Accepted' ? 'Accepted by Operations'
+                      : hstatus === 'Returned' ? 'Returned to the coordinator'
+                      : hstatus}
+                  </strong>
                   {hstatus === 'Returned' && handoff.data?.return_reason ? ` · ${handoff.data.return_reason}` : ''}
                 </div>
               )}
