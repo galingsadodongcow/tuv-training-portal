@@ -21,7 +21,9 @@ export default function Quotations() {
   const invalidate = useInvalidate()
   const toast = useToast()
   const isAdmin = profile?.role === 'super_admin'
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  // Quote writes per live RLS (20260812210000): super_admin + coordinator/sales
+  // (own). Coordinator owns intake, so it can create/edit quotes.
+  const canEdit = ['super_admin', 'coordinator', 'sales'].includes(profile?.role as string)
 
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>({ client_id: '', valid_until: '', sales_id: '' })

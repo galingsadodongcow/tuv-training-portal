@@ -21,7 +21,9 @@ export default function OrganizationDetail() {
   const org = useOrganization(id)
   const members = useOrgClients(id)
   const clients = useClients()
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  // Live RLS (20260812210000): organization UPDATE + client set-org are allowed for
+  // super_admin/coordinator/operations/business_owner/sales (sales row-scoped by RLS).
+  const canEdit = ['super_admin', 'coordinator', 'operations', 'business_owner', 'sales'].includes(profile?.role as string)
 
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<any>(null)
