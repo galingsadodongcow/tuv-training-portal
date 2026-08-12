@@ -1,10 +1,7 @@
-import CourseForm from '@/screens/CourseForm'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
-export default function Page() {
-  return (
-    <Guard roles={['super_admin', 'operations']}>
-      <CourseForm />
-    </Guard>
-  )
+// Course editing unified into the Training catalogue edit-drawer (#13). This
+// route redirects into the catalogue with the edit drawer open for this course.
+export default function Page({ params }: { params: { id: string } }) {
+  redirect(`/courses?edit=${params.id}`)
 }

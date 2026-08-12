@@ -81,7 +81,7 @@ export const NAV: NavItem[] = [
   { path: '/analytics', label: 'Analytics', roles: ALL, icon: 'dashboard', group: 'Oversight' },
 
   // Admin — catalogue, pricing, configuration, governance.
-  { path: '/courses', label: 'Courses and pricing', roles: ['super_admin', 'operations'], icon: 'courses', group: 'Admin' },
+  { path: '/courses', label: 'Training catalogue', roles: ['super_admin', 'operations'], icon: 'courses', group: 'Admin' },
   { path: '/pricing', label: 'Pricing rules', roles: ['super_admin', 'operations', 'business_owner'], icon: 'pricing', group: 'Admin' },
   { path: '/communications', label: 'Communications', roles: ['super_admin', 'operations'], icon: 'comms', group: 'Admin' },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'], icon: 'rollover', group: 'Admin' },
