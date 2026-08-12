@@ -4,6 +4,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useCourses, useCourseFees, useActiveYear, useSalespeople, useInvalidate, useTrainers, useVenues, checkConflicts, useTrainerCourseMap, useSessionTrainers } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { useFormErrors, Field } from '../components/inputs/Field'
 import DateSegments, { SegError } from '../components/DateSegments'
 import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
@@ -136,8 +137,16 @@ export default function SessionForm() {
   )
   const hasDateError = segErrors.some((e) => e?.level === 'error')
 
+  // Inline per-field validation (#125).
+  const fe = useFormErrors()
+  const errors = {
+    course: !f.course_id ? 'Pick a course.' : null,
+    dates: segments.filter((s) => s.start).length === 0 ? 'Set at least one date block.' : null,
+  }
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!fe.submit(errors)) return
     setBusy(true); setMsg(null)
     try {
       if (f.modality === 'E-learning') throw new Error('E-learning has no scheduled session. Sell it as a course order instead.')
@@ -202,14 +211,14 @@ export default function SessionForm() {
 
       <div className="card card-pad" style={{ maxWidth: 640 }}>
         <form onSubmit={submit}>
-          <label className="field"><span>Course</span>
-            <select value={f.course_id} onChange={onCourseChange} required>
+          <Field label="Course" required error={errors.course} show={fe.shows('course')}>
+            <select value={f.course_id} onChange={onCourseChange} {...fe.inputProps('course', errors.course)}>
               <option value="">Select a course…</option>
               {courses.data.map((c: any) => (
                 <option key={c.course_id} value={c.course_id}>{c.course_name} ({c.training_type})</option>
               ))}
             </select>
-          </label>
+          </Field>
 
           <label className="field"><span>Learning type</span>
             {/* E-learning has no scheduled session (submit rejects it), so keep it out of the picker. */}
@@ -219,8 +228,9 @@ export default function SessionForm() {
           </label>
 
           <div className="field">
-            <span style={{ display: 'block', fontSize: 12, color: 'var(--tr-slate)', marginBottom: 5, fontWeight: 600 }}>Dates</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--tr-slate)', marginBottom: 5, fontWeight: 600 }}>Dates<span className="req-star" aria-hidden="true">*</span></span>
             <DateSegments segments={segments} onChange={setSegments} errors={segErrors} />
+            {fe.shows('dates') && errors.dates && <span className="field-error" role="alert">{errors.dates}</span>}
           </div>
 
           {/* Everything below has a working default, so it stays folded for a new

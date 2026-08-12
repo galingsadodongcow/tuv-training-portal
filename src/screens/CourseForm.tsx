@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useCourses, useCategoryTree, useInvalidate } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
+import { useFormErrors, Field } from '../components/inputs/Field'
 import { useToast } from '../components/Toast'
 import { lt } from '../lib/labels'
 
@@ -62,16 +63,25 @@ export default function CourseForm({ courseId, onDone }: { courseId?: string; on
   const effCat = catId || selectedSub?.category_id || ''
   const subsForCat = treeData.find((c: any) => c.category_id === effCat)?.subcategories || []
 
+  // Inline per-field validation (#125) — computed each render, checked on submit.
+  const fe = useFormErrors()
+  const priceError = (m: string) => {
+    if (!mods[m].on) return null
+    const p = Number(mods[m].price)
+    return (mods[m].price === '' || !Number.isFinite(p) || p < 0) ? 'Set a valid fee.' : null
+  }
+  const errors: Record<string, string | null> = {
+    course_name: !f.course_name.trim() ? 'Training title is required.' : null,
+    mods: MODS.filter((m) => mods[m].on).length === 0 ? 'Pick at least one learning type.' : null,
+  }
+  for (const m of MODS) errors[`price_${m}`] = priceError(m)
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!fe.submit(errors)) return
     setBusy(true); setMsg(null)
     try {
       const picked = MODS.filter((m) => mods[m].on)
-      if (picked.length === 0) throw new Error('Pick at least one learning type.')
-      for (const m of picked) {
-        const p = Number(mods[m].price)
-        if (mods[m].price === '' || !Number.isFinite(p) || p < 0) throw new Error(`Set a valid price for ${m}.`)
-      }
       // When the hierarchy is live, the picked subcategory is the source of
       // truth and the free-text course.category column is retired (#23) — we no
       // longer write it. Only a legacy DB without the hierarchy uses the
@@ -129,9 +139,9 @@ export default function CourseForm({ courseId, onDone }: { courseId?: string; on
 
   const form = (
         <form onSubmit={submit}>
-          <label className="field"><span>Training title</span>
-            <input value={f.course_name} onChange={set('course_name')} required />
-          </label>
+          <Field label="Training title" required error={errors.course_name} show={fe.shows('course_name')}>
+            <input value={f.course_name} onChange={set('course_name')} {...fe.inputProps('course_name', errors.course_name)} />
+          </Field>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             {hasTree ? (
               <>
@@ -202,16 +212,21 @@ export default function CourseForm({ courseId, onDone }: { courseId?: string; on
           </label>
           </>)}
 
-          <div className="k-label" style={{ margin: '6px 0 8px' }}>Learning types and fees (PHP, excl. VAT)</div>
+          <div className="k-label" style={{ margin: '6px 0 8px' }}>Learning types and fees (PHP, excl. VAT)<span className="req-star" aria-hidden="true">*</span></div>
+          {fe.shows('mods') && errors.mods && <div className="field-error" role="alert" style={{ marginBottom: 8 }}>{errors.mods}</div>}
           {MODS.map((m) => (
-            <div key={m} className="toolbar" style={{ marginBottom: 8 }}>
+            <div key={m} className="toolbar" style={{ marginBottom: 8, alignItems: 'flex-start' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 200 }}>
                 <input type="checkbox" checked={mods[m].on} style={{ width: 'auto' }}
                   onChange={(e) => setMods((s) => ({ ...s, [m]: { ...s[m], on: e.target.checked } }))} />
                 {lt(m)}
               </label>
-              <input type="number" min="0" placeholder="Fee" value={mods[m].price} disabled={!mods[m].on}
-                onChange={(e) => setMods((s) => ({ ...s, [m]: { ...s[m], price: e.target.value } }))} style={{ maxWidth: 140 }} />
+              <div>
+                <input type="number" min="0" placeholder="Fee" value={mods[m].price} disabled={!mods[m].on}
+                  onChange={(e) => setMods((s) => ({ ...s, [m]: { ...s[m], price: e.target.value } }))}
+                  {...fe.inputProps(`price_${m}`, errors[`price_${m}`])} style={{ maxWidth: 140 }} />
+                {fe.shows(`price_${m}`) && errors[`price_${m}`] && <span className="field-error" role="alert">{errors[`price_${m}`]}</span>}
+              </div>
             </div>
           ))}
 
