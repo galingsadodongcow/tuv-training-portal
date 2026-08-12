@@ -138,6 +138,9 @@ export default function OrderDetail() {
   }
 
   const canEdit = ['operations', 'super_admin', 'sales', 'business_owner'].includes(profile?.role as string)
+  // Comments are a write; the two read-only roles (management, auditor) may read the
+  // thread but not post (RLS rejects the insert) — so hide the composer from them.
+  const canComment = !['management', 'auditor'].includes(profile?.role as string)
   // Sales may not touch payment status or the SAP number — a DB trigger blocks
   // it, so the UI shows them read-only rather than as editable controls.
   const isSales = profile?.role === 'sales'
@@ -359,11 +362,13 @@ export default function OrderDetail() {
       {tab === 'comments' && (
         <div className="card card-pad">
           <RecordSection title={`Comments (${notes.data?.length || 0})`}>
-            <div className="toolbar" style={{ marginBottom: 10 }}>
-              <input aria-label="Add a comment" placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && postComment()} />
-              <button className="btn btn-sm" onClick={postComment} disabled={posting}>{posting ? 'Posting…' : 'Post'}</button>
-            </div>
+            {canComment && (
+              <div className="toolbar" style={{ marginBottom: 10 }}>
+                <input aria-label="Add a comment" placeholder="Add a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && postComment()} />
+                <button className="btn btn-sm" onClick={postComment} disabled={posting}>{posting ? 'Posting…' : 'Post'}</button>
+              </div>
+            )}
             {notes.isLoading ? <Spinner /> : (notes.data?.length || 0) === 0 ? (
               <div className="muted fill-label">No comments yet. Start the thread.</div>
             ) : (

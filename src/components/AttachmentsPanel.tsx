@@ -29,6 +29,8 @@ export default function AttachmentsPanel({ entityType, entityId }: { entityType:
   const [busy, setBusy] = useState(false)
 
   const canDelete = (a: any) => a.uploaded_by === profile?.user_id || ['operations', 'super_admin'].includes(profile?.role as string)
+  // management + auditor are read-only (RLS rejects the insert) — hide the uploader.
+  const canUpload = !['management', 'auditor'].includes(profile?.role as string)
 
   const onPick = async (e: any) => {
     const file: File | undefined = e.target.files?.[0]
@@ -64,10 +66,12 @@ export default function AttachmentsPanel({ entityType, entityId }: { entityType:
 
   return (
     <div>
-      <div className="toolbar" style={{ marginBottom: 10 }}>
-        <input ref={inputRef} type="file" aria-label="Attach a file" onChange={onPick} disabled={busy} style={{ maxWidth: 320 }} />
-        {busy && <span className="fill-label">Uploading…</span>}
-      </div>
+      {canUpload && (
+        <div className="toolbar" style={{ marginBottom: 10 }}>
+          <input ref={inputRef} type="file" aria-label="Attach a file" onChange={onPick} disabled={busy} style={{ maxWidth: 320 }} />
+          {busy && <span className="fill-label">Uploading…</span>}
+        </div>
+      )}
       {files.isLoading ? (
         <Spinner label="Loading files" />
       ) : files.error ? (

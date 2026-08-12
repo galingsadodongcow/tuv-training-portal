@@ -55,6 +55,9 @@ export default function Worklist() {
 
   const myCode = profile?.salesperson?.code
   const canAssignAny = ['super_admin', 'operations', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
+  // Fulfillment is a write action; management + auditor are read-only (RLS rejects
+  // their stage writes) so the advance/select controls are hidden from them.
+  const canAct = !['management', 'auditor'].includes(profile?.role as string)
 
   // Owner scope first: mine, unassigned, or everyone.
   const whoScoped = useMemo(() => {
@@ -253,7 +256,7 @@ export default function Worklist() {
       {selectedVisible.length > 0 && (
         <div className="notice notice-info" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <strong>{selectedVisible.length} selected</strong>
-          <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={bulkAdvance}>Advance to next stage</button>
+          {canAct && <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={bulkAdvance}>Advance to next stage</button>}
           {canAssignAny && (
             <select aria-label="Assign selected orders to" value={bulkTo} disabled={busy === 'bulk'} onChange={(e) => bulkAssign(e.target.value)}>
               <option value="">Assign to…</option>
@@ -271,7 +274,7 @@ export default function Worklist() {
         <table className="sticky-1">
           <thead>
             <tr>
-              <th style={{ width: 32 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" /></th>
+              <th style={{ width: 32 }}>{canAct && <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />}</th>
               <th>Order</th><th>Customer</th><th>Stage</th><th className="right">Age</th>
               <th>Owner</th><th className="right">Value</th><th>Next step</th>
             </tr>
@@ -279,7 +282,7 @@ export default function Worklist() {
           <tbody>
             {shown.map((o: any) => (
               <tr key={o.order_id} className={o.days_in_stage > 14 ? 'risk-amber' : ''}>
-                <td><input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggle(o.order_id)} aria-label={`Select ${o.order_id}`} /></td>
+                <td>{canAct && <input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggle(o.order_id)} aria-label={`Select ${o.order_id}`} />}</td>
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                   <button className="linkbtn" style={{ padding: 0 }} onClick={() => router.push(`/orders/${o.order_id}`)}>
                     {o.order_id}
@@ -325,10 +328,14 @@ export default function Worklist() {
                 <td className="right">{php(o.total_amount)}</td>
                 <td>
                   {NEXT[o.fulfillment_stage] ? (
-                    <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
-                      onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
-                      → {NEXT[o.fulfillment_stage]}
-                    </button>
+                    canAct ? (
+                      <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
+                        onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
+                        → {NEXT[o.fulfillment_stage]}
+                      </button>
+                    ) : (
+                      <span className="fill-label">→ {NEXT[o.fulfillment_stage]}</span>
+                    )
                   ) : (
                     <span className="fill-label">Awaiting collection</span>
                   )}
