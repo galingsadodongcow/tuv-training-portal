@@ -73,12 +73,12 @@ export default function CourseForm({ courseId, onDone }: { courseId?: string; on
         if (mods[m].price === '' || !Number.isFinite(p) || p < 0) throw new Error(`Set a valid price for ${m}.`)
       }
       // When the hierarchy is live, the picked subcategory is the source of
-      // truth and course.category is kept in sync with its category name (the
-      // old column is not dropped yet). Otherwise the free-text field is used.
-      const selCat = treeData.find((c: any) => c.category_id === effCat)
+      // truth and the free-text course.category column is retired (#23) — we no
+      // longer write it. Only a legacy DB without the hierarchy uses the
+      // free-text field.
       const body: any = {
         course_name: f.course_name.trim(),
-        category: hasTree ? (selCat?.name || null) : (f.category.trim() || null),
+        ...(hasTree ? {} : { category: f.category.trim() || null }),
         subcategory_id: hasTree ? (f.subcategory_id || null) : undefined,
         training_type: f.training_type, url: f.url.trim() || null,
         is_certification: f.is_certification, max_pax: f.max_pax === '' ? null : Number(f.max_pax),

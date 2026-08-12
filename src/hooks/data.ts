@@ -13,6 +13,14 @@ const sel = async (q: any) => {
 const isMissingColumn = (error: any) =>
   !!error && (error.code === '42703' || /column .* does not exist/i.test(error.message || ''))
 
+// #23 — the course category name now comes from the S6 hierarchy
+// (subcategory → category); the free-text course.category column is retired.
+// `withCategory` normalises a joined course object so callers keep reading
+// `course.category` (and gain `course.subcategory` for surfacing).
+const COURSE_JOIN = 'course:course_id(course_name, training_type, url, subcategory:subcategory_id(name, category:category_id(name)))'
+export const withCategory = (c: any) =>
+  c && { ...c, category: c.subcategory?.category?.name ?? c.category ?? null, subcategory: c.subcategory?.name ?? null }
+
 export function useSchedules(year = 2026) {
   return useQuery({
     queryKey: ['schedules', year],
@@ -21,10 +29,10 @@ export function useSchedules(year = 2026) {
         supabase
           .from('schedule')
           .select(
-            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer_id, venue_id, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer_id, venue_id, trainer:trainer_id(name, code), venue:venue_id(name, capacity), ' + COURSE_JOIN + ', calendar_year:year_id(year)'
           )
           .order('start_date', { ascending: true })
-      ).then((rows: any[]) => rows.filter((r) => r.calendar_year?.year === year)),
+      ).then((rows: any[]) => rows.filter((r) => r.calendar_year?.year === year).map((r) => ({ ...r, course: withCategory(r.course) }))),
   })
 }
 
@@ -35,7 +43,7 @@ export function useSchedule(scheduleId?: string) {
   // profiles, the sales owner from salesperson) are appended optionally and
   // stripped on error, so an older schema still returns the session.
   const BASE =
-    'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, operations_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+    'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, operations_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, url), calendar_year:year_id(year)'
   const OWNERS = ', salesOwner:sales_owner(name, code), opsOwner:operations_owner(full_name)'
   return useQuery({
     queryKey: ['schedule', scheduleId],
@@ -70,13 +78,20 @@ export function useCourses() {
   return useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const base = 'course_id, course_name, training_type, category, url'
+      // Category/subcategory come from the S6 hierarchy join; the free-text
+      // course.category column is retired (#23). withCategory maps them onto
+      // course.category / course.subcategory so callers are unchanged.
+      const base = 'course_id, course_name, training_type, url, subcategory_id, subcategory:subcategory_id(name, category:category_id(name))'
       const full = await supabase.from('course').select(base + ', is_certification, max_pax').eq('active', true).order('course_name')
-      if (!full.error) return full.data as any
-      if (!isMissingColumn(full.error)) throw full.error
-      const b = await supabase.from('course').select(base).eq('active', true).order('course_name')
-      if (b.error) throw b.error
-      return b.data as any
+      if (!full.error) return (full.data as any[]).map(withCategory)
+      if (isMissingColumn(full.error)) {
+        const b = await supabase.from('course').select(base).eq('active', true).order('course_name')
+        if (!b.error) return (b.data as any[]).map(withCategory)
+      }
+      // Legacy DBs without the S6 hierarchy: fall back to the free-text column.
+      const legacy = await supabase.from('course').select('course_id, course_name, training_type, category, url').eq('active', true).order('course_name')
+      if (legacy.error) throw legacy.error
+      return legacy.data as any
     },
   })
 }
