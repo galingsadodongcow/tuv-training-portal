@@ -688,6 +688,116 @@ export function usePayments(orderId?: string) {
   })
 }
 
+export function useRefunds(orderId?: string) {
+  return useQuery({
+    queryKey: ['refunds', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('refund').select('*').eq('order_id', orderId).order('created_at', { ascending: false }), []),
+  })
+}
+
+// Keys to refresh after any money movement so AR, the order, and queues re-read.
+const MONEY_KEYS = ['payments', 'refunds', 'order_ar', 'order', 'orders', 'fulfillment_queue', 'receivables']
+
+// Void a payment (business_owner / super_admin only; enforced in the DB). The
+// payment is never deleted — its status becomes Voided with a persisted reason.
+export function useVoidPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ paymentId, reason }: { paymentId: string; reason: string }) => {
+      const { error } = await supabase.rpc('fn_void_payment', { p_payment: paymentId, p_reason: reason })
+      if (error) throw error
+    },
+    onSuccess: () => MONEY_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// Refund against a confirmed payment (business_owner / super_admin only). Writes
+// an immutable refund row; AR recomputes as confirmed − refunds + applied credits.
+export function useRefundPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ paymentId, amount, reason }: { paymentId: string; amount: number; reason: string }) => {
+      const { data, error } = await supabase.rpc('fn_refund_payment', { p_payment: paymentId, p_amount: amount, p_reason: reason })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => MONEY_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// ---- Endorsement handoff (Sales/Coordinator -> Operations) ----
+// The D2 completeness contract as data: { ok, hard: [...], warn: [...] }.
+export function useOrderCompleteness(orderId?: string) {
+  return useQuery({
+    queryKey: ['order_completeness', orderId],
+    enabled: !!orderId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_order_completeness', { p_order: orderId })
+      if (error) { if (isMissingObject(error)) return null; throw error }
+      return data
+    },
+  })
+}
+
+export function useOrderHandoff(orderId?: string) {
+  return useQuery({
+    queryKey: ['order_handoff', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('order_handoff').select('*').eq('order_id', orderId).maybeSingle(), null),
+  })
+}
+
+const HANDOFF_KEYS = ['order', 'orders', 'order_handoff', 'order_completeness', 'fulfillment_queue', 'worklist']
+
+// Endorse an order to Operations. Refused unless complete (super_admin may pass
+// an override reason). Enforced in the DB by fn_endorse_order.
+export function useEndorseOrder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ orderId, overrideReason }: { orderId: string; overrideReason?: string }) => {
+      const { data, error } = await supabase.rpc('fn_endorse_order', { p_order: orderId, p_override_reason: overrideReason ?? null })
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => HANDOFF_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// Operations accepts the endorsement — the two-sided close of the handoff.
+export function useAcceptEndorsement() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase.rpc('fn_accept_endorsement', { p_order: orderId })
+      if (error) throw error
+    },
+    onSuccess: () => HANDOFF_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// Return an order for correction (regresses the stage), with a required reason.
+export function useReturnForCorrection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ orderId, reason }: { orderId: string; reason: string }) => {
+      const { error } = await supabase.rpc('fn_return_for_correction', { p_order: orderId, p_reason: reason })
+      if (error) throw error
+    },
+    onSuccess: () => HANDOFF_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// ---- Customer 360 ----
+// Org-level rollup (clients / contacts / active orders / booked / linked leads).
+export function useCustomer360(orgId?: string) {
+  return useQuery({
+    queryKey: ['customer_360', orgId],
+    enabled: !!orgId,
+    queryFn: () => okOr(supabase.from('v_customer_360').select('*').eq('org_id', orgId).maybeSingle(), null),
+  })
+}
+
 // ---- Analytics ----
 export function useFunnel() {
   return useQuery({

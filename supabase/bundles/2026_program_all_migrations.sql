@@ -1187,6 +1187,10 @@ create or replace view public.v_country_revenue as
 -- ---- Global audit search ----
 -- A filterable window over audit_log for the super-admin browser. Every
 -- argument is optional; nulls widen the search.
+-- Drop-first so this is idempotent even after a later migration widens the
+-- return columns (Phase B adds source/reason) — create-or-replace cannot change
+-- an existing function's return type.
+drop function if exists public.fn_audit_search(text, text, text, timestamptz, timestamptz, text, integer);
 create or replace function public.fn_audit_search(
   p_table text default null,
   p_action text default null,

@@ -8,7 +8,12 @@ import { useConfirm } from '../components/Confirm'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
 import { ROLE_LABEL, type Role } from '../lib/roles'
 
-const ROLES: Role[] = ['super_admin', 'operations', 'business_owner', 'sales']
+const ROLES: Role[] = [
+  'super_admin', 'operations', 'business_owner', 'sales',
+  'coordinator', 'sales_manager', 'management', 'auditor',
+]
+// Roles that resolve order visibility through a linked salesperson record.
+const SELLING_ROLES = ['sales', 'sales_manager']
 
 export default function Admin() {
   const { profile } = useAuth()
@@ -27,7 +32,7 @@ export default function Admin() {
     const label = ROLE_LABEL[role as Role] || role
     const grantsAdmin = role === 'super_admin' && u.role !== 'super_admin'
     const removesAdmin = u.role === 'super_admin' && role !== 'super_admin'
-    const clearsLink = role !== 'sales' && !!u.sales_id
+    const clearsLink = !SELLING_ROLES.includes(role) && !!u.sales_id
     const body =
       `Change ${u.full_name || 'this user'}'s role to ${label}.` +
       (grantsAdmin ? ' This grants full super admin access to every part of the portal.' : '') +
@@ -47,7 +52,7 @@ export default function Admin() {
     // Moving a user off the sales role clears the stale salesperson link in the
     // same write, so order visibility does not resolve against a dead pointer.
     const patch: Record<string, any> = { role }
-    if (role !== 'sales') patch.sales_id = null
+    if (!SELLING_ROLES.includes(role)) patch.sales_id = null
     const { error } = await supabase.from('profiles').update(patch).eq('user_id', u.user_id)
     setBusy(null)
     if (error) toast.error(error.message)
@@ -130,7 +135,7 @@ export default function Admin() {
                         </select>
                       </td>
                       <td>
-                        <select aria-label={`Linked salesperson for ${u.full_name || 'user'}`} value={u.sales_id || ''} disabled={u.role !== 'sales'} onChange={(e) => setLink(u.user_id, e.target.value)}>
+                        <select aria-label={`Linked salesperson for ${u.full_name || 'user'}`} value={u.sales_id || ''} disabled={!SELLING_ROLES.includes(u.role)} onChange={(e) => setLink(u.user_id, e.target.value)}>
                           <option value="">— none —</option>
                           {activeSales.map((s: any) => <option key={s.sales_id} value={s.sales_id}>{s.name}{s.code ? ` (${s.code})` : ''}</option>)}
                         </select>
