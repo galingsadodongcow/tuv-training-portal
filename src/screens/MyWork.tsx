@@ -28,7 +28,7 @@ import {
   isNoFeedback,
   stageLabel,
 } from '../lib/orderState'
-import { healthMeta, healthNeedsAction, Health } from '../lib/health'
+import { healthMeta, healthNeedsAction, signalFromTone, Health, Signal } from '../lib/health'
 
 // Days since a timestamp, floored. Used for item age. (mirrors Home)
 const ageDays = (iso?: string) => (iso ? Math.floor((Date.now() - +new Date(iso)) / 86400000) : null)
@@ -50,6 +50,26 @@ const TONE_ORDER: Record<string, number> = { danger: 0, warn: 1, info: 2, ok: 3,
 // An order is "on my plate" when any actionable order-state predicate fires.
 const orderNeedsAttention = (o: any) =>
   isStalled(o) || isUnowned(o) || isOverdue(o) || isPaidUnendorsed(o) || isNoFeedback(o)
+
+// Reverse of signalMeta().cls — lead/quote badges carry a health-* class, so map
+// it back onto the shared scale for the row's severity stripe.
+const signalFromCls = (cls?: string): Signal =>
+  cls === 'health-blocked' ? 'blocked' : cls === 'health-risk' ? 'risk' : cls === 'health-ok' ? 'ok' : 'done'
+
+// Task priority → the shared attention scale (an overdue task is always blocked).
+const taskSignal = (t: any): Signal =>
+  isTaskOverdue(t.due_date) || t.priority === 'urgent' ? 'blocked' : t.priority === 'high' ? 'risk' : 'ok'
+
+// The leading cell for every My Work row: a single verb (Do / Decide / Review /
+// Resolve) + a left severity stripe on the shared scale, so "what is this and is
+// it mine?" reads at a glance (#132).
+function LeadCell({ verb }: { verb: string }) {
+  return (
+    <td className="mywork-lead">
+      <span className="verb">{verb}</span>
+    </td>
+  )
+}
 
 // Best-effort drill-through from a task entity to a screen. (mirrors Home)
 function entityHref(entityType?: string, entityId?: string): string | null {
@@ -218,7 +238,8 @@ export default function MyWork() {
             {inquiryFollowups.map((q: any) => {
               const h = inquiryHealth(q)
               return (
-                <tr key={q.inquiry_id}>
+                <tr key={q.inquiry_id} className={`stripe-${h ? signalFromCls(h.cls) : 'ok'}`}>
+                  <LeadCell verb="Do" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{q.company}</div>
                     <div className="fill-label">{q.course?.course_name || 'No course yet'} · <Link href="/crm?tab=pipeline">open pipeline</Link></div>
@@ -245,7 +266,8 @@ export default function MyWork() {
             {quoteFollowups.map((q: any) => {
               const h = quoteHealth(q)
               return (
-                <tr key={q.quote_id}>
+                <tr key={q.quote_id} className={`stripe-${h ? signalFromCls(h.cls) : 'ok'}`}>
+                  <LeadCell verb="Do" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{q.quote_number}</div>
                     <div className="fill-label">{q.client?.company || q.client?.name || '—'} · <Link href={`/quotations/${q.quote_id}`}>open quote</Link></div>
@@ -274,7 +296,8 @@ export default function MyWork() {
             {(tasks.data || []).map((t: any) => {
               const href = entityHref(t.entity_type, t.entity_id)
               return (
-                <tr key={t.task_id}>
+                <tr key={t.task_id} className={`stripe-${taskSignal(t)}`}>
+                  <LeadCell verb="Do" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{t.title}</div>
                     <div className="fill-label">
@@ -326,7 +349,8 @@ export default function MyWork() {
           <table>
             <tbody>
               {pending.map((a: any) => (
-                <tr key={a.approval_id}>
+                <tr key={a.approval_id} className="stripe-risk">
+                  <LeadCell verb="Decide" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{a.object_type}</div>
                     <div className="fill-label">
@@ -360,7 +384,8 @@ export default function MyWork() {
             {attentionOrders.slice(0, 50).map((o: any) => {
               const flag = primaryFlag(o)
               return (
-                <tr key={o.order_id} className={o.days_in_stage > 14 ? 'risk-amber' : ''}>
+                <tr key={o.order_id} className={`stripe-${signalFromTone(flag?.tone)}${o.days_in_stage > 14 ? ' risk-amber' : ''}`}>
+                  <LeadCell verb="Review" />
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                     <Link href={`/orders/${o.order_id}`}>{o.order_id}</Link>
                     <div className="fill-label">
@@ -401,7 +426,8 @@ export default function MyWork() {
         <table>
           <tbody>
             {sessionRows.slice(0, 50).map((s: any) => (
-              <tr key={s.schedule_id}>
+              <tr key={s.schedule_id} className={`stripe-${healthMeta(s.health).signal}`}>
+                <LeadCell verb="Review" />
                 <td>
                   <div style={{ fontWeight: 600 }}>
                     <Link href={`/session/${s.schedule_id}`}>{s.course?.course_name || 'Session'}</Link>
@@ -432,7 +458,8 @@ export default function MyWork() {
         <table>
           <tbody>
             {slaRows.map((b: any) => (
-              <tr key={b.order_id} className="risk-amber">
+              <tr key={b.order_id} className="stripe-blocked risk-amber">
+                <LeadCell verb="Resolve" />
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                   <Link href={`/orders/${b.order_id}`}>{b.order_id}</Link>
                   <div className="fill-label">
@@ -469,7 +496,8 @@ export default function MyWork() {
           <table>
             <tbody>
               {dupRows.map((d: any) => (
-                <tr key={d.candidate_id}>
+                <tr key={d.candidate_id} className="stripe-risk">
+                  <LeadCell verb="Resolve" />
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {d.order_id_a} <span className="fill-label">vs</span> {d.order_id_b}
                     <div className="fill-label">{d.match_basis}</div>
