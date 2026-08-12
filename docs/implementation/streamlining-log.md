@@ -23,8 +23,19 @@ Implementation-focused record of the simplification work (the "make it lighter /
 
 ---
 
+### S2 — Calendar drawer: inline session actions
+- **Previous:** selecting a session on the calendar opened a read-only drawer (summary + "Open full session →"). Every scheduling change — assign a trainer, set a venue, confirm — meant leaving the calendar for the full session page.
+- **Problem:** the calendar wasn't an operating surface; the most frequent Operations actions each cost a full-page navigation.
+- **Decision — Simplify (act in place).** The drawer now carries the frequent actions inline, gated to Operations/super_admin (others keep the read-only view; writes are RLS-gated regardless):
+  - **Assign / change trainer** and **assign / change venue** — selects backed by `useTrainers`/`useVenues`, writing `schedule.trainer_id`/`venue_id`; after a pick, `checkConflicts` runs best-effort and a `.notice-warn` shows any clash (never blocks).
+  - **Confirm session** — a primary button shown only while status is Tentative → sets Confirmed.
+  - **Heavy actions routed out** (not reimplemented): "Edit dates / reschedule" → `/session/{id}/edit`; "Cancel session" → `/session/{id}` (the disposition-gated cancel flow).
+- **Result:** trainer/venue/confirm happen without leaving the calendar. `useSchedules` now also selects `trainer_id`/`venue_id` so the drawer can pre-select. **Clicks:** assign a trainer went from ~4 (open session → edit → pick → save → back) to 1 in the drawer.
+- **Files:** `src/screens/Calendar.tsx`, `src/hooks/data.ts` (added `trainer_id`/`venue_id` to `useSchedules`).
+
+---
+
 ## Planned next entries (this phase)
-- S2 — Calendar drawer: inline session actions (assign/change trainer & venue, confirm, reschedule, cancel) without full-page navigation.
 - S3 — Create-session workflow: progressive disclosure; course-derived defaults confirmed (min/max already default from course); reduce required-at-creation fields.
 - S4 — Session detail: tighten to the standard header + attention + summary + minimal tabs (already tabbed via REC-standard; audit tab count).
 - S5 — Participants: lifecycle (soft-cancel / transfer / substitute) on the new `participant.status` column instead of hard delete.

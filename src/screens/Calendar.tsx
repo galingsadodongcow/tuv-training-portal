@@ -2,9 +2,12 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { useSchedules, useChannelPax, useYears, useSessionHealth } from '../hooks/data'
+import { useSchedules, useChannelPax, useYears, useSessionHealth, useTrainers, useVenues, useInvalidate, checkConflicts } from '../hooks/data'
 import { useAuth } from '../hooks/useAuth'
+import { supabase } from '../lib/supabase'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
+import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction } from '../lib/health'
@@ -171,12 +174,91 @@ function WeekGrid({ days, sessions, onOpen, healthMap }: { days: Date[]; session
   )
 }
 
-// Slide-in summary of a single session, built entirely from the row already in
-// hand (no fetch). Deep-links into the full session page from its primary action.
-function SessionDrawer({ r, healthMap, onClose }: { r: any; healthMap?: Map<string, string>; onClose: () => void }) {
+// Slide-in summary of a single session, built from the row already in hand (no
+// fetch). Operations get inline scheduling actions here — assign trainer/venue,
+// confirm the session — without leaving the calendar; heavier flows (reschedule,
+// cancel) and the full record deep-link to the session page.
+function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?: Map<string, string>; canEdit: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => { ref.current?.querySelector<HTMLElement>('a, button')?.focus() }, [])
+  useEffect(() => { ref.current?.querySelector<HTMLElement>('a, button, select')?.focus() }, [])
+  const trainers = useTrainers()
+  const venues = useVenues()
+  const invalidate = useInvalidate()
+  const toast = useToast()
+  const confirm = useConfirm()
+  const [trainerId, setTrainerId] = useState<string>(r.trainer_id || '')
+  const [venueId, setVenueId] = useState<string>(r.venue_id || '')
+  const [status, setStatus] = useState<string>(r.status)
+  const [trainerClash, setTrainerClash] = useState<string | null>(null)
+  const [venueClash, setVenueClash] = useState<string | null>(null)
   const hm = healthMeta(healthMap?.get(r.schedule_id))
+
+  // The session's date blocks in the shape fn_find_conflicts expects (mirrors
+  // SessionForm): fall back to the single start/end span when no segments exist.
+  const segs = (r.date_segments?.length ? r.date_segments : [{ start: r.start_date, end: r.end_date }])
+    .filter((s: any) => s.start)
+    .map((s: any) => ({ start: s.start, end: s.end || s.start }))
+
+  // One-line summary of any double-booking the RPC reports, deduped by
+  // type+course (same idiom as SessionForm's conflict list).
+  const describe = (rows: any[]) =>
+    [...new Map((rows || []).map((c: any) => [`${c.conflict_type}-${c.course_name}`, c])).values()]
+      .map((c: any) => `${c.course_name} on ${new Date(c.clash_day).toLocaleDateString('en-PH', { day: 'numeric', month: 'short' })}`)
+      .join(', ')
+
+  // Best-effort conflict preview for a candidate trainer/venue — never blocks the
+  // write, just surfaces a warning after the fact.
+  const clashFor = async (opts: { trainerId?: string | null; venueId?: string | null }) => {
+    if (segs.length === 0) return null
+    const sorted = [...segs].sort((a: any, b: any) => a.start.localeCompare(b.start))
+    try {
+      const rows = await checkConflicts({
+        scheduleId: r.schedule_id,
+        trainerId: opts.trainerId ?? null,
+        venueId: opts.venueId ?? null,
+        start: sorted[0].start,
+        end: sorted[sorted.length - 1].end,
+        segments: sorted,
+      })
+      return rows && rows.length ? describe(rows) : null
+    } catch { return null }
+  }
+
+  const write = async (patch: Record<string, any>) => {
+    const { error } = await supabase.from('schedule').update(patch).eq('schedule_id', r.schedule_id)
+    if (error) { toast.error(error.message); return false }
+    invalidate(['schedules', 'schedule', 'session_health'])
+    return true
+  }
+
+  const onTrainer = async (e: any) => {
+    const id = e.target.value
+    setTrainerId(id)
+    if (!(await write({ trainer_id: id || null }))) return
+    toast.success(id ? 'Trainer assigned.' : 'Trainer cleared.')
+    setTrainerClash(id ? await clashFor({ trainerId: id }) : null)
+  }
+
+  const onVenue = async (e: any) => {
+    const id = e.target.value
+    setVenueId(id)
+    if (!(await write({ venue_id: id || null }))) return
+    toast.success(id ? 'Venue assigned.' : 'Venue cleared.')
+    setVenueClash(id ? await clashFor({ venueId: id }) : null)
+  }
+
+  const confirmSession = async () => {
+    const res = await confirm({
+      title: 'Confirm this session?',
+      body: 'Marks the session Confirmed so it counts as a committed run on the calendar.',
+      confirmLabel: 'Confirm session',
+    })
+    if (!res.ok) return
+    if (!(await write({ status: 'Confirmed' }))) return
+    setStatus('Confirmed')
+    toast.success('Session confirmed.')
+  }
+
   return (
     <div className="drawer-scrim" onClick={onClose}>
       <div className="drawer" ref={ref} role="dialog" aria-modal="true" aria-label={`Session: ${r.course?.course_name}`}
@@ -191,7 +273,7 @@ function SessionDrawer({ r, healthMap, onClose }: { r: any; healthMap?: Map<stri
         </div>
         <div className="drawer-body">
           <div className="chip-row" style={{ marginBottom: 16 }}>
-            <StatusPill value={r.status} />
+            <StatusPill value={status} />
             <GoPill value={r.go_status} />
             <span className={`pill ${hm.cls}`}>{hm.label}</span>
           </div>
@@ -200,15 +282,50 @@ function SessionDrawer({ r, healthMap, onClose }: { r: any; healthMap?: Map<stri
               <tr><td>Dates</td><td className="right">{formatSegments(r.date_segments, r.start_date, r.end_date)}</td></tr>
               <tr><td>Learning type</td><td className="right">{lt(r.modality)}</td></tr>
               <tr><td>Fee</td><td className="right">{php(r.price)}</td></tr>
-              {r.trainer && <tr><td>Trainer</td><td className="right">{r.trainer}</td></tr>}
-              {r.venue && <tr><td>Venue</td><td className="right">{r.venue}</td></tr>}
+              {!canEdit && r.trainer && <tr><td>Trainer</td><td className="right">{r.trainer.name}</td></tr>}
+              {!canEdit && r.venue && <tr><td>Venue</td><td className="right">{r.venue.name}</td></tr>}
             </tbody>
           </table>
           <div style={{ marginBottom: 20 }}>
             <div className="fill-label" style={{ marginBottom: 6 }}>Fill · {r.booked_participants}/{r.min_participants}</div>
             <FillBar booked={r.booked_participants} min={r.min_participants} />
           </div>
-          <Link href={`/session/${r.schedule_id}`} className="btn">Open full session →</Link>
+
+          {canEdit && (
+            <div className="drawer-section">
+              <label className="field"><span>Trainer</span>
+                <select value={trainerId} onChange={onTrainer} aria-label="Assign trainer">
+                  <option value="">Not assigned yet</option>
+                  {trainers.data?.map((t: any) => (
+                    <option key={t.trainer_id} value={t.trainer_id}>{t.name} ({t.trainer_type})</option>
+                  ))}
+                </select>
+              </label>
+              {trainerClash && <div className="notice notice-warn" style={{ marginTop: 6, marginBottom: 10 }}>Trainer already booked: {trainerClash}</div>}
+
+              <label className="field"><span>Venue</span>
+                <select value={venueId} onChange={onVenue} aria-label="Assign venue">
+                  <option value="">Not assigned yet</option>
+                  {venues.data?.map((v: any) => (
+                    <option key={v.venue_id} value={v.venue_id}>{v.name}{v.capacity ? ` (holds ${v.capacity})` : ''}</option>
+                  ))}
+                </select>
+              </label>
+              {venueClash && <div className="notice notice-warn" style={{ marginTop: 6, marginBottom: 10 }}>Venue already booked: {venueClash}</div>}
+
+              {status === 'Tentative' && (
+                <button className="btn" style={{ marginTop: 4 }} onClick={confirmSession}>Confirm session</button>
+              )}
+            </div>
+          )}
+
+          <div className="drawer-section">
+            <div className="toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
+              <Link href={`/session/${r.schedule_id}`} className="btn">Open full session →</Link>
+              {canEdit && <Link href={`/session/${r.schedule_id}/edit`} className="btn btn-ghost">Edit dates / reschedule</Link>}
+              {canEdit && <Link href={`/session/${r.schedule_id}`} className="btn btn-ghost">Cancel session</Link>}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -538,7 +655,7 @@ export default function Calendar() {
         </>
       )}
 
-      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} onClose={() => setDrawer(null)} />}
+      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} canEdit={canEdit} onClose={() => setDrawer(null)} />}
     </>
   )
 }
