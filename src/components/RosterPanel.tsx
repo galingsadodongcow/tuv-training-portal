@@ -123,7 +123,7 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
     if (error) { setMsg(error.message); toast.error(error.message) }
     else {
       setForm({ line_id: form.line_id, full_name: '', email: '', position_title: '' })
-      invalidate(['roster'])
+      invalidate(['roster', 'session_health', 'open_schedules', 'digest'])
       toast.success('Participant added.')
     }
     setBusy(false)
@@ -166,7 +166,7 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
       else { errs++; lastErr = error.message }
     }
     setBusy(false)
-    invalidate(['roster'])
+    invalidate(['roster', 'session_health', 'open_schedules', 'digest'])
     const skipped = dups + errs
     const detail = skipped ? ` (${dups} duplicate${dups === 1 ? '' : 's'}${errs ? `, ${errs} error${errs === 1 ? '' : 's'}` : ''})` : ''
     const summary = `Added ${added}, skipped ${skipped}${detail}.`
@@ -194,7 +194,7 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
     if (!res.ok) return
     const { error } = await supabase.rpc('fn_remove_participant', { p_participant: pid, p_reason: res.reason?.trim() || null })
     if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['roster']); toast.success('Participant removed from the roster.') }
+    else { invalidate(['roster', 'session_health', 'open_schedules', 'digest']); toast.success('Participant removed from the roster.') }
   }
 
   const transfer = async () => {

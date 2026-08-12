@@ -27,6 +27,10 @@ export default function Inquiries() {
   const toast = useToast()
   const confirm = useConfirm()
   const isAdmin = profile?.role === 'super_admin'
+  // Inquiry writes per the role matrix: super_admin, coordinator, sales, sales_manager.
+  // operations/business_owner/management/auditor are read-only (RLS rejects their
+  // writes) — so the board's action controls are hidden from them, not just refused.
+  const canEdit = ['super_admin', 'coordinator', 'sales', 'sales_manager'].includes(profile?.role as string)
 
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>(emptyForm)
@@ -35,6 +39,13 @@ export default function Inquiries() {
   // an inbound lead only needs the company and a contact; qualification comes later.
   const [dealDetails, setDealDetails] = useState(false)
   const set = (k: string) => (e: any) => setForm((f: any) => ({ ...f, [k]: e.target.value }))
+  // Edit an existing lead. The "New inquiry" form is deliberately lean (CRM1), so
+  // qualification (value, probability, close, source, …) is added here afterwards —
+  // otherwise a lean-logged lead could never be qualified and the weighted pipeline
+  // would stay blank. RLS governs who may actually update (own/coordinator/admin).
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<any>(emptyForm)
+  const setE = (k: string) => (e: any) => setEditForm((f: any) => ({ ...f, [k]: e.target.value }))
 
   const byStage = useMemo(() => {
     const m: Record<string, any[]> = {}
@@ -80,6 +91,44 @@ export default function Inquiries() {
     else invalidate(['inquiries'])
   }
 
+  const openEdit = (q: any) => {
+    setCreating(false)
+    setEditForm({
+      company: q.company || '', contact: q.contact || '', email: q.email || '', phone: q.phone || '',
+      course_id: q.course_id || '', pax: q.pax ?? '', offering_type: q.offering_type || 'Public',
+      est_value: q.est_value ?? '', probability: q.probability ?? '', expected_close: q.expected_close || '', source: q.source || '',
+    })
+    setEditId(q.inquiry_id)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const saveEdit = async () => {
+    if (!editForm.company.trim()) { toast.error('Company is required.'); return }
+    setBusy(true)
+    const body: any = {
+      company: editForm.company.trim(),
+      contact: editForm.contact.trim() || null,
+      email: editForm.email.trim() || null,
+      phone: editForm.phone.trim() || null,
+      course_id: editForm.course_id || null,
+      pax: editForm.pax === '' ? null : Number(editForm.pax),
+      offering_type: editForm.offering_type,
+      est_value: editForm.est_value === '' ? null : Number(editForm.est_value),
+      probability: editForm.probability === '' ? null : Number(editForm.probability),
+      expected_close: editForm.expected_close || null,
+      source: editForm.source || null,
+    }
+    const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
+    let { error } = await supabase.from('inquiry').update(body).eq('inquiry_id', editId)
+    if (error && missingColumn(error)) {
+      const { est_value, probability, expected_close, source, ...base } = body
+      ;({ error } = await supabase.from('inquiry').update(base).eq('inquiry_id', editId))
+    }
+    if (error) toast.error(error.message)
+    else { toast.success('Inquiry updated.'); setEditId(null); invalidate(['inquiries']) }
+    setBusy(false)
+  }
+
   const markLost = async (id: string) => {
     const res = await confirm({ title: 'Mark this lead as lost?', confirmLabel: 'Mark lost', tone: 'danger', reason: 'optional', reasonLabel: 'Reason lost' })
     if (!res.ok) return
@@ -105,12 +154,51 @@ export default function Inquiries() {
           <h1>Inquiry pipeline</h1>
           <p>{total} inquir{total === 1 ? 'y' : 'ies'}, {won} closed won. Weighted open pipeline {php(weighted)}. {isAdmin ? 'You see the whole team.' : 'You see your own.'}</p>
         </div>
-        <div className="toolbar">
-          <button className="btn" onClick={() => setCreating((c) => !c)}>{creating ? 'Close' : '+ New inquiry'}</button>
-        </div>
+        {canEdit && (
+          <div className="toolbar">
+            <button className="btn" onClick={() => { setEditId(null); setCreating((c) => !c) }}>{creating ? 'Close' : '+ New inquiry'}</button>
+          </div>
+        )}
       </div>
 
-      {creating && (
+      {canEdit && editId && (
+        <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 720 }}>
+          <div className="k-label" style={{ marginBottom: 10 }}>Edit inquiry</div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <label className="field"><span>Company</span><input value={editForm.company} onChange={setE('company')} /></label>
+            <label className="field"><span>Contact</span><input value={editForm.contact} onChange={setE('contact')} /></label>
+            <label className="field"><span>Email</span><input type="email" value={editForm.email} onChange={setE('email')} /></label>
+            <label className="field"><span>Phone</span><input value={editForm.phone} onChange={setE('phone')} /></label>
+            <label className="field"><span>Course of interest</span>
+              <select value={editForm.course_id} onChange={setE('course_id')}>
+                <option value="">Not specified</option>
+                {courses.data?.map((c: any) => (<option key={c.course_id} value={c.course_id}>{c.course_name}</option>))}
+              </select>
+            </label>
+            <label className="field"><span>Offering</span>
+              <select value={editForm.offering_type} onChange={setE('offering_type')}>
+                {OFFERINGS.map((o) => (<option key={o}>{o}</option>))}
+              </select>
+            </label>
+            <label className="field"><span>Estimated pax</span><input type="number" min="1" value={editForm.pax} onChange={setE('pax')} /></label>
+            <label className="field"><span>Estimated value (PHP)</span><input type="number" min="0" value={editForm.est_value} onChange={setE('est_value')} /></label>
+            <label className="field"><span>Win probability %</span><input type="number" min="0" max="100" value={editForm.probability} onChange={setE('probability')} /></label>
+            <label className="field"><span>Expected close</span><input type="date" value={editForm.expected_close} onChange={setE('expected_close')} /></label>
+            <label className="field"><span>Source</span>
+              <select value={editForm.source} onChange={setE('source')}>
+                <option value="">Not specified</option>
+                {SOURCES.map((s) => (<option key={s}>{s}</option>))}
+              </select>
+            </label>
+          </div>
+          <div className="toolbar" style={{ marginTop: 8 }}>
+            <button className="btn btn-sm" onClick={saveEdit} disabled={busy}>{busy ? 'Saving…' : 'Save inquiry'}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditId(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {canEdit && creating && (
         <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 720 }}>
           {/* Essentials — enough to log the lead and start working it. */}
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -195,7 +283,9 @@ export default function Inquiries() {
                     )}
                     {stage === 'Closed Lost' && q.lost_reason && <div className="fill-label" style={{ color: 'var(--danger)' }}>Lost: {q.lost_reason}</div>}
                     <div className="fill-label">{q.salesperson?.name || '—'} · {shortDate(q.inquiry_date)}{q.source ? ` · ${q.source}` : ''}</div>
+                    {canEdit && (
                     <div className="toolbar" style={{ gap: 4, marginTop: 6 }}>
+                      <button className="btn btn-ghost btn-sm" title="Edit inquiry" onClick={() => openEdit(q)}>Edit</button>
                       {stage === 'Closed Lost' ? (
                         <button className="btn btn-ghost btn-sm" title="Reopen" onClick={() => move(q.inquiry_id, 'Received')}>Reopen</button>
                       ) : (
@@ -206,6 +296,7 @@ export default function Inquiries() {
                         </>
                       )}
                     </div>
+                    )}
                   </div>
                 )
               })}
