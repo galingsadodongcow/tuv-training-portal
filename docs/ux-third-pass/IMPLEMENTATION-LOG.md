@@ -8,3 +8,11 @@ Implementing the `docs/ux-third-pass/` backlog (`10-prioritized-simplification-b
 - **Retire dead Home** — `Home.tsx` deleted (unreferenced; `/home` already redirects to `/my-work`).
 - **Nav effect:** −2 items for the roles that had them (Operations 18→16, and Approvals gone for BO/ops/super_admin nav).
 - Files: `src/lib/roles.ts`, `src/app/(app)/operations-today/page.tsx`, deleted `src/screens/{Home,OperationsToday}.tsx`.
+
+## Wave 2 — record trims
+- **#19 Resources — drop Trainer-load tab** — 3 tabs → 2 (Trainers, Venues). Its only distinct metric ("delivered") folded into the Trainers row (`Sessions (delivered)` column). `TrainerManage` modal unchanged.
+- **#16 Customer 360 — drop Sessions tab** — 6 tabs → 5. The sessions-booked list folds into the Orders tab (they hang off the same orders). `?tab=sessions` no longer exists.
+- **#9 Session detail (partial)** — **Feedback tab folded into Activity** (6 → 5 tabs; `?tab=feedback` normalises to `activity`); **GoPill removed from the header** (it duplicated health — Go/No-Go is the reason behind health, already shown in the Go/No-Go panel). Header badges 6 → ~5. *(Carried to a later wave: the 7-button status row → 1 primary + More.)*
+- **#20 Relabel** — the order/booking move UI ("Transfer" on Session Orders + Order Lines + the shared `TransferOrder` modal) → **"Move booking"**, so it stops reading as the participant **Transfer** (which stays in the roster).
+- Files: `src/screens/{Resources,ClientDetail,SessionDetail,OrderDetail}.tsx`, `src/components/TransferOrder.tsx`.
+- *Carried forward:* #17 CourseForm progressive disclosure, session status-row → primary+More.

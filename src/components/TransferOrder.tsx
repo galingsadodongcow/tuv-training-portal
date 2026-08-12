@@ -41,7 +41,7 @@ export default function TransferOrder({ order, courseId, fromScheduleId, onClose
       <div className="card card-pad" style={{ width: 520, maxWidth: '94vw' }} onClick={(e) => e.stopPropagation()}
         ref={dialogRef} role="dialog" aria-modal="true" aria-label="Transfer booking"
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(false) } }}>
-        <h3 style={{ marginTop: 0 }}>Transfer booking</h3>
+        <h3 style={{ marginTop: 0 }}>Move booking</h3>
         <p className="muted" style={{ fontSize: 14 }}>
           Order {order.order?.order_id || order.order_id} · {order.seats} seat{order.seats > 1 ? 's' : ''} · {order.order?.client?.company || order.company || ''}
         </p>
@@ -74,7 +74,7 @@ export default function TransferOrder({ order, courseId, fromScheduleId, onClose
 
         {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
         <div className="toolbar">
-          <button className="btn" disabled={!target || busy} onClick={go}>{busy ? 'Transferring…' : 'Transfer'}</button>
+          <button className="btn" disabled={!target || busy} onClick={go}>{busy ? 'Moving…' : 'Move booking'}</button>
           <button className="btn btn-ghost" onClick={() => onClose(false)}>Cancel</button>
         </div>
       </div>

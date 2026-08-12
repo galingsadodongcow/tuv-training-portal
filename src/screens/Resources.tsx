@@ -7,7 +7,7 @@ import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
-import { shortDate, num } from '../lib/format'
+import { shortDate } from '../lib/format'
 import Link from 'next/link'
 import TrainerManage from '../components/TrainerManage'
 
@@ -109,9 +109,9 @@ export default function Resources() {
       )}
 
       <div className="filters">
-        {['trainers', 'venues', 'load'].map((t) => (
+        {['trainers', 'venues'].map((t) => (
           <button key={t} className={`btn btn-sm ${tab === t ? '' : 'btn-ghost'}`} onClick={() => setTab(t)}>
-            {t === 'load' ? 'Trainer load' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -122,7 +122,7 @@ export default function Resources() {
         <>
           <div className="card" style={{ marginBottom: 16 }}>
             <table>
-              <thead><tr><th>Name</th><th>Type</th><th>Contact</th><th className="right">Sessions</th><th className="right">Next</th><th></th></tr></thead>
+              <thead><tr><th>Name</th><th>Type</th><th>Contact</th><th className="right">Sessions (delivered)</th><th className="right">Next</th><th></th></tr></thead>
               <tbody>
                 {trainers.data.map((t: any) => {
                   const l = loadFor(t.trainer_id)
@@ -134,7 +134,7 @@ export default function Resources() {
                       </td>
                       <td><span className="pill pill-webshop">{t.trainer_type}</span></td>
                       <td className="fill-label">{t.email || '—'}</td>
-                      <td className="right">{l ? `${l.sessions} · ${l.training_days}d` : '—'}</td>
+                      <td className="right">{l ? `${l.sessions} · ${l.training_days}d (${l.delivered} done)` : '—'}</td>
                       <td className="right fill-label">{l?.next_session ? shortDate(l.next_session) : '—'}</td>
                       <td className="right">
                         {canEdit && (
@@ -214,28 +214,6 @@ export default function Resources() {
             </div>
           )}
         </>
-      )}
-
-      {tab === 'load' && (
-        <div className="card">
-          {load.error && <ErrorNote error={load.error} />}
-          <table>
-            <thead><tr><th>Trainer</th><th>Type</th><th className="right">Sessions</th><th className="right">Training days</th><th className="right">Delivered</th><th className="right">Next</th></tr></thead>
-            <tbody>
-              {load.data?.map((l: any) => (
-                <tr key={l.trainer_id}>
-                  <td style={{ fontWeight: 600 }}>{l.name}</td>
-                  <td className="fill-label">{l.trainer_type}</td>
-                  <td className="right">{num(l.sessions)}</td>
-                  <td className="right">{num(l.training_days)}</td>
-                  <td className="right">{num(l.delivered)}</td>
-                  <td className="right fill-label">{l.next_session ? shortDate(l.next_session) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {load.data?.length === 0 && <div className="empty">No trainer activity yet.</div>}
-        </div>
       )}
 
       {managing && <TrainerManage trainer={managing} onClose={() => setManaging(null)} />}

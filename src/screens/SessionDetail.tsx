@@ -15,7 +15,7 @@ import TransferOrder from '../components/TransferOrder'
 import CloseSession from '../components/CloseSession'
 import CancelSession from '../components/CancelSession'
 import GoNoGoPanel from '../components/GoNoGoPanel'
-import { StatusPill, GoPill, ChannelPill, FillBar, Spinner, ErrorNote } from '../components/ui'
+import { StatusPill, ChannelPill, FillBar, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordTabs, RecordSection, KeyVal, RecordNotice } from '../components/record'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
@@ -33,7 +33,7 @@ export default function SessionDetail() {
   const search = useSearchParams()
   // Notes + History merged into one "Activity" tab; keep the old deep-links alive.
   const rawTab = search.get('tab') || 'overview'
-  const tab = rawTab === 'notes' || rawTab === 'history' ? 'activity' : rawTab
+  const tab = ['notes', 'history', 'feedback'].includes(rawTab) ? 'activity' : rawTab
   const setTab = (t: string) => {
     const n = new URLSearchParams(search.toString())
     if (t === 'overview') n.delete('tab')
@@ -162,7 +162,6 @@ export default function SessionDetail() {
     { key: 'orders', label: `Orders (${bookedCount})${waitCount ? ` · ${waitCount} waitlisted` : ''}` },
     { key: 'participants', label: 'Participants' },
     { key: 'files', label: 'Files' },
-    { key: 'feedback', label: 'Feedback' },
     { key: 'activity', label: `Activity${notes.data?.length ? ` (${notes.data.length})` : ''}` },
   ]
 
@@ -175,7 +174,8 @@ export default function SessionDetail() {
         badges={
           <>
             <StatusPill value={schedule.status} />
-            <GoPill value={schedule.go_status} />
+            {/* Go/No-Go is the reason behind health, shown in the Go/No-Go panel below —
+                not repeated as a second header pill. Header carries status + health only. */}
             {(() => {
               // Health duplicates the status once a session is Completed/Cancelled, so only show it while live.
               const h = healthMap.get(schedule.schedule_id)
@@ -309,7 +309,7 @@ export default function SessionDetail() {
                 {canOps(role) && kind === 'waiting' && (
                   <button className="btn btn-sm" disabled={busy === 'line'} onClick={() => setLineStatus(l, 'New')}>Promote</button>
                 )}
-                <button className="linkbtn" onClick={() => setTransferring(l)}>Transfer</button>
+                <button className="linkbtn" onClick={() => setTransferring(l)}>Move booking</button>
               </div>
             </td>
           </tr>
@@ -353,9 +353,8 @@ export default function SessionDetail() {
         <div className="card card-pad"><AttachmentsPanel entityType="session" entityId={schedule.schedule_id} /></div>
       )}
 
-      {tab === 'feedback' && <FeedbackPanel scheduleId={schedule.schedule_id} />}
-
       {tab === 'activity' && (
+        <>
         <div className="card card-pad">
           {/* Post a note, then the full timeline (notes, approvals, tasks, audit) below. */}
           <div className="toolbar" style={{ marginBottom: 14 }}>
@@ -365,6 +364,9 @@ export default function SessionDetail() {
           </div>
           <ActivityTimeline events={timeline} loading={notes.isLoading || schedApprovals.isLoading || activity.isLoading} />
         </div>
+        {/* Participant feedback folded in from the retired Feedback tab (post-session, low-frequency). */}
+        <div style={{ marginTop: 16 }}><FeedbackPanel scheduleId={schedule.schedule_id} /></div>
+        </>
       )}
 
       {closing && <CloseSession schedule={schedule} onDone={() => setClosing(false)} onClose={() => setClosing(false)} />}
