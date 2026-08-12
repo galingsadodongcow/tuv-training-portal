@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
+import SavedViews from '../components/SavedViews'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
@@ -592,6 +593,10 @@ export default function Calendar() {
           <option value="all">All learning types</option>
           {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
         </select>
+      </div>
+
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="calendar" paramKeys={['cal', 'month', 'year', 'status', 'category', 'lt', 'q', 'sort', 'dir']} />
       </div>
 
       {cal === 'grid' && (

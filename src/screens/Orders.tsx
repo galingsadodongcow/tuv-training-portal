@@ -8,6 +8,7 @@ import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
 import { primaryFlag, stageLabel } from '../lib/orderState'
+import SavedViews from '../components/SavedViews'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -92,6 +93,10 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
           <option value="all">All payments</option>
           {['Paid', 'Unpaid', 'Partial'].map((p) => (<option key={p}>{p}</option>))}
         </select>
+      </div>
+
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="orders" paramKeys={['q', 'stage', 'pay', 'sort', 'dir']} />
       </div>
 
       {query.error ? (

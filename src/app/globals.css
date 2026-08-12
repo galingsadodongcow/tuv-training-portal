@@ -613,6 +613,27 @@ tr.stripe-risk    > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
 tr.stripe-ok      > td:first-child { box-shadow: inset 3px 0 0 var(--success); }
 tr.stripe-done    > td:first-child { box-shadow: inset 3px 0 0 var(--border); }
 
+/* Saved views (#123): a chip row for applying/saving/deleting filter presets on
+   Orders, Calendar and the fulfilment queue. */
+.saved-views { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sv-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg-subtle);
+}
+.sv-chip.sv-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.sv-chip.sv-saving { border-radius: 8px; padding: 2px 4px; gap: 4px; }
+.sv-apply {
+  border: none; background: none; cursor: pointer; color: inherit; font: inherit;
+  font-size: 13px; padding: 3px 10px; border-radius: 999px;
+}
+.sv-chip.sv-active .sv-apply { color: var(--accent); font-weight: 600; }
+.sv-del {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 15px; line-height: 1; padding: 0 8px 0 2px; border-radius: 999px;
+}
+.sv-del:hover { color: var(--danger); }
+.sv-saving input { font-size: 13px; padding: 3px 8px; min-width: 150px; }
+
 /* Notification center */
 .notif-wrap { position: relative; display: inline-flex; margin-left: 8px; }
 .notif-bell {
