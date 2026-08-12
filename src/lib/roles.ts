@@ -63,16 +63,15 @@ export const NAV: NavItem[] = [
   { path: '/clients', label: 'Customers', roles: ALL, icon: 'clients', group: 'Customers' },
   { path: '/organizations', label: 'Organizations', roles: ALL, icon: 'organizations', group: 'Customers' },
 
-  // Operations — delivery and fulfillment.
-  { path: '/operations-today', label: 'Operations today', roles: ['super_admin', 'operations', 'business_owner', 'coordinator', 'management'], icon: 'fulfillment', group: 'Operations' },
+  // Operations — delivery and fulfillment. (Operations today retired: its
+  // aggregator sections live in My Work + Calendar; /operations-today redirects.)
   { path: '/worklist', label: 'Fulfillment', roles: ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', ...OVERSIGHT], icon: 'fulfillment', group: 'Operations' },
   { path: '/resources', label: 'Trainers and venues', roles: ['super_admin', 'operations', 'business_owner', 'management'], icon: 'resources', group: 'Operations' },
   { path: '/duplicates', label: 'Duplicates', roles: ['super_admin', 'operations', 'coordinator'], icon: 'duplicates', group: 'Operations' },
   { path: '/elearning', label: 'E-learning access', roles: ['super_admin', 'operations', 'coordinator'], icon: 'elearning', group: 'Operations' },
 
-  // Oversight — decisions and analysis. Analytics is one area (AnalyticsTabs
-  // reaches Reports and Feedback where the role allows; those routes remain).
-  { path: '/approvals', label: 'Approvals', roles: ['super_admin', 'operations', 'business_owner'], icon: 'approvals', group: 'Oversight' },
+  // Oversight — decisions and analysis. Approvals retired from nav: the "Approvals
+  // to decide" queue on My Work is the entry point; /approvals stays as the surface.
   { path: '/dashboard', label: 'Analytics', roles: ALL, icon: 'dashboard', group: 'Oversight' },
 
   // Admin — catalogue, pricing, configuration, governance.

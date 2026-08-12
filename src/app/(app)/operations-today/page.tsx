@@ -1,10 +1,7 @@
-import OperationsToday from '@/screens/OperationsToday'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
+// Operations today was retired: its read-only aggregator sections are covered by
+// My Work (exceptions/tasks) and Calendar (today/this week). Old links land there.
 export default function Page() {
-  return (
-    <Guard roles={['super_admin', 'operations', 'business_owner', 'coordinator', 'management']}>
-      <OperationsToday />
-    </Guard>
-  )
+  redirect('/my-work')
 }
