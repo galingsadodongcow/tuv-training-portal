@@ -180,14 +180,16 @@ export default function RosterPanel({ schedule }: { schedule: any }) {
     setMsg(null)
     const res = await confirm({
       title: 'Remove this participant?',
-      body: 'This permanently deletes the participant along with any attendance, assessment, and certificate history captured against them. This cannot be undone.',
+      body: 'This removes them from the session roster. Their attendance, assessment, and certificate history is preserved for audit — the record is flagged removed, not deleted.',
       confirmLabel: 'Remove',
       tone: 'danger',
+      reason: 'optional',
+      reasonLabel: 'Reason',
     })
     if (!res.ok) return
-    const { error } = await supabase.from('participant').delete().eq('participant_id', pid)
+    const { error } = await supabase.rpc('fn_remove_participant', { p_participant: pid, p_reason: res.reason?.trim() || null })
     if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['roster']); toast.success('Participant removed.') }
+    else { invalidate(['roster']); toast.success('Participant removed from the roster.') }
   }
 
   const setResult = async (pid, result) => {

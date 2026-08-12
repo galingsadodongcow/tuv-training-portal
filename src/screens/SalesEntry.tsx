@@ -186,45 +186,28 @@ export default function SalesEntry() {
       }
       if (!clientId) throw new Error('Select or create a client.')
 
-      // header
-      const { error: oErr } = await supabase.from('orders').insert({
-        order_id: head.order_id.trim(),
-        order_date: head.order_date,
-        channel: head.channel,
-        modality: good[0].modality,
-        seats: 1,
-        amount_php: 0,
-        client_id: clientId,
-        created_by: profile?.user_id,
-        fulfillment_stage: 'New',
-      })
-      if (oErr) throw oErr
-
-      // lines
+      // Atomic create (SAL01): order + lines + self-assignment in one DB
+      // transaction, so a line failure can no longer leave a half-created order.
       const payload = good.map((l, i) => ({
-        order_id: head.order_id.trim(),
         line_no: i + 1,
         course_id: l.course_id,
         schedule_id: l.modality === 'E-learning' ? null : l.schedule_id,
         modality: l.modality,
         seats: Number(l.seats),
         amount_php: Number(l.amount) * Number(l.seats),
-        access_status: l.modality === 'E-learning' ? 'Pending' : null,
         line_status: isWaitlisted(l) ? 'Waitlist' : 'New',
       }))
-      const { error: lErr } = await supabase.from('order_line').insert(payload)
-      if (lErr) {
-        await supabase.from('orders').delete().eq('order_id', head.order_id.trim())
-        throw lErr
-      }
-
-      // self-assign (non-fatal: the order is already valid without it)
-      let assignWarning: string | null = null
-      if (profile?.sales_id) {
-        const { error: aErr } = await supabase.from('order_assignment')
-          .upsert({ order_id: head.order_id.trim(), sales_id: profile.sales_id }, { onConflict: 'order_id' })
-        if (aErr) assignWarning = 'Order saved, but it could not be auto-assigned to you. Assign it from the fulfillment screen.'
-      }
+      const { error: cErr } = await supabase.rpc('fn_create_order', {
+        p_order_id: head.order_id.trim(),
+        p_channel: head.channel,
+        p_order_date: head.order_date,
+        p_client_id: clientId,
+        p_lines: payload,
+        p_sales_id: profile?.sales_id || null,
+        p_country: 'PH',
+      })
+      if (cErr) throw cErr
+      const assignWarning: string | null = null
 
       invalidate(['orders', 'schedules', 'channel_pax', 'fulfillment_queue', 'clients'])
       const goodSeats = good.reduce((n, l) => n + (Number(l.seats) || 0), 0)

@@ -6,13 +6,17 @@ import { useAuth } from '@/hooks/useAuth'
 import { NAV, Role } from '@/lib/roles'
 
 // What each record kind is called, where it links, and which roles may open it.
+// Read-facing kinds are visible to every role that can reach the record's screen
+// (the DB still scopes what each user actually sees on the detail page).
+const READ_ROLES: Role[] = ['super_admin', 'operations', 'business_owner', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor']
 const KIND: Record<string, { label: string; href: (id: string) => string; roles: Role[] }> = {
-  order: { label: 'Order', href: (id) => `/orders/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  client: { label: 'Client', href: (id) => `/clients/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  session: { label: 'Session', href: (id) => `/session/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  organization: { label: 'Organization', href: (id) => `/organizations/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
+  order: { label: 'Order', href: (id) => `/orders/${id}`, roles: READ_ROLES },
+  client: { label: 'Client', href: (id) => `/clients/${id}`, roles: READ_ROLES },
+  participant: { label: 'Participant', href: (id) => `/orders/${id}`, roles: READ_ROLES },
+  session: { label: 'Session', href: (id) => `/session/${id}`, roles: READ_ROLES },
+  organization: { label: 'Organization', href: (id) => `/organizations/${id}`, roles: READ_ROLES },
   course: { label: 'Course', href: () => `/courses`, roles: ['super_admin', 'operations'] },
-  inquiry: { label: 'Inquiry', href: () => `/inquiries`, roles: ['super_admin', 'sales'] },
+  inquiry: { label: 'Inquiry', href: () => `/inquiries`, roles: ['super_admin', 'sales', 'coordinator', 'sales_manager', 'management', 'auditor'] },
 }
 
 type Entry = { key: string; label: string; sub: string; group: string; go: () => void }
@@ -83,8 +87,8 @@ export default function CommandPalette() {
 
   const entries: Entry[] = useMemo(() => {
     const nav: Entry[] = navMatches.map((it) => ({ key: 'nav:' + it.path, label: it.label, sub: it.path, group: 'Go to', go: () => go(it.path) }))
-    const recs: Entry[] = results.map((r: any) => ({
-      key: r.kind + ':' + r.id,
+    const recs: Entry[] = results.map((r: any, i: number) => ({
+      key: r.kind + ':' + r.id + ':' + i,
       label: r.title || '(untitled)',
       sub: [KIND[r.kind]?.label, r.subtitle].filter(Boolean).join(' · '),
       group: 'Records',
