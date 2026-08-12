@@ -33,6 +33,13 @@ Implementation-focused record of the simplification work (the "make it lighter /
 - **Result:** trainer/venue/confirm happen without leaving the calendar. `useSchedules` now also selects `trainer_id`/`venue_id` so the drawer can pre-select. **Clicks:** assign a trainer went from ~4 (open session → edit → pick → save → back) to 1 in the drawer.
 - **Files:** `src/screens/Calendar.tsx`, `src/hooks/data.ts` (added `trainer_id`/`venue_id` to `useSchedules`).
 
+### S5 — Participant lifecycle (retire hard delete; add transfer)
+- **Previous:** RosterPanel could add/import/mark attendance/issue certs and **hard-delete** a participant (destroying attendance/assessment/cert history).
+- **Problem:** a hard delete on an operational, audit-relevant record — contradicts the app's soft-delete stance and is a PII/history hazard. No way to move a participant to another session short of delete + re-add.
+- **Decision — Rebuild (non-destructive lifecycle).** Most landed with PR #80's `participant.status` migration: soft-remove (`fn_remove_participant` → status `Removed`, history preserved) already replaced the hard delete, and `fn_session_roster` already hides removed rows. **This entry adds the missing transfer UI:** a per-row **Transfer** action (Operations/Coordinator/super_admin) opening a picker of other sessions of the same course (`useSessionsForCourse`, current session excluded) + optional reason → `fn_transfer_participant`; invalidates roster + fill counts. Substitute = soft-remove + add (existing paths).
+- **Result:** the participant lifecycle is fully non-destructive (Active → Removed / Transferred), matching the delete-review policy. The `Participants` delete-review item is closed.
+- **Files:** `src/components/RosterPanel.tsx` (transfer UI). DB (`fn_remove_participant`/`fn_transfer_participant`/`participant.status`, `fn_session_roster` hides removed) shipped in PR #80.
+
 ---
 
 ## Planned next entries (this phase)
