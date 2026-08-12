@@ -3519,3 +3519,29 @@ create or replace view public.v_order_fact
 
 -- 2) Drop the retired column (indexes on it, if any, drop automatically).
 alter table public.course drop column if exists category;
+
+-- ===========================================================================
+-- 20260812240000_fix_quote_sales_fk_and_sla_grant.sql
+-- Fix two live runtime errors: (1) missing quote.sales_id -> salesperson FK
+-- that broke the PostgREST embed salesperson:sales_id(...) in useQuotes/useQuote;
+-- (2) v_sla_breach had no SELECT grant to authenticated ("permission denied for
+-- view"). Idempotent. Data verified before writing: 0 orphan quote.sales_id.
+-- ===========================================================================
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.quote'::regclass
+      and conname  = 'quote_sales_id_fkey'
+  ) then
+    alter table public.quote
+      add constraint quote_sales_id_fkey
+      foreign key (sales_id) references public.salesperson (sales_id);
+  end if;
+end
+$$;
+
+grant select on public.v_sla_breach to authenticated;
+
+notify pgrst, 'reload schema';
