@@ -537,6 +537,12 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .toast-success .toast-dot { background: var(--success); }
 .toast-error .toast-dot { background: var(--danger); }
 .toast-info .toast-dot { background: var(--accent); }
+.toast-action {
+  background: none; border: 1px solid currentColor; color: var(--accent);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+}
+.toast-action:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* =========================================================== Skeleton */
 .skeleton {

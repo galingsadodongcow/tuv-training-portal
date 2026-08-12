@@ -202,14 +202,19 @@ export default function MyWork() {
 
   const slaRows = sla.data || []
 
-  const completeTask = async (taskId: string) => {
+  const completeTask = async (task: any) => {
+    const prior = task.status || 'open'
     const { error } = await supabase
       .from('task')
       .update({ status: 'done', completed_at: new Date().toISOString(), completed_by: userId })
-      .eq('task_id', taskId)
+      .eq('task_id', task.task_id)
     if (error) toast.error(error.message)
     else {
-      toast.success('Task marked done.')
+      // #137: symmetric undo — reopen the task and clear the completion stamp.
+      toast.success('Task marked done.', { label: 'Undo', onClick: async () => {
+        await supabase.from('task').update({ status: prior, completed_at: null, completed_by: null }).eq('task_id', task.task_id)
+        invalidate(['my_tasks'])
+      } })
       invalidate(['my_tasks'])
     }
   }
@@ -325,7 +330,7 @@ export default function MyWork() {
                     )}
                   </td>
                   <td className="right">
-                    <button className="btn btn-ghost btn-sm" onClick={() => completeTask(t.task_id)}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => completeTask(t)}>
                       Mark done
                     </button>
                   </td>

@@ -170,12 +170,20 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
     setBusy(false)
   }
 
-  const markLost = async (id: string) => {
+  const markLost = async (q: any) => {
     const res = await confirm({ title: 'Mark this lead as lost?', confirmLabel: 'Mark lost', tone: 'danger', reason: 'optional', reasonLabel: 'Reason lost' })
     if (!res.ok) return
-    const { error } = await supabase.from('inquiry').update({ status: 'Closed Lost', lost_reason: res.reason || null }).eq('inquiry_id', id)
+    const prior = q.status
+    const { error } = await supabase.from('inquiry').update({ status: 'Closed Lost', lost_reason: res.reason || null }).eq('inquiry_id', q.inquiry_id)
     if (error) toast.error(error.message)
-    else invalidate(['inquiries'])
+    else {
+      invalidate(['inquiries'])
+      // #137: symmetric undo — restore the prior stage and clear the lost reason.
+      toast.success('Lead marked lost.', { label: 'Undo', onClick: async () => {
+        await supabase.from('inquiry').update({ status: prior, lost_reason: null }).eq('inquiry_id', q.inquiry_id)
+        invalidate(['inquiries'])
+      } })
+    }
   }
 
   const weighted = (inquiries.data || [])
@@ -455,7 +463,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
                           ) : (
                             <>
                               {i < 4 && <button className="btn btn-sm" title="Advance" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
-                              {OPEN_STAGES.includes(q.status) && <button className="linkbtn" onClick={() => markLost(q.inquiry_id)}>Lost</button>}
+                              {OPEN_STAGES.includes(q.status) && <button className="linkbtn" onClick={() => markLost(q)}>Lost</button>}
                             </>
                           )}
                         </div>
@@ -505,7 +513,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
                         <>
                           {i > 0 && <button className="btn btn-ghost btn-sm" title="Move back" aria-label="Move back a stage" onClick={() => move(q.inquiry_id, STAGES[i - 1])}>‹</button>}
                           {i < 4 && <button className="btn btn-sm" title="Advance" aria-label="Advance a stage" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
-                          {OPEN_STAGES.includes(stage) && <button className="btn btn-ghost btn-sm" title="Mark lost" onClick={() => markLost(q.inquiry_id)}>Lost</button>}
+                          {OPEN_STAGES.includes(stage) && <button className="btn btn-ghost btn-sm" title="Mark lost" onClick={() => markLost(q)}>Lost</button>}
                         </>
                       )}
                     </div>
