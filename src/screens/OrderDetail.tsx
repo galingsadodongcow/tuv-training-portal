@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAuditTrail, useOrderNotes } from '../hooks/data'
+import { useOrder, useInvalidate, useTransferTargets, useEntityActivity, useAuditTrail, useOrderNotes,
+  useOrderCompleteness, useOrderHandoff, useEndorseOrder, useAcceptEndorsement, useReturnForCorrection } from '../hooks/data'
 import ActivityTimeline from '../components/ActivityTimeline'
 import { noteEvents, taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
@@ -13,6 +14,7 @@ import BlockerBar from '../components/BlockerBar'
 import ReceivablePanel from '../components/ReceivablePanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
 import { collectionState, collectionTone } from '../lib/orderState'
@@ -67,10 +69,16 @@ export default function OrderDetail() {
   const { profile } = useAuth()
   const invalidate = useInvalidate()
   const toast = useToast()
+  const confirm = useConfirm()
   const order = useOrder(id)
   const activity = useEntityActivity('order', id)
   const audit = useAuditTrail('orders', id)
   const notes = useOrderNotes(id)
+  const completeness = useOrderCompleteness(id)
+  const handoff = useOrderHandoff(id)
+  const endorse = useEndorseOrder()
+  const accept = useAcceptEndorsement()
+  const returnForCorrection = useReturnForCorrection()
 
   const [stage, setStage] = useState('')
   const [sap, setSap] = useState('')
@@ -126,6 +134,37 @@ export default function OrderDetail() {
   const lines = o.lines || []
   const assignee = o.assignment?.[0]?.salesperson?.name
   const collection = collectionState(o)
+
+  // Endorsement handoff (Sales/Coordinator -> Operations).
+  const canEndorse = ['coordinator', 'sales', 'operations', 'super_admin'].includes(profile?.role as string)
+  const canAccept = ['operations', 'super_admin'].includes(profile?.role as string)
+  const canReturn = ['operations', 'coordinator', 'business_owner', 'super_admin'].includes(profile?.role as string)
+  const comp: any = completeness.data
+  const hstatus: string | undefined = handoff.data?.status
+
+  const doEndorse = async () => {
+    let overrideReason: string | undefined
+    if (comp && comp.ok === false) {
+      if (profile?.role !== 'super_admin') { toast.error('Order is not complete — resolve the blockers first.'); return }
+      const res = await confirm({ title: 'Endorse despite blockers?', body: 'This order has open completeness blockers. As super admin you may override.', confirmLabel: 'Override and endorse', tone: 'danger', reason: 'optional', reasonLabel: 'Override reason (required)' })
+      if (!res.ok) return
+      if (!res.reason?.trim()) { toast.error('An override reason is required.'); return }
+      overrideReason = res.reason.trim()
+    }
+    try { await endorse.mutateAsync({ orderId: id, overrideReason }); toast.success('Endorsed to Operations.') }
+    catch (e: any) { toast.error(e.message || 'Could not endorse this order.') }
+  }
+  const doAccept = async () => {
+    try { await accept.mutateAsync(id); toast.success('Endorsement accepted.') }
+    catch (e: any) { toast.error(e.message || 'Could not accept the endorsement.') }
+  }
+  const doReturn = async () => {
+    const res = await confirm({ title: 'Return for correction?', body: 'This sends the order back to “For Order Creation”.', confirmLabel: 'Return', tone: 'danger', reason: 'optional', reasonLabel: 'Reason (required)' })
+    if (!res.ok) return
+    if (!res.reason?.trim()) { toast.error('A reason is required to return an order.'); return }
+    try { await returnForCorrection.mutateAsync({ orderId: id, reason: res.reason.trim() }); toast.success('Returned for correction.') }
+    catch (e: any) { toast.error(e.message || 'Could not return this order.') }
+  }
 
   const save = async () => {
     setBusy(true); setMsg(null); setConflict(false)
@@ -207,6 +246,38 @@ export default function OrderDetail() {
             </div>
           )}
           <button className="btn btn-sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        </div>
+      )}
+
+      {(canEndorse || canAccept || canReturn) && (
+        <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <div className="k-label" style={{ marginBottom: 8 }}>Endorsement</div>
+          {hstatus && (
+            <div className="fill-label" style={{ marginBottom: 8 }}>
+              Status: <Badge tone={hstatus === 'Accepted' ? 'ok' : hstatus === 'Returned' ? 'danger' : 'info'}>{hstatus}</Badge>
+              {hstatus === 'Returned' && handoff.data?.return_reason ? ` · ${handoff.data.return_reason}` : ''}
+            </div>
+          )}
+          {comp && (
+            <div style={{ marginBottom: 10 }}>
+              {(comp.hard?.length || 0) === 0
+                ? <div className="fill-label" style={{ color: 'var(--success, var(--accent))' }}>All completeness checks pass.</div>
+                : (
+                  <>
+                    <div className="k-label" style={{ marginBottom: 4 }}>Blockers</div>
+                    <ul className="fill-label" style={{ margin: 0, paddingLeft: 18, color: 'var(--warning)' }}>{comp.hard.map((h: string, i: number) => <li key={i}>{h}</li>)}</ul>
+                  </>
+                )}
+              {(comp.warn?.length || 0) > 0 && (
+                <ul className="fill-label" style={{ margin: '6px 0 0', paddingLeft: 18 }}>{comp.warn.map((w: string, i: number) => <li key={i}>{w}</li>)}</ul>
+              )}
+            </div>
+          )}
+          <div className="toolbar" style={{ gap: 6 }}>
+            {canEndorse && <button className="btn btn-sm" onClick={doEndorse} disabled={endorse.isPending}>{endorse.isPending ? 'Endorsing…' : 'Endorse to Operations'}</button>}
+            {canAccept && hstatus === 'Endorsed' && <button className="btn btn-sm" onClick={doAccept} disabled={accept.isPending}>{accept.isPending ? 'Accepting…' : 'Accept'}</button>}
+            {canReturn && <button className="btn btn-ghost btn-sm" onClick={doReturn} disabled={returnForCorrection.isPending}>Return for correction</button>}
+          </div>
         </div>
       )}
 

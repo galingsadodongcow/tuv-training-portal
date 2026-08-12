@@ -3,7 +3,7 @@ import Guard from '@/components/Guard'
 
 export default function Page() {
   return (
-    <Guard roles={['super_admin', 'sales']}>
+    <Guard roles={['super_admin', 'sales', 'coordinator']}>
       <SalesEntry />
     </Guard>
   )
