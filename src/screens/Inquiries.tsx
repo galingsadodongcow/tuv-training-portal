@@ -32,6 +32,9 @@ export default function Inquiries() {
   // writes) — so the board's action controls are hidden from them, not just refused.
   const canEdit = ['super_admin', 'coordinator', 'sales', 'sales_manager'].includes(profile?.role as string)
 
+  // Table is the default daily view (who to work, what's overdue); the Kanban board
+  // is a toggle for pipeline-movement sessions.
+  const [view, setView] = useState<'table' | 'board'>('table')
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>(emptyForm)
   const [busy, setBusy] = useState(false)
@@ -141,6 +144,16 @@ export default function Inquiries() {
     .filter((q: any) => OPEN_STAGES.includes(q.status))
     .reduce((n: number, q: any) => n + (Number(q.est_value) || 0) * ((Number(q.probability) || 0) / 100), 0)
 
+  // Table rows: open leads first (in stage order), closed last, then by expected close.
+  const rows = useMemo(() => {
+    const rank = (s: string) => (OPEN_STAGES.includes(s) ? STAGES.indexOf(s) : 90 + STAGES.indexOf(s))
+    return [...(inquiries.data || [])].sort((a: any, b: any) => {
+      const d = rank(a.status) - rank(b.status)
+      if (d !== 0) return d
+      return String(a.expected_close || '9999').localeCompare(String(b.expected_close || '9999'))
+    })
+  }, [inquiries.data])
+
   if (inquiries.isLoading) return <TableSkeleton rows={6} cols={5} />
   if (inquiries.error) return <ErrorNote error={inquiries.error} />
 
@@ -154,11 +167,16 @@ export default function Inquiries() {
           <h1>Inquiry pipeline</h1>
           <p>{total} inquir{total === 1 ? 'y' : 'ies'}, {won} closed won. Weighted open pipeline {php(weighted)}. {isAdmin ? 'You see the whole team.' : 'You see your own.'}</p>
         </div>
-        {canEdit && (
-          <div className="toolbar">
+        <div className="toolbar">
+          {(['table', 'board'] as const).map((v) => (
+            <button key={v} className={`btn btn-sm ${view === v ? '' : 'btn-ghost'}`} onClick={() => setView(v)}>
+              {v === 'table' ? 'Table' : 'Board'}
+            </button>
+          ))}
+          {canEdit && (
             <button className="btn" onClick={() => { setEditId(null); setCreating((c) => !c) }}>{creating ? 'Close' : '+ New inquiry'}</button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {canEdit && editId && (
@@ -257,6 +275,52 @@ export default function Inquiries() {
         </div>
       )}
 
+      {view === 'table' ? (
+        <div className="card">
+          {rows.length === 0 ? <div className="empty">No inquiries yet.</div> : (
+          <div className="scroll-x">
+          <table>
+            <thead><tr><th>Customer</th><th>Training interest</th><th>Owner</th><th>Stage</th><th>Health</th><th className="right">Est. value</th><th>Expected close</th>{canEdit && <th></th>}</tr></thead>
+            <tbody>
+              {rows.map((q: any) => {
+                const i = STAGES.indexOf(q.status)
+                const h = inquiryHealth(q)
+                return (
+                  <tr key={q.inquiry_id}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{q.company}</div>
+                      <div className="fill-label">{q.contact || '—'}{q.salesperson?.name ? '' : ''}</div>
+                    </td>
+                    <td className="fill-label">{q.course?.course_name || 'No course yet'}{q.pax ? ` · ${q.pax} pax` : ''}</td>
+                    <td className="fill-label">{q.salesperson?.name || '—'}</td>
+                    <td><span className="fill-label">{q.status}</span></td>
+                    <td>{h ? <span className={`pill ${h.cls}`}>{h.label}</span> : '—'}</td>
+                    <td className="right">{q.est_value ? php(q.est_value) : '—'}{q.probability != null ? <span className="fill-label"> · {q.probability}%</span> : ''}</td>
+                    <td className="fill-label">{q.expected_close ? shortDate(q.expected_close) : '—'}</td>
+                    {canEdit && (
+                      <td className="right">
+                        <div className="toolbar" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                          <button className="linkbtn" onClick={() => openEdit(q)}>Edit</button>
+                          {q.status === 'Closed Lost' ? (
+                            <button className="linkbtn" onClick={() => move(q.inquiry_id, 'Received')}>Reopen</button>
+                          ) : (
+                            <>
+                              {i < 4 && <button className="btn btn-sm" title="Advance" onClick={() => move(q.inquiry_id, STAGES[i + 1])}>›</button>}
+                              {OPEN_STAGES.includes(q.status) && <button className="linkbtn" onClick={() => markLost(q.inquiry_id)}>Lost</button>}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          </div>
+          )}
+        </div>
+      ) : (
       <div className="pipeline">
         {STAGES.map((stage) => (
           <div key={stage} className="pipeline-col">
@@ -304,6 +368,7 @@ export default function Inquiries() {
           </div>
         ))}
       </div>
+      )}
     </>
   )
 }
