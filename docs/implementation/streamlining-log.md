@@ -68,6 +68,20 @@ Implementation-focused record of the simplification work (the "make it lighter /
 
 ---
 
+## Cross-cutting — screen-density sweep
+
+### DEN1 — Fix the one table overflow + tighten stray vertical spacing
+- **Method:** audited all 74 `<table>` elements against the two CSS backstops (`.card:has(> table)` auto-scrolls direct card tables; `.scroll-x` is the manual wrapper for the rest). **The convention was already well-enforced** — nearly every table is either a direct `.card > table` child or already `.scroll-x`-wrapped. This entry records that finding and fixes the small residue.
+- **Fixes:**
+  - **Overflow bug (the one real violation):** the Calendar session-drawer detail `<table>` (`Calendar.tsx`) sat directly in `.drawer-body` (no `overflow-x`), so a long date-segment string could push it past the ~500px drawer. Wrapped it in `.scroll-x`.
+  - **Duplicated section rhythm:** the identical `Section` wrappers in My Work and Operations today each hardcoded `marginBottom: 22` — the same value as `.page-head`. Added a single `.section` utility to `globals.css` and pointed both at it (removes the copy-paste; one source for the worklist rhythm).
+  - **Oversized inter-card margins:** the two `marginBottom: 24` cards (Approvals, Elearning) — the only inter-card margins above 20px in the app — dropped to the dominant **16px** so the vertical rhythm is uniform.
+- **Deliberately deferred (noted, not done):** ~29 inline `marginBottom: 16` on stacked cards across ~15 files. Normalizing them into one utility/token is worthwhile but a broad, purely-visual rewrite better done with a live preview to eyeball each screen — out of scope for this safe mechanical pass.
+- **Result:** no table can overflow its container on a narrow screen, and the stray >20px / duplicated margins are gone. No behaviour or layout-structure change beyond the tightened spacing.
+- **Files:** `src/screens/Calendar.tsx`, `src/screens/MyWork.tsx`, `src/screens/OperationsToday.tsx`, `src/screens/Approvals.tsx`, `src/screens/Elearning.tsx`, `src/app/globals.css`.
+
+---
+
 ## Planned next entries (this phase)
 - S6 — Categories/subcategories: **DB-dependent** (today `course.category` is free-text; a real hierarchy needs tables + RLS) → Supabase session; meanwhile keep category as a managed free-text list in Course management.
 

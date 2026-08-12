@@ -90,7 +90,7 @@ export default function Approvals() {
       {pending.length === 0 ? (
         <Empty title="Nothing pending">Cancellation proposals and forecast sign-offs land here for a decision.</Empty>
       ) : (
-        <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card" style={{ marginBottom: 16 }}>
           <table>
             <thead>
               <tr><th>Type</th><th>Object</th><th>Note</th><th>Decision</th><th className="right">Action</th></tr>

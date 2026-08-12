@@ -277,7 +277,8 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
             <GoPill value={r.go_status} />
             <span className={`pill ${hm.cls}`}>{hm.label}</span>
           </div>
-          <table style={{ marginBottom: 16 }}>
+          <div className="scroll-x" style={{ marginBottom: 16 }}>
+          <table>
             <tbody>
               <tr><td>Dates</td><td className="right">{formatSegments(r.date_segments, r.start_date, r.end_date)}</td></tr>
               <tr><td>Learning type</td><td className="right">{lt(r.modality)}</td></tr>
@@ -286,6 +287,7 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
               {!canEdit && r.venue && <tr><td>Venue</td><td className="right">{r.venue.name}</td></tr>}
             </tbody>
           </table>
+          </div>
           <div style={{ marginBottom: 20 }}>
             <div className="fill-label" style={{ marginBottom: 6 }}>Fill · {r.booked_participants}/{r.min_participants}</div>
             <FillBar booked={r.booked_participants} min={r.min_participants} />

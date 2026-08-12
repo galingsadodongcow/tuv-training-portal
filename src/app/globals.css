@@ -185,6 +185,9 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
 }
 .card-pad { padding: 20px; }
+/* Stacked worklist section (title + its card), single-sourced vertical rhythm
+   shared by My Work / Operations today instead of repeated inline margins. */
+.section { margin-bottom: 22px; }
 /* Wide tables scroll horizontally inside their card instead of overflowing */
 .card:has(> table) { overflow-x: auto; }
 /* Horizontal-scroll wrapper for tables that are not a direct child of .card

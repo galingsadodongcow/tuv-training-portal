@@ -62,7 +62,7 @@ export default function Elearning() {
       {pending.length === 0 ? (
         <Empty title="All caught up">No e-learning orders are waiting for access.</Empty>
       ) : (
-        <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card" style={{ marginBottom: 16 }}>
           <table>
             <thead>
               <tr><th>Order</th><th>Date</th><th>Customer</th><th>Course</th><th>Payment</th><th className="right">Action</th></tr>
