@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad, useCountryRevenue } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import ChartTable, { ChartTableToggle } from '../components/ChartTable'
+import { DateRange } from '../components/inputs/DateRange'
 import { php, money, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
 import { stageLabel } from '../lib/orderState'
@@ -92,20 +93,23 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
     if (range.from && range.to) return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`
     return range.from ? `From ${fmt(range.from)}` : `Through ${fmt(range.to)}`
   }, [range])
+  // The period filter is a DateRange primitive (#140) at month granularity. The
+  // presets resolve here (they depend on "now"); editing an input flips to custom.
+  const onPeriodPreset = (key: string) => {
+    if (['all', 'year', 'ytd', '12m', 'custom'].includes(key)) setPeriod(key as typeof period)
+  }
   const periodBar = (
-    <div className="filters">
-      <div className="seg">
-        {([['all', 'All'], ['year', 'This year'], ['ytd', 'Year to date'], ['12m', 'Last 12 months']] as const).map(([k, label]) => (
-          <button key={k} className={`seg-btn ${period === k ? 'on' : ''}`} onClick={() => setPeriod(k)}>{label}</button>
-        ))}
-      </div>
-      <input type="month" aria-label="Period from" value={range.from}
-        onChange={(e) => { const v = e.target.value; setCustomFrom(v); setCustomTo((t) => t || range.to); setPeriod('custom') }} />
-      <span className="fill-label">to</span>
-      <input type="month" aria-label="Period to" value={range.to}
-        onChange={(e) => { const v = e.target.value; setCustomTo(v); setCustomFrom((f) => f || range.from); setPeriod('custom') }} />
-      <span className="fill-label" style={{ marginLeft: 'auto' }}>{periodLabel}</span>
-    </div>
+    <DateRange
+      granularity="month"
+      presets={[{ key: 'all', label: 'All' }, { key: 'year', label: 'This year' }, { key: 'ytd', label: 'Year to date' }, { key: '12m', label: 'Last 12 months' }]}
+      preset={period}
+      value={range}
+      onChange={(v) => { setCustomFrom(v.from); setCustomTo(v.to); setPeriod('custom') }}
+      onPreset={onPeriodPreset}
+      fromLabel="Period from"
+      toLabel="Period to"
+      label={periodLabel}
+    />
   )
   const digest = useDigest()
   const facts = useOrderFacts()
