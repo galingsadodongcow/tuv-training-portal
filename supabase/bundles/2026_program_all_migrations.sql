@@ -3453,6 +3453,17 @@ create policy p_subcategory_w on public.subcategory for all to authenticated
 
 grant select, insert, update, delete on public.category, public.subcategory to authenticated;
 
+
+-- ## 20260812230000_perf_hot_fk_indexes.sql
+-- Covering indexes for the hot foreign keys joined on every load / used in RLS.
+-- Deferred: cold FKs, multiple_permissive_policies (59), auth_rls_initplan (30).
+create index if not exists idx_orders_created_by        on public.orders(created_by);
+create index if not exists idx_orders_schedule_id        on public.orders(schedule_id);
+create index if not exists idx_order_assignment_sales_id on public.order_assignment(sales_id);
+create index if not exists idx_participant_line_id       on public.participant(line_id);
+create index if not exists idx_schedule_course_id        on public.schedule(course_id);
+create index if not exists idx_course_subcategory_id     on public.course(subcategory_id);
+
 -- ============================================================================
 -- ## _ledger_reconcile
 -- Records every migration section applied by THIS bundle into the Supabase
@@ -3499,5 +3510,6 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('20260812190000', 'sv01_saved_views'),
   ('20260812200000', 'sal01_create_order'),
   ('20260812210000', 'rls_customer_authority'),
-  ('20260812220000', 's6_category_hierarchy')
+  ('20260812220000', 's6_category_hierarchy'),
+  ('20260812230000', 'perf_hot_fk_indexes')
 on conflict (version) do nothing;
