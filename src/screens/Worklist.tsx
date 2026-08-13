@@ -5,13 +5,14 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useFulfillmentQueue, useSalespeople, useInvalidate, useSlaBreaches } from '../hooks/data'
-import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
+import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import SavedViews from '../components/SavedViews'
 import { php, shortDate } from '../lib/format'
 import { primaryFlag, ORDER_VIEWS, orderView, stageLabel } from '../lib/orderState'
+import { updateUrlParams } from '../lib/urlParams'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback']
 const NEXT: Record<string, string> = {
@@ -51,12 +52,11 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
   const who = params.get('who')
     || ((profile?.salesperson?.code && !profile?.salesperson?.is_supervisor) ? 'mine' : 'all')
   const view = params.get('view') || 'all'
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v || v === 'all') n.delete(k)
-    else n.set(k, v)
+  const setParams = (updates: Record<string, string>) => {
+    const n = updateUrlParams(params, updates)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: string) => setParams({ [k]: v })
 
   const myCode = profile?.salesperson?.code
   const canAssignAny = ['super_admin', 'operations', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
@@ -149,7 +149,12 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
   const visibleIds = shown.map((o: any) => o.order_id)
   const selectedVisible = visibleIds.filter((id: string) => selected.has(id))
   const allSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length
-  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggle = (id: string) => setSelected((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
   const toggleAll = () => setSelected((s) => {
     const n = new Set(s)
     if (allSelected) visibleIds.forEach((id: string) => n.delete(id))
@@ -359,13 +364,13 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
           <div className="empty">
             {view !== 'all' || stage !== 'all' ? (
               <>Nothing matches the current filters{whoScoped.length > 0 ? ` — ${whoScoped.length} hidden` : ''}.{' '}
-                <button className="linkbtn" onClick={() => { setParam('view', 'all'); setParam('stage', 'all') }}>Clear filters</button></>
+                <button className="linkbtn" onClick={() => setParams({ view: 'all', stage: 'all' })}>Clear filters</button></>
             ) : who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
           </div>
         ) : (whoScoped.length - rows.length > 0 && (view !== 'all' || stage !== 'all')) ? (
           <div className="fill-label" style={{ padding: '10px 12px' }}>
             {whoScoped.length - rows.length} hidden by the current filters —{' '}
-            <button className="linkbtn" onClick={() => { setParam('view', 'all'); setParam('stage', 'all') }}>Clear filters</button>
+            <button className="linkbtn" onClick={() => setParams({ view: 'all', stage: 'all' })}>Clear filters</button>
           </div>
         ) : null}
       </div>

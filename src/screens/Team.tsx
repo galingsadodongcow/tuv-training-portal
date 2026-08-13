@@ -1,8 +1,6 @@
 'use client'
 import { useMemo } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { useAuth } from '../hooks/useAuth'
-import { Role } from '../lib/roles'
 import { useFulfillmentQueue } from '../hooks/data'
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
@@ -24,8 +22,6 @@ const TABS: Tab[] = [
 ]
 
 export default function Team() {
-  const { profile } = useAuth()
-  const role = profile?.role as Role | undefined
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()

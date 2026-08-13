@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useSchedules, useChannelPax, useYears, useSessionHealth, useTrainers, useVenues, useInvalidate, checkConflicts } from '../hooks/data'
@@ -15,6 +15,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
+import { updateUrlParams } from '../lib/urlParams'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
@@ -423,12 +424,11 @@ export default function Calendar() {
   const sortDir = get('dir', 'asc')
   const gridMonth = month === 'all' ? CURRENT_MONTH : month
 
-  const setParam = (k: string, v: any) => {
-    const next = new URLSearchParams(params.toString())
-    if (v === 'all' || v === '' || v == null) next.delete(k)
-    else next.set(k, v)
+  const setParams = (updates: Record<string, any>) => {
+    const next = updateUrlParams(params, updates)
     router.replace(`${pathname}?${next.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: any) => setParams({ [k]: v })
 
   const sched = useSchedules(year)
   const pax = useChannelPax()
@@ -491,18 +491,18 @@ export default function Calendar() {
   }).length
 
   // Week/day anchor and the seven Sun–Sat days around it.
-  const anchor = new Date(`${dateStr}T00:00:00`)
+  const anchor = useMemo(() => new Date(`${dateStr}T00:00:00`), [dateStr])
   const weekDays = useMemo(() => {
     const start = new Date(anchor)
     start.setDate(anchor.getDate() - anchor.getDay())
     return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
-  }, [dateStr])
+  }, [anchor])
   const weekLabel = `${shortDate(weekDays[0])} – ${shortDate(weekDays[6])}, ${weekDays[6].getFullYear()}`
   const dayLabel = `${WEEKDAYS[anchor.getDay()]}, ${shortDate(anchor)}, ${anchor.getFullYear()}`
   const weekCount = useMemo(() => base.filter((r: any) => weekDays.some((d) => sameDay(r.start_date, d))).length, [base, weekDays])
   const dayRows = useMemo(
     () => base.filter((r: any) => sameDay(r.start_date, anchor)).sort((a: any, b: any) => (a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0)),
-    [base, dateStr]
+    [base, anchor]
   )
 
   if (sched.isLoading || years.isLoading) return <Spinner label="Loading calendar" />
@@ -522,12 +522,12 @@ export default function Calendar() {
   const sortBtn = (key: string, label: string, align?: string) => {
     const toggleSort = () => {
       if (sortKey === key) setParam('dir', sortDir === 'asc' ? 'desc' : 'asc')
-      else { setParam('sort', key); setParam('dir', 'asc') }
+      else setParams({ sort: key, dir: 'asc' })
     }
     const ariaSort = sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
     return (
       <th className={align} style={{ cursor: 'pointer', userSelect: 'none' }}
-        role="button" tabIndex={0} aria-sort={ariaSort as any}
+        tabIndex={0} aria-sort={ariaSort as any}
         onClick={toggleSort}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort() } }}>
         {label}{sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}

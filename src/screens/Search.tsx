@@ -31,6 +31,7 @@ export default function Search() {
   // Recent searches (#136) — kept in localStorage so a repeat lookup is one click.
   const [recent, setRecent] = useState<string[]>([])
   const timer = useRef<any>(null)
+  const requestId = useRef(0)
 
   useEffect(() => {
     try {
@@ -55,6 +56,7 @@ export default function Search() {
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
     const t = q.trim()
+    const id = ++requestId.current
     // Reflect the term in the URL (replace, so typing doesn't stack history).
     const next = t ? `${pathname}?q=${encodeURIComponent(t)}` : pathname
     const current = `${pathname}${urlQ ? `?q=${encodeURIComponent(urlQ)}` : ''}`
@@ -64,6 +66,7 @@ export default function Search() {
     setLoading(true)
     timer.current = setTimeout(async () => {
       const { data, error } = await supabase.rpc('fn_global_search', { p_q: t })
+      if (id !== requestId.current) return
       if (error) { setError(error.message); setResults([]) }
       else {
         const hits = visibleHits((data || []) as any, role)
@@ -73,7 +76,9 @@ export default function Search() {
       setSearched(t)
       setLoading(false)
     }, 200)
-    return () => timer.current && clearTimeout(timer.current)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, role])
 

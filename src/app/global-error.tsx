@@ -1,8 +1,12 @@
 'use client'
 
+import { useEffect } from 'react'
+import { reportError } from '@/lib/telemetry'
+
 // Catches errors thrown in the root layout itself. Must render its own
 // <html>/<body> because it replaces the root layout when it fires.
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => reportError(error, 'global-error-boundary'), [error])
   return (
     <html lang="en">
       <body style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', margin: 0 }}>

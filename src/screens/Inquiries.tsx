@@ -14,6 +14,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { shortDate, php } from '../lib/format'
 import { inquiryHealth } from '../lib/leadHealth'
+import { updateUrlParams } from '../lib/urlParams'
 
 // The lead pipeline, left to right. Matches the inquiry_status enum.
 const STAGES = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback', 'Closed Won', 'Closed Lost']
@@ -118,7 +119,8 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
     const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
     let { error } = await supabase.from('inquiry').insert(body)
     if (error && missingColumn(error)) {
-      const { est_value, probability, expected_close, source, ...base } = body
+      const base = { ...body }
+      ;['est_value', 'probability', 'expected_close', 'source'].forEach((key) => delete (base as any)[key])
       ;({ error } = await supabase.from('inquiry').insert(base))
     }
     if (error) toast.error(error.message)
@@ -162,7 +164,8 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
     const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
     let { error } = await supabase.from('inquiry').update(body).eq('inquiry_id', editId)
     if (error && missingColumn(error)) {
-      const { est_value, probability, expected_close, source, ...base } = body
+      const base = { ...body }
+      ;['est_value', 'probability', 'expected_close', 'source'].forEach((key) => delete (base as any)[key])
       ;({ error } = await supabase.from('inquiry').update(base).eq('inquiry_id', editId))
     }
     if (error) toast.error(error.message)
@@ -260,12 +263,11 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => {
     if (focusId) document.getElementById(`inq-${focusId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focusId, inquiries.data])
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v || v === 'all') n.delete(k)
-    else n.set(k, v)
+  const setParams = (updates: Record<string, string>) => {
+    const n = updateUrlParams(params, updates)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: string) => setParams({ [k]: v })
 
   // Owner options are the salespeople who actually have inquiries in view, so the
   // dropdown stays short and RLS-relevant (a rep only ever sees their own).
@@ -465,7 +467,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
             </select>
           )}
           {(statusFilter !== 'all' || ownerFilter !== 'all') && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setParam('status', 'all'); setParam('owner', 'all') }}>Clear filters</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setParams({ status: 'all', owner: 'all' })}>Clear filters</button>
           )}
           <span className="fill-label" style={{ alignSelf: 'center' }}>{rows.length} shown</span>
         </div>
@@ -478,7 +480,7 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
           <table>
             <thead><tr>
               {([['company', 'Customer'], ['course', 'Training interest'], ['owner', 'Owner'], ['status', 'Stage']] as const).map(([key, label]) => (
-                <th key={key} className="clickable" role="button" tabIndex={0}
+                <th key={key} className="clickable" tabIndex={0}
                   aria-sort={tableSort.sort.key === key ? (tableSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   onClick={() => tableSort.toggle(key)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableSort.toggle(key) } }}>
@@ -486,13 +488,13 @@ export default function Inquiries({ embedded }: { embedded?: boolean } = {}) {
                 </th>
               ))}
               <th>Health</th>
-              <th className="right clickable" role="button" tabIndex={0}
+              <th className="right clickable" tabIndex={0}
                 aria-sort={tableSort.sort.key === 'est_value' ? (tableSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                 onClick={() => tableSort.toggle('est_value')}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableSort.toggle('est_value') } }}>
                 Est. value{tableSort.indicator('est_value')}
               </th>
-              <th className="clickable" role="button" tabIndex={0}
+              <th className="clickable" tabIndex={0}
                 aria-sort={tableSort.sort.key === 'expected_close' ? (tableSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                 onClick={() => tableSort.toggle('expected_close')}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableSort.toggle('expected_close') } }}>

@@ -99,7 +99,11 @@ export default function CourseForm({ courseId, onDone }: { courseId?: string; on
       // Retry without the newer columns if the migrations that add them are not
       // applied yet, so course editing never breaks (strip-and-retry on 42703).
       const missingColumn = (e: any) => !!e && (e.code === '42703' || /column .* does not exist/i.test(e.message || ''))
-      const stripped = (o: any) => { const { is_certification, max_pax, has_assessment, pass_mark, cert_validity_months, subcategory_id, ...rest } = o; return rest }
+      const stripped = (o: any) => {
+        const rest = { ...o }
+        ;['is_certification', 'max_pax', 'has_assessment', 'pass_mark', 'cert_validity_months', 'subcategory_id'].forEach((key) => delete rest[key])
+        return rest
+      }
       let courseId: any = id
       if (editing) {
         let { error } = await supabase.from('course').update(body).eq('course_id', id)

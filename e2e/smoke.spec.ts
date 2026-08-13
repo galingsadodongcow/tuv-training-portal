@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 
 // Credential-free acceptance smoke tests. They confirm the app is served and
 // that its authentication gate works, without needing a real account. Run them
@@ -11,6 +12,12 @@ test.describe('public surface', () => {
     await expect(page.getByText('Academy Portal')).toBeVisible()
     await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible()
     await expect(page.getByLabel(/work email/i)).toBeVisible()
+  })
+
+  test('login has no serious automated accessibility violations', async ({ page }) => {
+    await page.goto('/login')
+    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+    expect(results.violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual([])
   })
 
   test('the root path resolves to a known screen', async ({ page }) => {

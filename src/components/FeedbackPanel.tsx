@@ -22,7 +22,7 @@ export default function FeedbackPanel({ scheduleId }: { scheduleId: string }) {
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<any>({ nps: '', content_rating: '', trainer_rating: '', venue_rating: '', comments: '' })
 
-  const rows = list.data || []
+  const rows = useMemo(() => list.data || [], [list.data])
   const summary = useMemo(() => {
     const withNps = rows.filter((r: any) => r.nps != null)
     const promoters = withNps.filter((r: any) => r.nps >= 9).length

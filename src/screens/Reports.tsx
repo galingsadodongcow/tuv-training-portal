@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad, useCountryRevenue } from '../hooks/data'
@@ -79,14 +79,14 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
       default: return { from: '', to: '' }
     }
   }, [period, customFrom, customTo])
-  const inPeriod = (d?: string | null) => {
+  const inPeriod = useCallback((d?: string | null) => {
     if (!range.from && !range.to) return true
     if (!d) return false
     const m = String(d).slice(0, 7)
     if (range.from && m < range.from) return false
     if (range.to && m > range.to) return false
     return true
-  }
+  }, [range])
   const periodLabel = useMemo(() => {
     if (!range.from && !range.to) return 'All time'
     const fmt = (m: string) => (m ? monthLabel(`${m}-01`) : '—')
@@ -111,21 +111,24 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
       label={periodLabel}
     />
   )
-  const digest = useDigest()
-  const facts = useOrderFacts()
-  const receivables = useReceivables()
-  const certs = useCertsExpiring()
-  const pnl = useProfitability()
-  const funnel = useFunnel()
-  const forecast = useForecastVsActual()
-  const trainerLoad = useTrainerLoad()
-  const countryRev = useCountryRevenue()
+  // Only load the active report. The analytics tab intentionally uses its four
+  // summary datasets together; hidden tabs no longer download thousands of rows.
+  const digest = useDigest(activeTab === 'digest')
+  const facts = useOrderFacts(activeTab === 'revenue', range.from, range.to)
+  const receivables = useReceivables(activeTab === 'receivables')
+  const certs = useCertsExpiring(activeTab === 'certs')
+  const pnl = useProfitability(activeTab === 'margin', range.from, range.to)
+  const analyticsEnabled = activeTab === 'analytics'
+  const funnel = useFunnel(analyticsEnabled)
+  const forecast = useForecastVsActual(analyticsEnabled)
+  const trainerLoad = useTrainerLoad(analyticsEnabled)
+  const countryRev = useCountryRevenue(analyticsEnabled)
 
   const margins = useMemo(() => {
     const rows = (pnl.data || []).filter((r: any) => (Number(r.revenue) > 0 || Number(r.total_cost) > 0) && inPeriod(r.start_date))
     const t = rows.reduce((a: any, r: any) => ({ revenue: a.revenue + Number(r.revenue || 0), cost: a.cost + Number(r.total_cost || 0), margin: a.margin + Number(r.margin || 0) }), { revenue: 0, cost: 0, margin: 0 })
     return { rows, ...t }
-  }, [pnl.data, range])
+  }, [pnl.data, inPeriod])
   const [verifyNo, setVerifyNo] = useState('')
   const [verifyResult, setVerifyResult] = useState<any>(undefined)
   const [verifyError, setVerifyError] = useState<any>(null)
@@ -174,7 +177,7 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
       return t
     }, { orders: 0, seats: 0, booked: 0, collected: 0 })
     return { months, channels, sales, totals }
-  }, [facts.data, range])
+  }, [facts.data, inPeriod])
 
   const stamp = () => new Date().toISOString().slice(0, 10)
   const exportMonths = () =>

@@ -12,6 +12,7 @@ import SavedViews from '../components/SavedViews'
 import { Legend } from '../components/Legend'
 import { FilterChip } from '../components/inputs/FilterChip'
 import { Tooltip } from '../components/inputs/Tooltip'
+import { updateUrlParams } from '../lib/urlParams'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -27,16 +28,27 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
   const [page, setPage] = useState(0)
 
   const q = params.get('q') || ''
+  const [searchInput, setSearchInput] = useState(q)
   const stage = params.get('stage') || 'all'
   const pay = params.get('pay') || 'all'
   const sortKey = params.get('sort') || ''
   const sortDir: 'asc' | 'desc' = params.get('dir') === 'asc' ? 'asc' : 'desc'
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v || v === 'all') n.delete(k)
-    else n.set(k, v)
+  const setParams = (updates: Record<string, string>) => {
+    const n = updateUrlParams(params, updates)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: string) => setParams({ [k]: v })
+
+  useEffect(() => setSearchInput(q), [q])
+  useEffect(() => {
+    if (searchInput === q) return
+    const current = params.toString()
+    const timer = window.setTimeout(() => {
+      const next = updateUrlParams({ toString: () => current }, { q: searchInput })
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput, q, params, pathname, router])
   // Sorting runs in the database across the whole filtered set (not just the
   // visible page). Clicking a header sets the sort in the URL and resets paging;
   // clicking the active column flips the direction.
@@ -90,7 +102,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
       </div>
 
       <div className="filters">
-        <input placeholder="Search order # or SAP…" value={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 240 }} />
+        <input placeholder="Search order # or SAP…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} style={{ minWidth: 240 }} />
         <select value={stage} onChange={(e) => setParam('stage', e.target.value)}>
           <option value="all">All stages</option>
           {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)}</option>))}
@@ -106,7 +118,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
           {q && <FilterChip label={`Search: ${q}`} onClear={() => setParam('q', '')} />}
           {stage !== 'all' && <FilterChip label={`Stage: ${stageLabel(stage)}`} onClear={() => setParam('stage', 'all')} />}
           {pay !== 'all' && <FilterChip label={`Payment: ${pay}`} onClear={() => setParam('pay', 'all')} />}
-          <button className="btn btn-ghost btn-sm" onClick={() => { setParam('q', ''); setParam('stage', 'all'); setParam('pay', 'all') }}>Clear all</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setParams({ q: '', stage: 'all', pay: 'all' })}>Clear all</button>
         </div>
       )}
 
@@ -125,7 +137,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
               <thead>
                 <tr>
                   {([['order_id', 'Order'], ['customer', 'Customer'], ['fulfillment_stage', 'Stage'], ['sap_order_no', 'SAP'], ['channel', 'Channel'], ['total_seats', 'Seats', 'right'], ['total_amount', 'Amount', 'right']] as const).map(([key, label, align]) => (
-                    <th key={key} className={`clickable${align ? ' ' + align : ''}`} role="button" tabIndex={0}
+                    <th key={key} className={`clickable${align ? ' ' + align : ''}`} tabIndex={0}
                       aria-sort={sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => toggleSort(key)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}>

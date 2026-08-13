@@ -4,13 +4,13 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import Shell from '@/components/Shell'
 import CommandPalette from '@/components/CommandPalette'
-import { Spinner } from '@/components/ui'
+import { ErrorNote, Spinner } from '@/components/ui'
 
 // Authenticated shell: requires a session (redirects to /login otherwise) and a
 // loaded profile before rendering any screen. Per-route role restrictions are
 // applied with <Guard> inside the individual route files.
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, profileError, retryProfile, signOut } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -27,7 +27,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (!profile) {
     return (
       <div className="login-wrap">
-        <Spinner label="Loading profile" />
+        <div className="card card-pad login-card">
+          <h1 style={{ fontSize: 20, marginTop: 0 }}>Unable to load your profile</h1>
+          <ErrorNote error={profileError || new Error('No application profile was returned.')} />
+          <div className="toolbar" style={{ marginTop: 16 }}>
+            <button className="btn" onClick={retryProfile}>Try again</button>
+            <button className="btn btn-ghost" onClick={() => signOut()}>Sign out</button>
+          </div>
+        </div>
       </div>
     )
   }

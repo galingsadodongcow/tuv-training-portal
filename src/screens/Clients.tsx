@@ -7,6 +7,7 @@ import { ErrorNote } from '../components/ui'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num } from '../lib/format'
 import { exportCsv } from '../lib/csv'
+import { updateUrlParams } from '../lib/urlParams'
 
 const PAGE_SIZE = 50
 
@@ -20,14 +21,19 @@ export default function Clients() {
 
   // Search and sort live in the URL so a view survives navigation (#128).
   const q = params.get('q') || ''
+  const [searchInput, setSearchInput] = useState(q)
   const sortKey = params.get('sort') || 'company'
   const sortDir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc'
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v) n.delete(k)
-    else n.set(k, v)
-    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
-  }
+  useEffect(() => setSearchInput(q), [q])
+  useEffect(() => {
+    if (searchInput === q) return
+    const current = params.toString()
+    const timer = window.setTimeout(() => {
+      const next = updateUrlParams({ toString: () => current }, { q: searchInput }, [''])
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput, q, params, pathname, router])
   // Sorting runs in the database across every match, not just the visible page.
   // Clicking a header sets the sort in the URL and resets paging; clicking the
   // active column flips the direction.
@@ -84,7 +90,7 @@ export default function Clients() {
         ))}
         {tab === 'clients' && (
           <>
-            <input placeholder="Search company, name, email…" defaultValue={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 240 }} />
+            <input placeholder="Search company, name, email…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} style={{ minWidth: 240 }} />
             <button className="btn btn-ghost btn-sm" onClick={exportClients} disabled={rows.length === 0}
               title="Exports only the clients on the current page, not all matches.">Export this page</button>
           </>
@@ -103,7 +109,7 @@ export default function Clients() {
                 <thead>
                   <tr>
                     {([['company', 'Company'], ['name', 'Contact'], ['email', 'Email'], ['phone', 'Phone'], ['owner', 'Owner']] as const).map(([key, label]) => (
-                      <th key={key} className="clickable" role="button" tabIndex={0}
+                    <th key={key} className="clickable" tabIndex={0}
                         aria-sort={sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                         onClick={() => toggleSort(key)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}>
