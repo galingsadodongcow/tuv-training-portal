@@ -123,6 +123,8 @@ handoff correctly but does not enforce the precondition.
 1. **Decide and fix cost visibility** (IMM-1) — the only item that should block a pilot.
 2. **Create a least-privileged test account**, restore E2E secrets, and let the
    authenticated Playwright suite (already built and wired) start running.
+   Scope it **read-only**: there is no staging database and, by decision, there
+   will not be one, so signed-in automation must never write.
 3. **Assign owners to the 40 unowned orders**; add a completeness rule that an
    order cannot be endorsed without one.
 4. Staff the 6 unstaffed live sessions.

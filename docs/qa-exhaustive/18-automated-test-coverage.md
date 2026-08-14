@@ -51,9 +51,24 @@ Priority order, highest value first:
 5. **axe on all 22 screens** — reuses the existing `AxeBuilder` wiring.
 6. **Viewport matrix** across the 8 target sizes.
 
-## Constraint to respect
+## Constraint to respect — decided
 
-Destructive CRUD tests must **not** run against production. Either stand up a
-second Supabase project for CI, or restrict authenticated CI to read-only
-assertions. Today only production exists, which is why CRUD automation is
-recommended rather than added.
+Destructive CRUD tests must **not** run against production.
+
+**Decision (owner, 2026-08-14): there will be no second Supabase project for
+staging.** Production is the only database and will remain so.
+
+Consequences, which follow directly and should not be re-litigated later:
+
+1. **Authenticated CI must be strictly read-only.** The test account gets a
+   least-privileged role and the specs assert *rendering, navigation, role
+   scoping and filter behaviour* — never create/update/delete.
+2. **Item 4 of the list above (core CRUD happy paths) is off the table** as
+   automation. CRUD correctness stays covered by the RLS regression suite
+   (which builds its own throwaway Postgres in CI) plus manual verification.
+3. **The RLS regression workflow becomes more important, not less** — it is now
+   the only place where write paths are exercised automatically. Extend it
+   rather than the browser suite when a write rule changes.
+4. Any future migration remains a production change on first application, so the
+   throwaway-Postgres validation step used for the 2026-08-14 migrations should
+   stay standard practice.

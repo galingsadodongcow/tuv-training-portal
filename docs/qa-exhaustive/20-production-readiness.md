@@ -60,9 +60,13 @@ readiness blockers.
 
 ## Risks to carry
 
-- **Production is the only database.** There is no staging, so every DB change
-  is a production change and no destructive test can ever run safely. Standing
-  up a second project is the highest-leverage infrastructure investment
-  available.
+- **Production is the only database — and this is now a settled decision**
+  (owner, 2026-08-14: no second Supabase project). Two consequences to carry
+  permanently rather than revisit: every DB change is a production change on
+  first application, and no destructive automated test can ever run. Mitigations
+  in use: validate each migration against a throwaway PostgreSQL first (as was
+  done for the 2026-08-14 migrations, which caught a real off-by-one), keep
+  authenticated CI strictly read-only, and treat the RLS regression suite — which
+  builds its own disposable database — as the home for write-path testing.
 - **No production error visibility** until telemetry is pointed somewhere.
 - **Repo ↔ ledger version drift** persists by design of the apply path (DQ-8).

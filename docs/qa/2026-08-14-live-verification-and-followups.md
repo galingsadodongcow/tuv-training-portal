@@ -12,10 +12,13 @@ CLAUDE.md.
   exists and is `SECURITY INVOKER`, and all five trigram indexes plus the partial
   "hot" indexes are present. `pg_trgm` 1.6 is installed in `extensions`. So the
   handover's "apply to staging first" step is already moot for this migration.
-- **No separate staging Supabase project exists** for this portal among the
-  linked projects. The target is the production database, so DB changes should
-  go through `.github/workflows/apply-supabase.yml` (bundle apply) and be
-  re-verified live, not applied casually.
+- **No separate staging Supabase project exists** for this portal, and by owner
+  decision (2026-08-14) none will be created. The target is the production
+  database, so DB changes should go through
+  `.github/workflows/apply-supabase.yml` (bundle apply) or be applied
+  deliberately and re-verified live — never casually. Validate every migration
+  against a throwaway PostgreSQL first; that practice caught a real off-by-one
+  in the 2026-08-14 auto-code migration.
 
 ## Drift found and reconciled
 
