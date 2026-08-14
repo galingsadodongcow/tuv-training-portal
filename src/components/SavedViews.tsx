@@ -10,8 +10,36 @@ import { useToast } from './Toast'
 // queue). The screen already keeps its filter state in the URL; a "view" is just
 // the subset of those params that define it. Applying a view rewrites only those
 // params (leaving e.g. the CRM shell's ?tab= intact); saving captures the ones
-// currently set. Role-default views (shared_role, seeded server-side) show with a
-// ★ and are read-only; a user's own views can be deleted. RLS scopes both.
+// currently set. Role-default views (shared_role, seeded server-side) are
+// read-only; a user's own views can be deleted. RLS scopes both.
+//
+// The ★ that used to mark defaults *and* label the save button was doing two
+// unrelated jobs and read as a rating rather than a state, so it is gone: a
+// default now carries a plain "Default" badge, and what is actually filtering
+// the list is spelled out in a summary row underneath (owner feedback).
+
+// Human labels for the URL params each surface saves. Anything not listed falls
+// back to the raw key, so adding a param to a surface's paramKeys never breaks
+// the summary — it just shows the key until a label is added here.
+const FILTER_LABEL: Record<string, string> = {
+  q: 'Search',
+  cal: 'View',
+  month: 'Month',
+  year: 'Year',
+  status: 'Status',
+  category: 'Category',
+  lt: 'Learning type',
+  stage: 'Stage',
+  pay: 'Payment',
+  who: 'Owner',
+  view: 'View',
+  sort: 'Sorted by',
+  dir: 'Direction',
+}
+
+// Values that are stored lowercase/slug-ish in the URL but read better titled.
+const prettyValue = (v: string) => (v === 'all' ? 'All' : v.charAt(0).toUpperCase() + v.slice(1))
+
 export default function SavedViews({ surface, paramKeys }: { surface: string; paramKeys: string[] }) {
   const { profile } = useAuth()
   const params = useSearchParams()
@@ -48,12 +76,22 @@ export default function SavedViews({ surface, paramKeys }: { surface: string; pa
     for (const k of paramKeys) if (cfg?.[k] != null && cfg[k] !== '') c[k] = String(cfg[k])
     return JSON.stringify(c)
   }
-  const hasFilters = Object.keys(current).length > 0
+  const activeKeys = Object.keys(current)
+  const hasFilters = activeKeys.length > 0
 
   const apply = (v: any) => {
     const n = new URLSearchParams(params.toString())
     for (const k of paramKeys) n.delete(k)
     for (const k of paramKeys) if (v.config?.[k] != null && v.config[k] !== '') n.set(k, String(v.config[k]))
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
+
+  // Drop one filter, or all of this surface's filters. Only paramKeys are
+  // touched so unrelated params (?tab=, ?session=) survive.
+  const clear = (key?: string) => {
+    const n = new URLSearchParams(params.toString())
+    if (key) n.delete(key)
+    else for (const k of paramKeys) n.delete(k)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
 
@@ -81,36 +119,53 @@ export default function SavedViews({ surface, paramKeys }: { surface: string; pa
   }
 
   return (
-    <div className="saved-views" role="group" aria-label="Saved views">
-      {views.map((v) => {
-        const active = configSig(v.config) === currentSig
-        return (
-          <span key={v.view_id} className={`sv-chip${active ? ' sv-active' : ''}`}>
-            <button type="button" className="sv-apply" aria-pressed={active} onClick={() => apply(v)}
-              title={v.shared_role ? 'Default view' : 'Your saved view'}>
-              {v.shared_role ? '★ ' : ''}{v.name}
-            </button>
-            {isOwn(v) && (
-              <button type="button" className="sv-del" aria-label={`Delete view ${v.name}`} onClick={() => remove(v)}>×</button>
-            )}
-          </span>
-        )
-      })}
+    <div className="saved-views-wrap">
+      <div className="saved-views" role="group" aria-label="Saved views">
+        {views.map((v) => {
+          const active = configSig(v.config) === currentSig
+          return (
+            <span key={v.view_id} className={`sv-chip${active ? ' sv-active' : ''}`}>
+              <button type="button" className="sv-apply" aria-pressed={active} onClick={() => apply(v)}
+                title={v.shared_role ? 'Shared default view for your role' : 'Your saved view'}>
+                {v.name}
+                {v.shared_role && <span className="sv-default">Default</span>}
+              </button>
+              {isOwn(v) && (
+                <button type="button" className="sv-del" aria-label={`Delete view ${v.name}`} onClick={() => remove(v)}>×</button>
+              )}
+            </span>
+          )
+        })}
 
-      {saving ? (
-        <span className="sv-chip sv-saving">
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} aria-label="Name this view"
-            placeholder="Name this view"
-            onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setSaving(false); setName('') } }} />
-          <button type="button" className="btn btn-sm" onClick={save} disabled={!name.trim() || upsert.isPending}>Save</button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSaving(false); setName('') }}>Cancel</button>
-        </span>
-      ) : (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSaving(true)}
-          disabled={!hasFilters || !profile?.user_id}
-          title={hasFilters ? 'Save the current filters as a view' : 'Set a filter first, then save it as a view'}>
-          ★ Save this view
-        </button>
+        {saving ? (
+          <span className="sv-chip sv-saving">
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} aria-label="Name this view"
+              placeholder="Name this view"
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setSaving(false); setName('') } }} />
+            <button type="button" className="btn btn-sm" onClick={save} disabled={!name.trim() || upsert.isPending}>Save</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSaving(false); setName('') }}>Cancel</button>
+          </span>
+        ) : (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSaving(true)}
+            disabled={!hasFilters || !profile?.user_id}
+            title={hasFilters ? 'Save the current filters as a view' : 'Set a filter first, then save it as a view'}>
+            Save current filters
+          </button>
+        )}
+      </div>
+
+      {hasFilters && (
+        <div className="sv-filters" aria-live="polite">
+          <span className="fill-label">Filtering by</span>
+          {activeKeys.map((k) => (
+            <span key={k} className="sv-filter">
+              <span className="sv-filter-k">{FILTER_LABEL[k] || k}:</span> {prettyValue(current[k])}
+              <button type="button" className="sv-filter-x" onClick={() => clear(k)}
+                aria-label={`Remove the ${FILTER_LABEL[k] || k} filter`}>×</button>
+            </span>
+          ))}
+          <button type="button" className="linkbtn" onClick={() => clear()}>Clear all</button>
+        </div>
       )}
     </div>
   )
