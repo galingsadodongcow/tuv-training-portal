@@ -25,9 +25,44 @@ Result: **40 passed** against a local production build (13.4s).
 | E2E public (Playwright) | 40 tests (above) |
 | E2E authenticated | **Harness exists, inert** — `auth.setup.ts` + `authenticated.spec.ts` activate only when `E2E_USER_EMAIL`/`PASSWORD` are set |
 | Accessibility | axe WCAG 2.0 A/AA on `/login` only |
-| RLS regression | `rls-regression.yml` — throwaway Postgres, fixture built from real policy migrations, assertions on ownership + RPC locks |
+| RLS regression | `rls-regression.yml` — throwaway Postgres, fixture built from real policy migrations. **Extended 2026-08-14: 9 → 20 assertions**, now covering the delegation matrix, order-creation authority and cost/margin masking (see below) |
 | Migration parity | `migration-parity.yml` — every migration ≥ cutoff must appear in the deployment bundle |
 | Static | ESLint `--max-warnings=0`, `tsc --noEmit` |
+
+## RLS suite extension (2026-08-14)
+
+The boundary checks that were run by hand against the live database during the
+audit are now codified, so they cannot regress silently. Assertions **J–T**:
+
+| ID | Guards |
+|---|---|
+| J | A supervisor may grant `sales` and nothing else |
+| K | Supervisor scope: own-team rep yes; other team, self and operations no |
+| L | Escalation — supervisor cannot grant `super_admin` |
+| M | Oversight ring-fence — operations cannot act on business_owner or super_admin, keeps sales |
+| N | Operations cannot grant `business_owner` (matrix is downward-only) |
+| O | A supervisor's team is forced server-side on roster writes |
+| P | `business_owner` cannot create an order (`42501`) |
+| Q | `sales_manager` can (reaches validation `22004`, not the role check) |
+| R | A sales rep sees revenue but **no cost and no margin** |
+| S | Operations still gets the full P&L — proves R is a gate, not a broken view |
+| T | Rate columns not directly readable; safe columns still are |
+
+The fixture grew skeletons for `trainer`, `venue`, `session_trainer`,
+`order_line`, the costing columns on `schedule`, all eight `user_role` values and
+the three order enums, and now `\i`s four more real migrations
+(`20260814060000/070000/080000/090000`).
+
+**Mutation-tested, not just green.** Breaking `fn_cost_visible()` to return true
+fires `REGRESSION R`; widening the grant matrix fires `REGRESSION J`. In both
+cases psql exits **3**, so CI fails — verified, because an assertion that passes
+for the wrong reason is worse than no assertion.
+
+Why this suite rather than authenticated browser tests: it exercises the
+*authoritative* layer (RLS + the SECURITY DEFINER RPCs), it can test **write**
+paths safely on a disposable database, and it needs **no credentials** — where a
+signed-in Playwright suite would require a standing production account and still
+could not write.
 
 ## The gap
 
