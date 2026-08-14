@@ -10,6 +10,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
 import SavedViews from '../components/SavedViews'
+import OwnerAssign, { canAssignAnyOwner } from '../components/OwnerAssign'
 import { php, shortDate } from '../lib/format'
 import { primaryFlag, ORDER_VIEWS, orderView, stageLabel } from '../lib/orderState'
 import { updateUrlParams } from '../lib/urlParams'
@@ -59,7 +60,10 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
   const setParam = (k: string, v: string) => setParams({ [k]: v })
 
   const myCode = profile?.salesperson?.code
-  const canAssignAny = ['super_admin', 'operations', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
+  // Shared with the per-row control so the bulk toolbar and the row picker can
+  // never disagree about who may assign (this also picks up the coordinator,
+  // which p_asg_coord allows but the old local check missed).
+  const canAssignAny = canAssignAnyOwner(profile)
   // Fulfillment is a write action; management + auditor are read-only (RLS rejects
   // their stage writes) so the advance/select controls are hidden from them.
   const canAct = !['management', 'auditor'].includes(profile?.role as string)
@@ -112,37 +116,8 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
     setBusy('')
   }
 
-  const selfAssign = async (orderId: string) => {
-    setBusy(orderId); setMsg(null)
-    // upsert keyed on order_id: one assignment per order, no check-then-act race.
-    const { error } = await supabase.from('order_assignment')
-      .upsert({ order_id: orderId, sales_id: profile?.sales_id }, { onConflict: 'order_id' })
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
-    setBusy('')
-  }
-
-  const reassign = async (orderId: string, salesId: string) => {
-    // Reassignment is a destructive action: confirm and take a reason first.
-    const who = salesId ? (people.data?.find((p: any) => p.sales_id === salesId)?.name || 'another owner') : 'no one'
-    const res = await confirm({
-      title: salesId ? 'Reassign this order?' : 'Unassign this order?',
-      body: `Ownership changes to ${who}.`,
-      confirmLabel: salesId ? 'Reassign' : 'Unassign',
-      tone: salesId ? 'default' : 'danger',
-      reason: 'optional',
-    })
-    if (!res.ok) return
-    setBusy(orderId); setMsg(null)
-    // Empty selection means unassign: delete the row rather than writing an empty FK.
-    const { error } = salesId
-      ? await supabase.from('order_assignment')
-          .upsert({ order_id: orderId, sales_id: salesId }, { onConflict: 'order_id' })
-      : await supabase.from('order_assignment').delete().eq('order_id', orderId)
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
-    setBusy('')
-  }
+  // Per-row assign/reassign lives in components/OwnerAssign, shared with the
+  // order record. Bulk assignment over the selection stays here.
 
   // ---- bulk selection over the visible rows ----
   const shown = rows.slice(0, 250)
@@ -327,19 +302,14 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
                   </div>
                 </td>
                 <td>
-                  {canAssignAny ? (
-                    <select aria-label={`Owner for order ${o.order_id}`}
-                      value={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id || ''}
-                      disabled={busy === o.order_id}
-                      onChange={(e) => reassign(o.order_id, e.target.value)} style={{ minWidth: 120 }}>
-                      <option value="">Unassigned</option>
-                      {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
-                    </select>
-                  ) : o.owner ? o.owner : profile?.sales_id ? (
-                    <button className="btn btn-sm" disabled={busy === o.order_id} onClick={() => selfAssign(o.order_id)}>Pick up</button>
-                  ) : (
-                    <span className="fill-label">Unassigned</span>
-                  )}
+                  {/* Same control as the order record — see components/OwnerAssign. */}
+                  <OwnerAssign
+                    orderId={o.order_id}
+                    ownerSalesId={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id}
+                    ownerName={o.owner}
+                    invalidateKeys={['fulfillment_queue', 'orders']}
+                    compact
+                  />
                 </td>
                 <td className="right">{php(o.total_amount)}</td>
                 <td>

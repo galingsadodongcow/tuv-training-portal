@@ -243,6 +243,71 @@ export function useAllProfiles() {
   })
 }
 
+// ── Delegated team management (20260814060000) ──────────────────────────────
+// The profiles table stays readable only by yourself or a super admin; these
+// RPCs are the scoped path that lets operations and a sales supervisor manage
+// their people. Each one re-checks the caller in the database, so the UI below
+// is presentation only.
+
+// The members the signed-in user may manage, plus their own row. Each row
+// carries `manageable` so the screen can show context without offering edits.
+export function useTeamMembers() {
+  return useQuery({
+    queryKey: ['team_members'],
+    queryFn: () => okOr(supabase.rpc('fn_team_members'), []),
+  })
+}
+
+// Which roles this user is allowed to hand out. Drives the role dropdown, so a
+// delegator is never shown an option the database would reject.
+export function useGrantableRoles() {
+  return useQuery({
+    queryKey: ['grantable_roles'],
+    queryFn: () => okOr(supabase.rpc('fn_member_grantable_roles'), []),
+  })
+}
+
+export function useGrantMemberRole() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { userId: string; role: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_grant_member_role', {
+        p_user: v.userId, p_role: v.role, p_reason: v.reason ?? null,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => invalidate(['team_members', 'profiles_all']),
+  })
+}
+
+export function useLinkMemberSalesperson() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { userId: string; salesId: string | null }) => {
+      const { error } = await supabase.rpc('fn_link_member_salesperson', {
+        p_user: v.userId, p_sales_id: v.salesId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => invalidate(['team_members', 'profiles_all']),
+  })
+}
+
+export function useUpsertTeamMember() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { name: string; code?: string | null; team?: string | null; region?: string | null; salesId?: string | null; active?: boolean | null }) => {
+      const { data, error } = await supabase.rpc('fn_upsert_team_member', {
+        p_name: v.name, p_code: v.code ?? null, p_team: v.team ?? null,
+        p_region: v.region ?? null, p_sales_id: v.salesId ?? null, p_active: v.active ?? null,
+      })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => invalidate(['team_members', 'salespeople_all', 'salespeople']),
+  })
+}
+
 // ---- Pricing, country, and audit (Phase N) ----
 export function useDiscountRules() {
   return useQuery({

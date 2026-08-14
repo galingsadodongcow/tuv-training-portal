@@ -11,6 +11,7 @@ import { noteEvents, taskEvents, notificationEvents, auditEvents, mergeActivity 
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordTabs, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
 import BlockerBar from '../components/BlockerBar'
+import OwnerAssign from '../components/OwnerAssign'
 import ReceivablePanel from '../components/ReceivablePanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
 import { useToast } from '../components/Toast'
@@ -231,7 +232,10 @@ export default function OrderDetail() {
             <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
             <span className="pill pill-cancelled">{o.payment_status}</span>
             {collection !== 'None' && collection !== 'Not due' && <Badge tone={collectionTone(collection)}>{collection}</Badge>}
-            {assignee && <span className="fill-label">{assignee}</span>}
+            {/* Ownership is editable here, not just displayed: an unowned order
+                used to read "no owner assigned" with no way to fix it without
+                going back to the queue. */}
+            <OwnerAssign orderId={o.order_id} ownerSalesId={o.assignment?.[0]?.sales_id} ownerName={assignee} />
             {o.client?.email && <span className="fill-label">{o.client.email}</span>}
           </>
         }

@@ -4093,3 +4093,629 @@ revoke execute on function public.fn_orders_lock_payment_status() from public, a
 -- ===========================================================================
 drop index if exists public.participant_schedule_idx;
 drop index if exists public.ix_audit_changed_at;
+
+-- ===========================================================================
+-- 20260814050000_auto_trainer_venue_codes.sql
+-- Automatic trainer (TR-nn) and venue (VN-nn) codes: sequences + BEFORE
+-- INSERT triggers, backfill for existing rows, case-insensitive unique
+-- indexes. Generated in the DB so no client can race or bypass it.
+-- ===========================================================================
+-- Automatic trainer and venue codes (owner feedback).
+--
+-- Trainer codes were a free-text box on the add form — easy to leave blank,
+-- duplicate, or typo — and venues had no code at all. Generate both in the
+-- database rather than the client: a browser can race another browser, and the
+-- anon-key app is not the only writer (seeds and the SQL editor insert too), so
+-- the sequence + trigger is the only place that can guarantee uniqueness.
+--
+-- Format follows the codes already in the table (TR-01, TR-02, …): a 2-digit
+-- zero-padded suffix that simply grows past 99 (lpad never truncates).
+-- A caller may still pass an explicit code — the trigger only fills a blank one,
+-- so historical/manual codes keep working.
+--
+-- Idempotent throughout.
+
+-- ── Venue gains the column trainers already had ───────────────────────────────
+alter table public.venue add column if not exists code text;
+
+-- ── Sequences, seeded past whatever already exists ────────────────────────────
+create sequence if not exists public.trainer_code_seq;
+create sequence if not exists public.venue_code_seq;
+
+-- Seed each sequence to the highest numeric suffix currently in use so the first
+-- generated code cannot collide with a hand-entered one. Runs on every apply and
+-- only ever moves the sequence forward.
+-- Derived from the codes actually present, so re-running is safe: the value is a
+-- function of the table, not of the sequence's current position. Non-numeric
+-- codes contribute nothing (regexp strips to '', nullif makes it null, max
+-- ignores it).
+--
+-- is_called = false, so the next nextval() returns exactly max + 1. Using
+-- is_called = true here would skip a number on an empty register — the first
+-- venue came out VN-02 instead of VN-01.
+do $$
+declare
+  max_t integer;
+  max_v integer;
+begin
+  select coalesce(max(nullif(regexp_replace(code, '\D', '', 'g'), '')::integer), 0)
+    into max_t from public.trainer where code is not null;
+  select coalesce(max(nullif(regexp_replace(code, '\D', '', 'g'), '')::integer), 0)
+    into max_v from public.venue where code is not null;
+  perform setval('public.trainer_code_seq', max_t + 1, false);
+  perform setval('public.venue_code_seq',   max_v + 1, false);
+end $$;
+
+-- ── Trigger functions ─────────────────────────────────────────────────────────
+-- SECURITY INVOKER (the default) and a pinned empty search_path: these only read
+-- their own NEW row and a sequence, so they need no elevated rights.
+create or replace function public.fn_trainer_autocode()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.code is null or btrim(new.code) = '' then
+    new.code := 'TR-' || lpad(nextval('public.trainer_code_seq')::text, 2, '0');
+  end if;
+  return new;
+end;
+$function$;
+
+create or replace function public.fn_venue_autocode()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.code is null or btrim(new.code) = '' then
+    new.code := 'VN-' || lpad(nextval('public.venue_code_seq')::text, 2, '0');
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists trg_trainer_autocode on public.trainer;
+create trigger trg_trainer_autocode before insert on public.trainer
+  for each row execute function public.fn_trainer_autocode();
+
+drop trigger if exists trg_venue_autocode on public.venue;
+create trigger trg_venue_autocode before insert on public.venue
+  for each row execute function public.fn_venue_autocode();
+
+-- These are BEFORE-trigger functions returning `trigger`; they are never called
+-- as RPCs. Revoke the default PUBLIC EXECUTE so they are not exposed through
+-- PostgREST (same reasoning as 20260812010000 / 20260814030000). Revoking does
+-- not stop the triggers firing.
+revoke execute on function public.fn_trainer_autocode() from public, anon, authenticated;
+revoke execute on function public.fn_venue_autocode()   from public, anon, authenticated;
+
+-- ── Backfill anything already missing a code ──────────────────────────────────
+-- Deterministic order so a rebuild assigns the same codes. Only touches rows
+-- with no code, so re-applying is a no-op.
+do $$
+declare
+  r record;
+begin
+  for r in select venue_id from public.venue where code is null or btrim(code) = ''
+           order by created_at, name loop
+    update public.venue
+       set code = 'VN-' || lpad(nextval('public.venue_code_seq')::text, 2, '0')
+     where venue_id = r.venue_id;
+  end loop;
+
+  for r in select trainer_id from public.trainer where code is null or btrim(code) = ''
+           order by created_at, name loop
+    update public.trainer
+       set code = 'TR-' || lpad(nextval('public.trainer_code_seq')::text, 2, '0')
+     where trainer_id = r.trainer_id;
+  end loop;
+end $$;
+
+-- ── Uniqueness ────────────────────────────────────────────────────────────────
+-- Case-insensitive so TR-01 and tr-01 cannot coexist. Partial, because a row is
+-- allowed to sit with a null code between insert and backfill in older data.
+create unique index if not exists ux_trainer_code_lower
+  on public.trainer (lower(code)) where code is not null;
+create unique index if not exists ux_venue_code_lower
+  on public.venue (lower(code)) where code is not null;
+
+-- ===========================================================================
+-- 20260814060000_team_membership_delegation.sql
+-- Delegated team membership + role assignment via scoped SECURITY DEFINER
+-- RPCs. Roles are grantable downward only; supervisors are confined to
+-- their own team; nobody may change their own role. Table RLS unchanged.
+-- ===========================================================================
+-- Delegated team membership and role assignment (owner feedback).
+--
+-- Before this, `profiles` was writable only by super_admin (p_profiles_admin)
+-- and readable only by yourself (p_profiles_self), so operations and sales
+-- supervisors could not see their own people, let alone build a team. Every such
+-- request had to go through a super admin.
+--
+-- The table policies are deliberately left alone. Widening `profiles` for two
+-- more roles would hand them every column of every user; instead this exposes a
+-- narrow, scoped set of SECURITY DEFINER RPCs — the same pattern the workflow
+-- functions already use (fn_create_order, fn_endorse_order, …). RLS stays the
+-- authority on the table; these functions are the only widened path and each one
+-- re-checks the caller.
+--
+-- The delegation matrix is the security boundary. Roles are only ever grantable
+-- *downward*, so no one can mint an account with more authority than they hold:
+--
+--   super_admin        → any role
+--   operations         → sales, coordinator, sales_manager
+--   sales supervisor   → sales, and only inside their own team
+--   everyone else      → nothing
+--
+-- Three further invariants, enforced in fn_can_manage_member / fn_grant_member_role:
+--   * nobody may change their own role (no self-elevation),
+--   * only a super_admin may touch an existing super_admin (no lateral takeover),
+--   * a supervisor is confined to their own team, matched on salesperson.team.
+--
+-- Accounts are not created here: the browser holds the anon key and cannot call
+-- the Auth admin API. A person signs in once (which provisions their profile
+-- row) and is then given a role and a team through these functions.
+--
+-- Idempotent throughout.
+
+-- ── Which roles may the caller hand out? ─────────────────────────────────────
+create or replace function public.fn_member_grantable_roles()
+returns public.user_role[]
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select case
+    when public.fn_current_role() = 'super_admin' then
+      array['super_admin','operations','business_owner','sales',
+            'coordinator','sales_manager','management','auditor']::public.user_role[]
+    when public.fn_current_role() = 'operations' then
+      array['sales','coordinator','sales_manager']::public.user_role[]
+    when public.fn_is_team_lead() then
+      array['sales']::public.user_role[]
+    else
+      array[]::public.user_role[]
+  end;
+$function$;
+
+-- ── May the caller manage this particular user? ──────────────────────────────
+create or replace function public.fn_can_manage_member(p_user uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  target_role public.user_role;
+  target_team text;
+begin
+  -- No self-management: a delegator must never be able to raise their own role.
+  if p_user is null or p_user = (select auth.uid()) then
+    return false;
+  end if;
+
+  select p.role, s.team
+    into target_role, target_team
+    from public.profiles p
+    left join public.salesperson s on s.sales_id = p.sales_id
+   where p.user_id = p_user;
+
+  if not found then
+    return false;
+  end if;
+
+  -- Only a super admin may act on another super admin.
+  if target_role = 'super_admin' then
+    return public.fn_current_role() = 'super_admin';
+  end if;
+
+  if public.fn_current_role() in ('super_admin', 'operations') then
+    return true;
+  end if;
+
+  -- A supervisor manages the sales reps on their own team, nobody else. A null
+  -- team on either side is not a match — it would otherwise pair up every
+  -- unassigned person with every teamless supervisor.
+  if public.fn_is_team_lead() then
+    return target_role = 'sales'
+       and target_team is not null
+       and target_team is not distinct from public.fn_current_team();
+  end if;
+
+  return false;
+end;
+$function$;
+
+-- ── The scoped member list the admin screen reads ────────────────────────────
+-- Returns only the people the caller may manage, plus the caller's own row so
+-- the screen can show "you". Never exposes anything beyond these columns.
+create or replace function public.fn_team_members()
+returns table (
+  user_id uuid,
+  full_name text,
+  role text,
+  sales_id uuid,
+  sales_name text,
+  code text,
+  team text,
+  region text,
+  is_supervisor boolean,
+  active boolean,
+  manageable boolean,
+  is_self boolean
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select p.user_id,
+         p.full_name,
+         p.role::text,
+         p.sales_id,
+         s.name,
+         s.code,
+         s.team,
+         s.region,
+         coalesce(s.is_supervisor, false),
+         coalesce(s.active, true),
+         public.fn_can_manage_member(p.user_id),
+         p.user_id = (select auth.uid())
+    from public.profiles p
+    left join public.salesperson s on s.sales_id = p.sales_id
+   where p.user_id = (select auth.uid())
+      or public.fn_can_manage_member(p.user_id)
+   order by p.full_name nulls last;
+$function$;
+
+-- ── Grant a role ─────────────────────────────────────────────────────────────
+create or replace function public.fn_grant_member_role(
+  p_user uuid,
+  p_role text,
+  p_reason text default null
+)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  new_role public.user_role;
+  old_role public.user_role;
+  keep_link boolean;
+begin
+  -- A CASE/param of text is typed text, and text → enum has no implicit
+  -- assignment cast, so the enum is built explicitly (see CLAUDE.md).
+  begin
+    new_role := p_role::public.user_role;
+  exception when invalid_text_representation then
+    raise exception 'Unknown role: %', p_role using errcode = '22023';
+  end;
+
+  if not public.fn_can_manage_member(p_user) then
+    raise exception 'You may not manage this user' using errcode = '42501';
+  end if;
+
+  if not (new_role = any (public.fn_member_grantable_roles())) then
+    raise exception 'You may not grant the % role', p_role using errcode = '42501';
+  end if;
+
+  select role into old_role from public.profiles where user_id = p_user;
+  if old_role = new_role then
+    return;
+  end if;
+
+  -- Only the selling roles resolve visibility through a salesperson record;
+  -- moving off them clears the link so nothing points at a dead pointer.
+  keep_link := new_role in ('sales', 'sales_manager');
+
+  update public.profiles
+     set role = new_role,
+         sales_id = case when keep_link then sales_id else null end
+   where user_id = p_user;
+
+  insert into public.audit_log (table_name, row_pk, action, actor_id, actor_role,
+                                old_data, new_data, source, reason)
+  values ('profiles', p_user::text, 'UPDATE', (select auth.uid()), public.fn_current_role(),
+          jsonb_build_object('role', old_role), jsonb_build_object('role', new_role),
+          'fn_grant_member_role', p_reason);
+end;
+$function$;
+
+-- ── Link a person to a salesperson record ────────────────────────────────────
+create or replace function public.fn_link_member_salesperson(
+  p_user uuid,
+  p_sales_id uuid
+)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  target_role public.user_role;
+  link_team text;
+  old_link uuid;
+begin
+  if not public.fn_can_manage_member(p_user) then
+    raise exception 'You may not manage this user' using errcode = '42501';
+  end if;
+
+  select role, sales_id into target_role, old_link from public.profiles where user_id = p_user;
+  if target_role not in ('sales', 'sales_manager') then
+    raise exception 'Only the sales roles link to a salesperson record' using errcode = '22023';
+  end if;
+
+  if p_sales_id is not null then
+    select team into link_team from public.salesperson where sales_id = p_sales_id;
+    if not found then
+      raise exception 'No such salesperson' using errcode = '23503';
+    end if;
+    -- A supervisor may only link people onto their own team.
+    if public.fn_current_role() not in ('super_admin', 'operations')
+       and link_team is distinct from public.fn_current_team() then
+      raise exception 'You may only link people to your own team' using errcode = '42501';
+    end if;
+  end if;
+
+  update public.profiles set sales_id = p_sales_id where user_id = p_user;
+
+  insert into public.audit_log (table_name, row_pk, action, actor_id, actor_role,
+                                old_data, new_data, source)
+  values ('profiles', p_user::text, 'UPDATE', (select auth.uid()), public.fn_current_role(),
+          jsonb_build_object('sales_id', old_link), jsonb_build_object('sales_id', p_sales_id),
+          'fn_link_member_salesperson');
+end;
+$function$;
+
+-- ── Create / update a salesperson record (the team roster) ───────────────────
+-- Returns the sales_id so the caller can link a profile to it straight away.
+create or replace function public.fn_upsert_team_member(
+  p_name text,
+  p_code text default null,
+  p_team text default null,
+  p_region text default null,
+  p_sales_id uuid default null,
+  p_active boolean default null
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  is_admin boolean;
+  eff_team text;
+  new_id uuid;
+  old_row jsonb;
+begin
+  is_admin := public.fn_current_role() in ('super_admin', 'operations');
+
+  if not (is_admin or public.fn_is_team_lead()) then
+    raise exception 'You may not manage the team roster' using errcode = '42501';
+  end if;
+
+  if p_name is null or btrim(p_name) = '' then
+    raise exception 'A name is required' using errcode = '23502';
+  end if;
+
+  -- A supervisor cannot place people outside their own team, whatever they pass.
+  eff_team := case when is_admin then p_team else public.fn_current_team() end;
+  if not is_admin and eff_team is null then
+    raise exception 'Your account has no team, so you cannot add members yet' using errcode = '42501';
+  end if;
+
+  if p_sales_id is null then
+    insert into public.salesperson (name, code, team, region, active)
+    values (btrim(p_name), nullif(btrim(coalesce(p_code, '')), ''), eff_team,
+            case when is_admin then p_region else public.fn_current_region() end,
+            coalesce(p_active, true))
+    returning sales_id into new_id;
+
+    insert into public.audit_log (table_name, row_pk, action, actor_id, actor_role, new_data, source)
+    values ('salesperson', new_id::text, 'INSERT', (select auth.uid()), public.fn_current_role(),
+            jsonb_build_object('name', btrim(p_name), 'team', eff_team), 'fn_upsert_team_member');
+    return new_id;
+  end if;
+
+  -- Editing an existing member: a supervisor may only touch their own team.
+  select to_jsonb(s) into old_row from public.salesperson s where s.sales_id = p_sales_id;
+  if old_row is null then
+    raise exception 'No such salesperson' using errcode = '23503';
+  end if;
+  if not is_admin and (old_row ->> 'team') is distinct from public.fn_current_team() then
+    raise exception 'You may only manage your own team' using errcode = '42501';
+  end if;
+
+  update public.salesperson
+     set name   = btrim(p_name),
+         code   = coalesce(nullif(btrim(coalesce(p_code, '')), ''), code),
+         team   = eff_team,
+         region = case when is_admin then p_region else region end,
+         active = coalesce(p_active, active)
+   where sales_id = p_sales_id;
+
+  insert into public.audit_log (table_name, row_pk, action, actor_id, actor_role,
+                                old_data, new_data, source)
+  values ('salesperson', p_sales_id::text, 'UPDATE', (select auth.uid()), public.fn_current_role(),
+          old_row, jsonb_build_object('name', btrim(p_name), 'team', eff_team), 'fn_upsert_team_member');
+  return p_sales_id;
+end;
+$function$;
+
+-- ── Grants: authenticated only, never anon ───────────────────────────────────
+revoke all on function public.fn_member_grantable_roles()                        from public, anon;
+revoke all on function public.fn_can_manage_member(uuid)                         from public, anon;
+revoke all on function public.fn_team_members()                                  from public, anon;
+revoke all on function public.fn_grant_member_role(uuid, text, text)             from public, anon;
+revoke all on function public.fn_link_member_salesperson(uuid, uuid)             from public, anon;
+revoke all on function public.fn_upsert_team_member(text, text, text, text, uuid, boolean) from public, anon;
+
+grant execute on function public.fn_member_grantable_roles()                        to authenticated;
+grant execute on function public.fn_can_manage_member(uuid)                         to authenticated;
+grant execute on function public.fn_team_members()                                  to authenticated;
+grant execute on function public.fn_grant_member_role(uuid, text, text)             to authenticated;
+grant execute on function public.fn_link_member_salesperson(uuid, uuid)             to authenticated;
+grant execute on function public.fn_upsert_team_member(text, text, text, text, uuid, boolean) to authenticated;
+
+-- ===========================================================================
+-- 20260814070000_protect_oversight_roles.sql
+-- Only a super_admin may act on super_admin / business_owner / management /
+-- auditor. Operations keeps sales, coordinator and sales_manager.
+-- ===========================================================================
+-- Protect the oversight roles from operations (owner decision, follow-up to
+-- 20260814060000).
+--
+-- The first cut of fn_can_manage_member only ring-fenced super_admin, so
+-- operations could act on anyone else — including demoting the business owner.
+-- Verified live: as the operations account, fn_can_manage_member(<business
+-- owner>) returned true. That is not a privilege *escalation* (operations still
+-- cannot grant business_owner, so they cannot take the role themselves), but it
+-- does let operations strip senior oversight access, which is not the intent.
+--
+-- Oversight roles — business_owner, management, auditor — now join super_admin
+-- as roles only a super_admin may act on. Operations keeps full control of the
+-- operational roles it is meant to run: sales, coordinator, sales_manager.
+--
+-- Only the guard changes; the grant matrix in fn_member_grantable_roles is
+-- already correct (operations was never able to grant these roles).
+-- Idempotent: create or replace.
+
+create or replace function public.fn_can_manage_member(p_user uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  target_role public.user_role;
+  target_team text;
+begin
+  -- No self-management: a delegator must never be able to raise their own role.
+  if p_user is null or p_user = (select auth.uid()) then
+    return false;
+  end if;
+
+  select p.role, s.team
+    into target_role, target_team
+    from public.profiles p
+    left join public.salesperson s on s.sales_id = p.sales_id
+   where p.user_id = p_user;
+
+  if not found then
+    return false;
+  end if;
+
+  -- super_admin plus the oversight roles: super_admin only. This blocks a
+  -- lateral takedown (operations demoting the business owner) as well as the
+  -- upward path already covered by the grant matrix.
+  if target_role in ('super_admin', 'business_owner', 'management', 'auditor') then
+    return public.fn_current_role() = 'super_admin';
+  end if;
+
+  if public.fn_current_role() in ('super_admin', 'operations') then
+    return true;
+  end if;
+
+  -- A supervisor manages the sales reps on their own team, nobody else. A null
+  -- team on either side is not a match — it would otherwise pair up every
+  -- unassigned person with every teamless supervisor.
+  if public.fn_is_team_lead() then
+    return target_role = 'sales'
+       and target_team is not null
+       and target_team is not distinct from public.fn_current_team();
+  end if;
+
+  return false;
+end;
+$function$;
+
+-- ===========================================================================
+-- 20260814080000_sales_manager_can_sell.sql
+-- sales_manager joins the fn_create_order allowlist (that RPC is SECURITY
+-- DEFINER and bypasses the orders INSERT policies, so it is the real gate).
+-- ===========================================================================
+-- Let a sales supervisor sell as well as supervise (owner decision).
+--
+-- Context: sales supervisors were being unified onto the sales_manager role, but
+-- sales_manager could not create orders — so promoting a working seller would
+-- have taken their day job away.
+--
+-- The gate is this function, not RLS. fn_create_order is SECURITY DEFINER, so it
+-- bypasses the orders INSERT policies entirely and enforces its own allowlist —
+-- which is why `operations` can create orders despite having no INSERT policy.
+-- Adding an RLS policy for sales_manager would therefore be dead code; the
+-- allowlist here is the only thing that matters.
+--
+-- sales_manager is added to the allowlist and inherits the same channel
+-- restriction as sales: a selling role may only raise Inside Sales / Field Sales
+-- orders, leaving the other channels to coordinator/operations/super_admin.
+--
+-- Reproduced verbatim from the live definition with those two lines changed, so
+-- nothing else about order creation shifts. Idempotent: create or replace.
+
+create or replace function public.fn_create_order(
+  p_order_id text,
+  p_channel text,
+  p_order_date date,
+  p_client_id uuid,
+  p_lines jsonb,
+  p_sales_id uuid default null::uuid,
+  p_country text default 'PH'::text
+)
+returns text
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare r text := fn_current_role()::text; v_line jsonb; v_no int := 0;
+begin
+  -- sales_manager joins the selling roles (was: sales, coordinator, operations,
+  -- super_admin) so a supervisor can raise an order for their own team.
+  if r is null or r not in ('sales','sales_manager','coordinator','operations','super_admin') then
+    raise exception 'Your role may not create orders' using errcode = '42501';
+  end if;
+  -- Same channel restriction for both selling roles.
+  if r in ('sales','sales_manager') and p_channel not in ('Inside Sales','Field Sales') then
+    raise exception 'Sales may only create Inside Sales or Field Sales orders' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_order_id),'') = '' then
+    raise exception 'An order reference is required' using errcode = '22004';
+  end if;
+  if exists (select 1 from orders where order_id = p_order_id) then
+    raise exception 'Order % already exists', p_order_id using errcode = '23505';
+  end if;
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
+    raise exception 'At least one line is required' using errcode = '22004';
+  end if;
+
+  insert into orders (order_id, order_date, channel, modality, seats, amount_php,
+                      client_id, created_by, country, fulfillment_stage)
+  values (p_order_id, coalesce(p_order_date, current_date), p_channel::channel_t,
+          (p_lines->0->>'modality')::modality_t, 1, 0, p_client_id, auth.uid(),
+          coalesce(p_country,'PH')::country_t, 'New');
+
+  for v_line in select * from jsonb_array_elements(p_lines) loop
+    v_no := v_no + 1;
+    insert into order_line (order_id, line_no, course_id, schedule_id, modality,
+                            seats, amount_php, line_status)
+    values (p_order_id, v_no, (v_line->>'course_id')::uuid,
+            nullif(v_line->>'schedule_id','')::uuid, (v_line->>'modality')::modality_t,
+            coalesce((v_line->>'seats')::int, 1), coalesce((v_line->>'amount_php')::numeric, 0),
+            coalesce(nullif(v_line->>'line_status',''), 'New')::order_status_t);
+  end loop;
+
+  if p_sales_id is not null then
+    insert into order_assignment (order_id, sales_id) values (p_order_id, p_sales_id)
+      on conflict (order_id) do nothing;
+  end if;
+
+  return p_order_id;
+end $function$;
