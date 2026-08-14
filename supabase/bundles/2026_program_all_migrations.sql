@@ -3644,22 +3644,43 @@ create table if not exists public.subcategory (
 alter table public.course add column if not exists subcategory_id uuid references public.subcategory(subcategory_id);
 
 -- ---- Backfill from the existing free-text course.category -------------------
-insert into public.category (name)
-  select distinct btrim(category) from public.course
-   where category is not null and btrim(category) <> ''
-  on conflict (name) do nothing;
+-- Guarded on column existence: 20260812230000_s6_retire_course_category drops
+-- course.category, so on any re-apply of this bundle after that migration the
+-- column is gone and the original unguarded backfill errored ("column category
+-- does not exist"). The data was already backfilled on the first apply, so it is
+-- safe to skip the free-text-derived steps once the column is retired.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'course' and column_name = 'category'
+  ) then
+    insert into public.category (name)
+      select distinct btrim(category) from public.course
+       where category is not null and btrim(category) <> ''
+      on conflict (name) do nothing;
+  end if;
+end $$;
 
 insert into public.subcategory (category_id, name)
   select category_id, 'General' from public.category
   on conflict (category_id, name) do nothing;
 
-update public.course c
-   set subcategory_id = s.subcategory_id
-  from public.category cat
-  join public.subcategory s on s.category_id = cat.category_id and s.name = 'General'
- where c.subcategory_id is null
-   and c.category is not null and btrim(c.category) <> ''
-   and cat.name = btrim(c.category);
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'course' and column_name = 'category'
+  ) then
+    update public.course c
+       set subcategory_id = s.subcategory_id
+      from public.category cat
+      join public.subcategory s on s.category_id = cat.category_id and s.name = 'General'
+     where c.subcategory_id is null
+       and c.category is not null and btrim(c.category) <> ''
+       and cat.name = btrim(c.category);
+  end if;
+end $$;
 
 -- ---- RLS: read all authenticated; write super_admin/operations -------------
 alter table public.category enable row level security;
