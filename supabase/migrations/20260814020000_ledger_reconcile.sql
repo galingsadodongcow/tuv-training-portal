@@ -1,0 +1,20 @@
+-- Ledger reconciliation marker — no application-schema change.
+--
+-- The live migration ledger (supabase_migrations.schema_migrations) records
+-- version 20260814020000 "ledger_reconcile", but no file for it existed in this
+-- repo. That is repo <-> DB drift of exactly the kind CLAUDE.md warns about, so
+-- this file is added to close it and keep a from-scratch rebuild faithful.
+--
+-- The applied body was NOT recoverable: this project stores statement text for
+-- only 17 of 79 ledger rows (bundle/psql-applied migrations, this one included,
+-- record no statements), and this row's `statements` is null. Live-schema
+-- inspection found no object attributable to it — no relation or function named
+-- like `%reconcile%`/`%ledger%` exists, and every reconcile row in the ledger
+-- (e.g. the catch-up rows 20260805124815, 20260812140816) is ledger bookkeeping,
+-- not DDL. Consistent with the name, this version reconciled the ledger itself;
+-- it made no change to the application schema.
+--
+-- This file is therefore an intentional, idempotent no-op. If the original
+-- author's body is later found to contain real DDL, supersede this with the
+-- recovered statements in a new migration rather than editing applied history.
+do $$ begin end $$;

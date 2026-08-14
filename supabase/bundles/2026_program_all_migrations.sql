@@ -4068,3 +4068,28 @@ do $$ begin
       foreign key (course_id) references public.course (course_id);
   end if;
 end $$;
+
+-- ===========================================================================
+-- 20260814020000_ledger_reconcile.sql
+-- Ledger reconciliation marker — no application-schema change. Adds the repo
+-- file for a live-only ledger version whose body was ledger bookkeeping (see the
+-- migration file header for the full recovery notes). Intentional no-op.
+-- ===========================================================================
+do $$ begin end $$;
+
+-- ===========================================================================
+-- 20260814030000_revoke_anon_lock_payment_trigger_fn.sql
+-- Revoke the default PUBLIC/anon/authenticated EXECUTE on the SECURITY DEFINER
+-- trigger function fn_orders_lock_payment_status() — missed by 20260812010000.
+-- Clears advisor 0028; does not stop the trigger firing. Idempotent.
+-- ===========================================================================
+revoke execute on function public.fn_orders_lock_payment_status() from public, anon, authenticated;
+
+-- ===========================================================================
+-- 20260814040000_drop_duplicate_indexes.sql
+-- Drop the un-tracked live-only twins of two indexes created by 20260814010000
+-- (participant_schedule_idx == idx_participant_schedule; ix_audit_changed_at ==
+-- idx_audit_changed). Clears the duplicate_index advisor findings. Idempotent.
+-- ===========================================================================
+drop index if exists public.participant_schedule_idx;
+drop index if exists public.ix_audit_changed_at;
