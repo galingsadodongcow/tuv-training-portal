@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useApprovals } from '../hooks/data'
-import { Spinner, ErrorNote, Empty } from '../components/ui'
+import { ErrorNote, Empty } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
@@ -17,8 +18,15 @@ export default function Approvals() {
   const qc = useQueryClient()
   const toast = useToast()
   const confirm = useConfirm()
+  const params = useSearchParams()
+  const focusId = params.get('focus') || ''
   const [msg, setMsg] = useState(null)
   const canDecide = ['business_owner', 'super_admin'].includes(profile?.role)
+
+  // A notification deep-link (?focus=) scrolls the linked approval into view (#139).
+  useEffect(() => {
+    if (focusId) document.getElementById(`appr-${focusId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusId, approvals.data])
 
   const decide = async (a, decision) => {
     // Approving or rejecting is consequential: confirm and record a reason.
@@ -27,8 +35,9 @@ export default function Approvals() {
       body: a.object_type,
       confirmLabel: decision === 'Approved' ? 'Approve' : 'Reject',
       tone: decision === 'Rejected' ? 'danger' : 'default',
-      reason: 'optional',
-      reasonLabel: 'Decision note',
+      // A rejection must carry a rationale (audit trail); an approval note stays optional.
+      reason: decision === 'Rejected' ? 'required' : 'optional',
+      reasonLabel: decision === 'Rejected' ? 'Reason for rejection (required)' : 'Decision note',
     })
     if (!res.ok) return
     setMsg(null)
@@ -47,7 +56,7 @@ export default function Approvals() {
   const decided = approvals.data.filter((a) => a.decision !== 'Pending')
 
   const Row = ({ a, showActions }: { a: any; showActions: boolean }) => (
-    <tr key={a.approval_id}>
+    <tr key={a.approval_id} id={`appr-${a.approval_id}`} className={String(a.approval_id) === focusId ? 'row-focus' : undefined}>
       <td>{a.object_type}</td>
       <td>
         {a.schedule

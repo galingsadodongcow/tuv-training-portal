@@ -21,18 +21,20 @@ const COURSE_JOIN = 'course:course_id(course_name, training_type, url, subcatego
 export const withCategory = (c: any) =>
   c && { ...c, category: c.subcategory?.category?.name ?? c.category ?? null, subcategory: c.subcategory?.name ?? null }
 
-export function useSchedules(year = 2026) {
+export function useSchedules(year = 2026, enabled = true) {
   return useQuery({
     queryKey: ['schedules', year],
+    enabled,
     queryFn: () =>
       sel(
         supabase
           .from('schedule')
           .select(
-            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer_id, venue_id, trainer:trainer_id(name, code), venue:venue_id(name, capacity), ' + COURSE_JOIN + ', calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer_id, venue_id, trainer:trainer_id(name, code), venue:venue_id(name, capacity), ' + COURSE_JOIN + ', calendar_year:year_id!inner(year)'
           )
+          .eq('calendar_year.year', year)
           .order('start_date', { ascending: true })
-      ).then((rows: any[]) => rows.filter((r) => r.calendar_year?.year === year).map((r) => ({ ...r, course: withCategory(r.course) }))),
+      ).then((rows: any[]) => rows.map((r) => ({ ...r, course: withCategory(r.course) }))),
   })
 }
 
@@ -134,9 +136,25 @@ export function useActiveYear() {
   })
 }
 
-export function useOrders() {
+// One RLS-scoped aggregate request powers the role dashboards. Keeping the
+// aggregation in Postgres avoids downloading multiple full tables just to
+// count or sum them in the browser.
+export function useDashboardMetrics(year: number, enabled = true) {
+  return useQuery({
+    queryKey: ['dashboard_metrics', year],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_dashboard_metrics', { p_year: year })
+      if (error) throw error
+      return (data || {}) as any
+    },
+  })
+}
+
+export function useOrders(enabled = true) {
   return useQuery({
     queryKey: ['orders'],
+    enabled,
     queryFn: () =>
       sel(
         supabase
@@ -173,9 +191,10 @@ export function useOrder(orderId?: string) {
 
 // Sales inquiry pipeline. RLS scopes rows to the owning salesperson, or all for
 // the super admin.
-export function useInquiries() {
+export function useInquiries(enabled = true) {
   return useQuery({
     queryKey: ['inquiries'],
+    enabled,
     queryFn: () =>
       sel(
         supabase
@@ -224,6 +243,71 @@ export function useAllProfiles() {
   })
 }
 
+// ── Delegated team management (20260814060000) ──────────────────────────────
+// The profiles table stays readable only by yourself or a super admin; these
+// RPCs are the scoped path that lets operations and a sales supervisor manage
+// their people. Each one re-checks the caller in the database, so the UI below
+// is presentation only.
+
+// The members the signed-in user may manage, plus their own row. Each row
+// carries `manageable` so the screen can show context without offering edits.
+export function useTeamMembers() {
+  return useQuery({
+    queryKey: ['team_members'],
+    queryFn: () => okOr(supabase.rpc('fn_team_members'), []),
+  })
+}
+
+// Which roles this user is allowed to hand out. Drives the role dropdown, so a
+// delegator is never shown an option the database would reject.
+export function useGrantableRoles() {
+  return useQuery({
+    queryKey: ['grantable_roles'],
+    queryFn: () => okOr(supabase.rpc('fn_member_grantable_roles'), []),
+  })
+}
+
+export function useGrantMemberRole() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { userId: string; role: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_grant_member_role', {
+        p_user: v.userId, p_role: v.role, p_reason: v.reason ?? null,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => invalidate(['team_members', 'profiles_all']),
+  })
+}
+
+export function useLinkMemberSalesperson() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { userId: string; salesId: string | null }) => {
+      const { error } = await supabase.rpc('fn_link_member_salesperson', {
+        p_user: v.userId, p_sales_id: v.salesId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => invalidate(['team_members', 'profiles_all']),
+  })
+}
+
+export function useUpsertTeamMember() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { name: string; code?: string | null; team?: string | null; region?: string | null; salesId?: string | null; active?: boolean | null }) => {
+      const { data, error } = await supabase.rpc('fn_upsert_team_member', {
+        p_name: v.name, p_code: v.code ?? null, p_team: v.team ?? null,
+        p_region: v.region ?? null, p_sales_id: v.salesId ?? null, p_active: v.active ?? null,
+      })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => invalidate(['team_members', 'salespeople_all', 'salespeople']),
+  })
+}
+
 // ---- Pricing, country, and audit (Phase N) ----
 export function useDiscountRules() {
   return useQuery({
@@ -250,16 +334,18 @@ export function useApplicableDiscounts(courseId?: string, type?: string, country
   })
 }
 
-export function useCountryRevenue() {
+export function useCountryRevenue(enabled = true) {
   return useQuery({
     queryKey: ['country_revenue'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_country_revenue').select('*'), []),
   })
 }
 
-export function useAuditSearch(filters: Record<string, any>) {
+export function useAuditSearch(filters: Record<string, any>, enabled = true) {
   return useQuery({
     queryKey: ['audit_search', filters],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('fn_audit_search', {
         p_table: filters.table || null,
@@ -332,16 +418,18 @@ export function useOpenSchedules(year = 2026) {
   })
 }
 
-export function useDuplicates() {
+export function useDuplicates(enabled = true) {
   return useQuery({
     queryKey: ['duplicates'],
+    enabled,
     queryFn: () => sel(supabase.from('duplicate_candidate').select('*').eq('status', 'Open')),
   })
 }
 
-export function useApprovals() {
+export function useApprovals(enabled = true) {
   return useQuery({
     queryKey: ['approvals'],
+    enabled,
     queryFn: () =>
       sel(
         supabase
@@ -640,9 +728,10 @@ export function useOrgClients(orgId?: string) {
 // The operational digest: the same at-risk lists the nightly job watches, read
 // straight from the digest views. Each view is optional, so a missing one
 // simply yields an empty list.
-export function useDigest() {
+export function useDigest(enabled = true) {
   return useQuery({
     queryKey: ['digest'],
+    enabled,
     queryFn: async () => {
       const [atRisk, rosterGaps, stalled, unstaffed, elearning] = await Promise.all([
         supabase.from('v_digest_at_risk').select('*'),
@@ -665,17 +754,27 @@ export function useDigest() {
 
 // Order facts for the revenue report, one row per order with month, channel,
 // course, seats, amount, and who sold it.
-export function useOrderFacts() {
+const monthStart = (month: string) => month ? `${month}-01` : ''
+const monthAfter = (month: string) => {
+  if (!month) return ''
+  const [year, value] = month.split('-').map(Number)
+  return new Date(Date.UTC(year, value, 1)).toISOString().slice(0, 10)
+}
+
+export function useOrderFacts(enabled = true, from = '', to = '') {
   return useQuery({
-    queryKey: ['order_facts'],
-    queryFn: () =>
-      sel(
-        supabase
-          .from('v_order_fact')
-          .select('order_id, order_date, order_month, channel, modality, seats, amount_php, payment_status, order_status, course_name, category, sales_name')
-          .order('order_date', { ascending: false })
-          .limit(5000)
-      ),
+    queryKey: ['order_facts', from, to],
+    enabled,
+    queryFn: () => {
+      let query = supabase
+        .from('v_order_fact')
+        .select('order_id, order_date, order_month, channel, modality, seats, amount_php, payment_status, order_status, course_name, category, sales_name')
+        .order('order_date', { ascending: false })
+        .limit(5000)
+      if (from) query = query.gte('order_month', monthStart(from))
+      if (to) query = query.lt('order_month', monthAfter(to))
+      return sel(query)
+    },
   })
 }
 
@@ -838,9 +937,10 @@ export function useCustomer360(orgId?: string) {
 }
 
 // ---- Analytics ----
-export function useFunnel() {
+export function useFunnel(enabled = true) {
   return useQuery({
     queryKey: ['funnel'],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('fn_funnel')
       if (error) return null
@@ -849,17 +949,19 @@ export function useFunnel() {
   })
 }
 
-export function useForecastVsActual() {
+export function useForecastVsActual(enabled = true) {
   return useQuery({
     queryKey: ['forecast_actual'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_session_forecast').select('*').order('start_date', { ascending: false }).limit(1000), []),
   })
 }
 
 // ---- SLA ----
-export function useSlaBreaches() {
+export function useSlaBreaches(enabled = true) {
   return useQuery({
     queryKey: ['sla_breaches'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_sla_breach').select('*').limit(1000), []),
   })
 }
@@ -873,10 +975,16 @@ export function useSessionPnl(scheduleId?: string) {
   })
 }
 
-export function useProfitability() {
+export function useProfitability(enabled = true, from = '', to = '') {
   return useQuery({
-    queryKey: ['profitability'],
-    queryFn: () => okOr(supabase.from('v_session_pnl').select('*').order('start_date', { ascending: false }).limit(2000), []),
+    queryKey: ['profitability', from, to],
+    enabled,
+    queryFn: () => {
+      let query = supabase.from('v_session_pnl').select('*').order('start_date', { ascending: false }).limit(2000)
+      if (from) query = query.gte('start_date', monthStart(from))
+      if (to) query = query.lt('start_date', monthAfter(to))
+      return okOr(query, [])
+    },
   })
 }
 
@@ -917,7 +1025,30 @@ export function useContacts(clientId?: string) {
   return useQuery({
     queryKey: ['contacts', clientId],
     enabled: !!clientId,
-    queryFn: () => okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), []),
+    queryFn: async () => {
+      // Hide soft-removed contacts (#129). Falls back to the unfiltered query
+      // before the contact.status migration is applied (42703).
+      const withStatus = await supabase.from('contact').select('*').eq('client_id', clientId).neq('status', 'Removed').order('is_primary', { ascending: false })
+      if (!withStatus.error) return withStatus.data
+      if (!isMissingColumn(withStatus.error)) throw withStatus.error
+      return okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), [])
+    },
+  })
+}
+
+// Orders currently returned-for-correction (order_handoff.status = 'Returned'),
+// for the distinct My Work queue (#129). RLS scopes rows to orders the user can
+// see (fn_can_see_order). The caller joins order details from the queue it holds.
+export function useReturnedHandoffs() {
+  return useQuery({
+    queryKey: ['returned_handoffs'],
+    queryFn: () => okOr(
+      supabase.from('order_handoff')
+        .select('order_id, return_reason, returned_at')
+        .eq('status', 'Returned')
+        .order('returned_at', { ascending: false }),
+      []
+    ),
   })
 }
 
@@ -992,17 +1123,19 @@ export function useAttachments(entityType?: string, entityId?: string) {
 }
 
 // Certificates expiring soon (or already expired).
-export function useCertsExpiring() {
+export function useCertsExpiring(enabled = true) {
   return useQuery({
     queryKey: ['certs_expiring'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_cert_expiring').select('*').limit(500), []),
   })
 }
 
 // Open receivables for the aging report: orders with a positive balance.
-export function useReceivables() {
+export function useReceivables(enabled = true) {
   return useQuery({
     queryKey: ['receivables'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_order_ar').select('*').gt('balance', 0).order('due_date', { ascending: true }).limit(2000), []),
   })
 }
@@ -1186,16 +1319,18 @@ export function useVenues(activeOnly = true) {
   })
 }
 
-export function useTrainerLoad() {
+export function useTrainerLoad(enabled = true) {
   return useQuery({
     queryKey: ['trainer_load'],
+    enabled,
     queryFn: () => sel(supabase.from('v_trainer_load').select('*').order('training_days', { ascending: false })),
   })
 }
 
-export function useUnstaffed() {
+export function useUnstaffed(enabled = true) {
   return useQuery({
     queryKey: ['unstaffed'],
+    enabled,
     queryFn: () => sel(supabase.from('v_unstaffed_sessions').select('*').order('days_out')),
   })
 }
@@ -1236,9 +1371,10 @@ export async function checkConflicts({
 }
 
 // ---- Phase 4: fulfillment queue ----
-export function useFulfillmentQueue() {
+export function useFulfillmentQueue(enabled = true) {
   return useQuery({
     queryKey: ['fulfillment_queue'],
+    enabled,
     queryFn: () => sel(supabase.from('v_fulfillment_queue').select('*').order('age_days', { ascending: false })),
   })
 }
@@ -1261,15 +1397,29 @@ export function useSessionsForCourse(courseId?: string) {
 
 // Server-side paged orders: filters and paging run in the database,
 // so the screen stays fast as the table grows.
-export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all' }: {
+// Columns the Orders table may sort on, server-side. Maps a UI sort key to the
+// actual DB column so the whole filtered dataset is ordered in the database
+// (not just the visible page). 'customer' orders by the joined client company.
+const ORDERS_SORT_COLUMNS: Record<string, string> = {
+  order_id: 'order_id',
+  fulfillment_stage: 'fulfillment_stage',
+  sap_order_no: 'sap_order_no',
+  channel: 'channel',
+  total_seats: 'total_seats',
+  total_amount: 'total_amount',
+}
+
+export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all', sortKey = '', sortDir = 'desc' }: {
   page?: number
   pageSize?: number
   q?: string
   stage?: string
   pay?: string
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
 }) {
   return useQuery({
-    queryKey: ['orders_paged', page, pageSize, q, stage, pay],
+    queryKey: ['orders_paged', page, pageSize, q, stage, pay, sortKey, sortDir],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       let query = supabase
@@ -1278,8 +1428,22 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
           'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))',
           { count: 'exact' }
         )
-        .order('order_date', { ascending: false })
-        .range(page * pageSize, page * pageSize + pageSize - 1)
+
+      // Server-side ordering across the whole filtered set. Fall back to newest
+      // first when no (or an unknown) sort key is given.
+      const asc = sortDir === 'asc'
+      if (sortKey === 'customer') {
+        // Order the top-level orders by the joined client's company. This is the
+        // PostgREST embedded-ordering form for a to-one relationship
+        // (order=client(company)); passing { referencedTable } would instead
+        // order the embedded rows and no-op at the parent level.
+        query = query.order('client(company)' as any, { ascending: asc, nullsFirst: false })
+      } else if (ORDERS_SORT_COLUMNS[sortKey]) {
+        query = query.order(ORDERS_SORT_COLUMNS[sortKey], { ascending: asc, nullsFirst: false })
+      } else {
+        query = query.order('order_date', { ascending: false })
+      }
+      query = query.range(page * pageSize, page * pageSize + pageSize - 1)
 
       if (stage !== 'all') query = query.eq('fulfillment_stage', stage)
       if (pay !== 'all') query = query.eq('payment_status', pay)
@@ -1297,12 +1461,70 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
   })
 }
 
+const CLIENTS_SORT_COLUMNS: Record<string, string> = {
+  company: 'company',
+  name: 'name',
+  email: 'email',
+  phone: 'phone',
+}
+
+// Server-paged client book (#128): filtered, sorted and paged in the database
+// across every match, so the list is no longer capped at the first 300 rows.
+// Mirrors useOrdersPaged. deleted_at may not exist before its migration, so the
+// query strips it (select + is-null filter) and retries — the graceful
+// degradation pattern used throughout the data layer.
+export function useClientsPaged({ page = 0, pageSize = 50, q = '', sortKey = 'company', sortDir = 'asc' }: {
+  page?: number
+  pageSize?: number
+  q?: string
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
+}) {
+  return useQuery({
+    queryKey: ['clients_paged', page, pageSize, q, sortKey, sortDir],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const base = 'client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)'
+      const asc = sortDir === 'asc'
+      const build = (withDeleted: boolean) => {
+        let query = supabase
+          .from('client')
+          .select(withDeleted ? base + ', deleted_at' : base, { count: 'exact' })
+        // Hide soft-deleted customers when the column is present.
+        if (withDeleted) query = query.is('deleted_at', null)
+        if (sortKey === 'owner') {
+          // Order the parent rows by the joined salesperson's name (PostgREST
+          // to-one embedded ordering, same form as useOrdersPaged's customer sort).
+          query = query.order('salesperson(name)' as any, { ascending: asc, nullsFirst: false })
+        } else if (CLIENTS_SORT_COLUMNS[sortKey]) {
+          query = query.order(CLIENTS_SORT_COLUMNS[sortKey], { ascending: asc, nullsFirst: false })
+        } else {
+          query = query.order('company', { ascending: true, nullsFirst: false })
+        }
+        query = query.range(page * pageSize, page * pageSize + pageSize - 1)
+        if (q.trim()) {
+          // Strip PostgREST-significant characters before interpolating user input
+          // into an or() filter string (same guard as useOrdersPaged).
+          const t = q.trim().replace(/[,()*%\\]/g, ' ').trim()
+          if (t) query = query.or(`company.ilike.%${t}%,name.ilike.%${t}%,email.ilike.%${t}%`)
+        }
+        return query
+      }
+      let res = await build(true)
+      if (res.error && isMissingColumn(res.error)) res = await build(false)
+      if (res.error) throw res.error
+      return { rows: res.data, count: res.count ?? 0 }
+    },
+  })
+}
+
 // ---- Phase 1/2: session health, order merge, notification center ----
 // Computed health per session (v_session_health). Consumers usually build a
 // Map<schedule_id, health> for O(1) lookup on the calendar / lists.
-export function useSessionHealth() {
+export function useSessionHealth(enabled = true) {
   return useQuery({
     queryKey: ['session_health'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_session_health').select('schedule_id, health'), []),
   })
 }

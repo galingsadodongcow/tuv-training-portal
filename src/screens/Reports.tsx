@@ -1,12 +1,14 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad, useCountryRevenue } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import ChartTable, { ChartTableToggle } from '../components/ChartTable'
+import { DateRange } from '../components/inputs/DateRange'
 import { php, money, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
+import { stageLabel } from '../lib/orderState'
 
 const monthLabel = (d: string) => {
   const dt = new Date(d)
@@ -77,50 +79,56 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
       default: return { from: '', to: '' }
     }
   }, [period, customFrom, customTo])
-  const inPeriod = (d?: string | null) => {
+  const inPeriod = useCallback((d?: string | null) => {
     if (!range.from && !range.to) return true
     if (!d) return false
     const m = String(d).slice(0, 7)
     if (range.from && m < range.from) return false
     if (range.to && m > range.to) return false
     return true
-  }
+  }, [range])
   const periodLabel = useMemo(() => {
     if (!range.from && !range.to) return 'All time'
     const fmt = (m: string) => (m ? monthLabel(`${m}-01`) : '—')
     if (range.from && range.to) return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`
     return range.from ? `From ${fmt(range.from)}` : `Through ${fmt(range.to)}`
   }, [range])
+  // The period filter is a DateRange primitive (#140) at month granularity. The
+  // presets resolve here (they depend on "now"); editing an input flips to custom.
+  const onPeriodPreset = (key: string) => {
+    if (['all', 'year', 'ytd', '12m', 'custom'].includes(key)) setPeriod(key as typeof period)
+  }
   const periodBar = (
-    <div className="filters">
-      <div className="seg">
-        {([['all', 'All'], ['year', 'This year'], ['ytd', 'Year to date'], ['12m', 'Last 12 months']] as const).map(([k, label]) => (
-          <button key={k} className={`seg-btn ${period === k ? 'on' : ''}`} onClick={() => setPeriod(k)}>{label}</button>
-        ))}
-      </div>
-      <input type="month" aria-label="Period from" value={range.from}
-        onChange={(e) => { const v = e.target.value; setCustomFrom(v); setCustomTo((t) => t || range.to); setPeriod('custom') }} />
-      <span className="fill-label">to</span>
-      <input type="month" aria-label="Period to" value={range.to}
-        onChange={(e) => { const v = e.target.value; setCustomTo(v); setCustomFrom((f) => f || range.from); setPeriod('custom') }} />
-      <span className="fill-label" style={{ marginLeft: 'auto' }}>{periodLabel}</span>
-    </div>
+    <DateRange
+      granularity="month"
+      presets={[{ key: 'all', label: 'All' }, { key: 'year', label: 'This year' }, { key: 'ytd', label: 'Year to date' }, { key: '12m', label: 'Last 12 months' }]}
+      preset={period}
+      value={range}
+      onChange={(v) => { setCustomFrom(v.from); setCustomTo(v.to); setPeriod('custom') }}
+      onPreset={onPeriodPreset}
+      fromLabel="Period from"
+      toLabel="Period to"
+      label={periodLabel}
+    />
   )
-  const digest = useDigest()
-  const facts = useOrderFacts()
-  const receivables = useReceivables()
-  const certs = useCertsExpiring()
-  const pnl = useProfitability()
-  const funnel = useFunnel()
-  const forecast = useForecastVsActual()
-  const trainerLoad = useTrainerLoad()
-  const countryRev = useCountryRevenue()
+  // Only load the active report. The analytics tab intentionally uses its four
+  // summary datasets together; hidden tabs no longer download thousands of rows.
+  const digest = useDigest(activeTab === 'digest')
+  const facts = useOrderFacts(activeTab === 'revenue', range.from, range.to)
+  const receivables = useReceivables(activeTab === 'receivables')
+  const certs = useCertsExpiring(activeTab === 'certs')
+  const pnl = useProfitability(activeTab === 'margin', range.from, range.to)
+  const analyticsEnabled = activeTab === 'analytics'
+  const funnel = useFunnel(analyticsEnabled)
+  const forecast = useForecastVsActual(analyticsEnabled)
+  const trainerLoad = useTrainerLoad(analyticsEnabled)
+  const countryRev = useCountryRevenue(analyticsEnabled)
 
   const margins = useMemo(() => {
     const rows = (pnl.data || []).filter((r: any) => (Number(r.revenue) > 0 || Number(r.total_cost) > 0) && inPeriod(r.start_date))
     const t = rows.reduce((a: any, r: any) => ({ revenue: a.revenue + Number(r.revenue || 0), cost: a.cost + Number(r.total_cost || 0), margin: a.margin + Number(r.margin || 0) }), { revenue: 0, cost: 0, margin: 0 })
     return { rows, ...t }
-  }, [pnl.data, range])
+  }, [pnl.data, inPeriod])
   const [verifyNo, setVerifyNo] = useState('')
   const [verifyResult, setVerifyResult] = useState<any>(undefined)
   const [verifyError, setVerifyError] = useState<any>(null)
@@ -169,7 +177,7 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
       return t
     }, { orders: 0, seats: 0, booked: 0, collected: 0 })
     return { months, channels, sales, totals }
-  }, [facts.data, range])
+  }, [facts.data, inPeriod])
 
   const stamp = () => new Date().toISOString().slice(0, 10)
   const exportMonths = () =>
@@ -242,7 +250,7 @@ export default function Reports({ embedded, section }: { embedded?: boolean; sec
             <DigestCard title="Roster gaps" rows={digest.data?.rosterGaps || []} empty="Every seat sold has a name."
               render={(r) => (<><Link href={`/session/${r.schedule_id}`}>{r.course_name}</Link> · {shortDate(r.start_date)} · {r.missing} missing</>)} />
             <DigestCard title="Stalled orders" rows={digest.data?.stalled || []} empty="Nothing sat too long in a stage."
-              render={(r) => (<><Link href={`/orders/${r.order_id}`}>{r.order_id}</Link> · {r.company || '—'} · {r.days_in_stage}d in {r.fulfillment_stage}</>)} />
+              render={(r) => (<><Link href={`/orders/${r.order_id}`}>{r.order_id}</Link> · {r.company || '—'} · {r.days_in_stage}d in {stageLabel(r.fulfillment_stage)}</>)} />
             <DigestCard title="Unstaffed sessions" rows={digest.data?.unstaffed || []} empty="Every upcoming session has a trainer."
               render={(r) => (<><Link href={`/session/${r.schedule_id}`}>{r.course_name}</Link> · {shortDate(r.start_date)} · {r.days_out}d out</>)} />
             <DigestCard title="E-learning waiting" rows={digest.data?.elearning || []} empty="No paid e-learning is waiting for access."

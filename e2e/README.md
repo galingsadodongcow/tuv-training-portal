@@ -32,9 +32,9 @@ a Chromium build, point the config at it with
 - `/orders`, `/calendar`, `/worklist`, `/clients`, and `/data-quality` each
   redirect to `/login` when signed out.
 
-## Extending to signed-in flows
+## Signed-in flows
 
-The auth gate is client-side (Supabase). To test signed-in journeys, add a
-setup project that signs in with a test account and saves storage state, then
-reuse that state in authenticated specs. Keep test credentials in CI secrets,
-never in the repo.
+Set `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` to enable the authenticated setup
+project. It signs in once, stores browser state in the gitignored `e2e/.auth`
+directory, and runs the role-home plus authenticated accessibility checks.
+Keep these values in CI secrets, never in the repository.

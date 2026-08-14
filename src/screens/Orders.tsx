@@ -7,8 +7,12 @@ import { TableSkeleton } from '../components/Skeleton'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
 import { exportCsv } from '../lib/csv'
-import { primaryFlag } from '../lib/orderState'
-import { useSort } from '../hooks/useSort'
+import { primaryFlag, stageLabel, STAGE_MEANING } from '../lib/orderState'
+import SavedViews from '../components/SavedViews'
+import { Legend } from '../components/Legend'
+import { FilterChip } from '../components/inputs/FilterChip'
+import { Tooltip } from '../components/inputs/Tooltip'
+import { updateUrlParams } from '../lib/urlParams'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
 const PAGE_SIZE = 50
@@ -24,28 +28,44 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
   const [page, setPage] = useState(0)
 
   const q = params.get('q') || ''
+  const [searchInput, setSearchInput] = useState(q)
   const stage = params.get('stage') || 'all'
   const pay = params.get('pay') || 'all'
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v || v === 'all') n.delete(k)
-    else n.set(k, v)
+  const sortKey = params.get('sort') || ''
+  const sortDir: 'asc' | 'desc' = params.get('dir') === 'asc' ? 'asc' : 'desc'
+  const setParams = (updates: Record<string, string>) => {
+    const n = updateUrlParams(params, updates)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: string) => setParams({ [k]: v })
+
+  useEffect(() => setSearchInput(q), [q])
+  useEffect(() => {
+    if (searchInput === q) return
+    const current = params.toString()
+    const timer = window.setTimeout(() => {
+      const next = updateUrlParams({ toString: () => current }, { q: searchInput })
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput, q, params, pathname, router])
+  // Sorting runs in the database across the whole filtered set (not just the
+  // visible page). Clicking a header sets the sort in the URL and resets paging;
+  // clicking the active column flips the direction.
+  const toggleSort = (key: string) => {
+    const n = new URLSearchParams(params.toString())
+    if (sortKey === key) n.set('dir', sortDir === 'asc' ? 'desc' : 'asc')
+    else { n.set('sort', key); n.set('dir', 'asc') }
+    setPage(0)
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
+  const sortIndicator = (key: string) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
   // Reset to the first page whenever a filter changes.
   useEffect(() => setPage(0), [q, stage, pay])
 
-  const query = useOrdersPaged({ page, pageSize: PAGE_SIZE, q, stage, pay })
+  const query = useOrdersPaged({ page, pageSize: PAGE_SIZE, q, stage, pay, sortKey, sortDir })
   const rows: any[] = query.data?.rows || []
-  // Sort is page-local: it reorders the current page's rows in the browser, not
-  // the whole filtered dataset (the query is paged server-side by order_date).
-  const sort = useSort(rows, (o: any, k: string) => {
-    if (k === 'customer') return o.client?.company || o.client?.name || null
-    if (k === 'total_seats') return Number(o.total_seats) || 0
-    if (k === 'total_amount') return Number(o.total_amount) || 0
-    return o?.[k]
-  })
   const count = query.data?.count ?? 0
   const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const from = count === 0 ? 0 : page * PAGE_SIZE + 1
@@ -55,7 +75,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
     exportCsv(
       `orders-${new Date().toISOString().slice(0, 10)}`,
       ['Order', 'Date', 'Customer', 'Stage', 'Payment', 'SAP', 'Channel', 'Seats', 'Amount'],
-      sort.sorted.map((o) => [
+      rows.map((o) => [
         o.order_id, o.order_date, o.client?.company || o.client?.name || '',
         o.fulfillment_stage, o.payment_status, o.sap_order_no || '', o.channel, o.total_seats, o.total_amount,
       ])
@@ -68,26 +88,42 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
         {!embedded && (
           <div>
             <h1>Orders</h1>
-            <p>{count} order{count === 1 ? '' : 's'}. Filtered and paged in the database. One row per order — expand for its training lines. Column sort reorders the current page.</p>
+            <p>{count} order{count === 1 ? '' : 's'}. Filtered, sorted and paged in the database across all matches. One row per order — expand for its training lines.</p>
             <span className="k-sub">All amounts in PHP (₱)</span>
           </div>
         )}
         <div className="toolbar">
-          <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}
-            title="Exports only the orders on the current page, not all matches.">Export this page</button>
+          <Legend title="What the stages mean"
+            items={STAGES.map((s) => ({ label: <span className="pill pill-webshop">{stageLabel(s)}</span>, desc: STAGE_MEANING[s] || '' }))} />
+          <Tooltip label="Exports only the orders on the current page, not all matches.">
+            <button className="btn btn-ghost btn-sm" onClick={doExport} disabled={rows.length === 0}>Export this page</button>
+          </Tooltip>
         </div>
       </div>
 
       <div className="filters">
-        <input placeholder="Search order # or SAP…" defaultValue={q} onChange={(e) => setParam('q', e.target.value)} style={{ minWidth: 240 }} />
+        <input placeholder="Search order # or SAP…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} style={{ minWidth: 240 }} />
         <select value={stage} onChange={(e) => setParam('stage', e.target.value)}>
           <option value="all">All stages</option>
-          {STAGES.map((s) => (<option key={s}>{s}</option>))}
+          {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)}</option>))}
         </select>
         <select value={pay} onChange={(e) => setParam('pay', e.target.value)}>
           <option value="all">All payments</option>
           {['Paid', 'Unpaid', 'Partial'].map((p) => (<option key={p}>{p}</option>))}
         </select>
+      </div>
+
+      {(q || stage !== 'all' || pay !== 'all') && (
+        <div className="filters" style={{ marginTop: -6 }}>
+          {q && <FilterChip label={`Search: ${q}`} onClear={() => setParam('q', '')} />}
+          {stage !== 'all' && <FilterChip label={`Stage: ${stageLabel(stage)}`} onClear={() => setParam('stage', 'all')} />}
+          {pay !== 'all' && <FilterChip label={`Payment: ${pay}`} onClear={() => setParam('pay', 'all')} />}
+          <button className="btn btn-ghost btn-sm" onClick={() => setParams({ q: '', stage: 'all', pay: 'all' })}>Clear all</button>
+        </div>
+      )}
+
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="orders" paramKeys={['q', 'stage', 'pay', 'sort', 'dir']} />
       </div>
 
       {query.error ? (
@@ -101,18 +137,18 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
               <thead>
                 <tr>
                   {([['order_id', 'Order'], ['customer', 'Customer'], ['fulfillment_stage', 'Stage'], ['sap_order_no', 'SAP'], ['channel', 'Channel'], ['total_seats', 'Seats', 'right'], ['total_amount', 'Amount', 'right']] as const).map(([key, label, align]) => (
-                    <th key={key} className={`clickable${align ? ' ' + align : ''}`} role="button" tabIndex={0}
-                      aria-sort={sort.sort.key === key ? (sort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      onClick={() => sort.toggle(key)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort.toggle(key) } }}>
-                      {label}{sort.indicator(key)}
+                    <th key={key} className={`clickable${align ? ' ' + align : ''}`} tabIndex={0}
+                      aria-sort={sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      onClick={() => toggleSort(key)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}>
+                      {label}{sortIndicator(key)}
                     </th>
                   ))}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {sort.sorted.map((o) => (
+                {rows.map((o) => (
                   <Fragment key={o.order_id}>
                     <tr className="clickable" role="button" tabIndex={0}
                       aria-label={`Open order ${o.order_id}`}
@@ -130,7 +166,7 @@ export default function Orders({ embedded }: { embedded?: boolean } = {}) {
                         </div>
                       </td>
                       <td>
-                        <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                        <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                         {(() => {
                           const f = primaryFlag(o)
                           return f ? (

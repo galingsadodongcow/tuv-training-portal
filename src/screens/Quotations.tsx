@@ -1,11 +1,12 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useQuotes, useClients, useSalespeople, useInvalidate } from '../hooks/data'
 import { TableSkeleton } from '../components/Skeleton'
 import { ErrorNote } from '../components/ui'
+import { useFormErrors, Field } from '../components/inputs/Field'
 import { useToast } from '../components/Toast'
 import { shortDate } from '../lib/format'
 import { quoteHealth } from '../lib/leadHealth'
@@ -30,9 +31,20 @@ export default function Quotations({ embedded }: { embedded?: boolean } = {}) {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<any>({ client_id: '', valid_until: '', sales_id: '' })
   const [busy, setBusy] = useState(false)
+  const fe = useFormErrors()
+  const sp = useSearchParams()
+
+  // Open the create form prefilled when arriving from an inquiry conversion
+  // (?new=1&client=<id>&sales=<id>) so the customer is carried, not re-picked.
+  useEffect(() => {
+    if (sp.get('new') !== '1') return
+    setCreating(true)
+    setForm((f: any) => ({ ...f, client_id: sp.get('client') || f.client_id, sales_id: sp.get('sales') || f.sales_id }))
+  }, [sp])
+  const errors = { client: !form.client_id ? 'Pick a client.' : null }
 
   const create = async () => {
-    if (!form.client_id) { toast.error('Pick a client.'); return }
+    if (!fe.submit(errors)) return
     const salesId = isAdmin ? (form.sales_id || null) : profile?.sales_id
     setBusy(true)
     const { data, error } = await supabase.from('quote').insert({
@@ -61,12 +73,13 @@ export default function Quotations({ embedded }: { embedded?: boolean } = {}) {
       {creating && (
         <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 640 }}>
           <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
-            <label className="field"><span>Client</span>
-              <select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
+            <Field label="Client" required error={errors.client} show={fe.shows('client')}>
+              <select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+                {...fe.inputProps('client', errors.client)}>
                 <option value="">Select a client…</option>
                 {clients.data?.map((c: any) => (<option key={c.client_id} value={c.client_id}>{c.company || c.name}</option>))}
               </select>
-            </label>
+            </Field>
             <label className="field"><span>Valid until</span><input type="date" value={form.valid_until} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} /></label>
             {isAdmin && (
               <label className="field"><span>Salesperson</span>

@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useSchedules, useChannelPax, useYears, useSessionHealth, useTrainers, useVenues, useInvalidate, checkConflicts } from '../hooks/data'
@@ -8,9 +8,15 @@ import { supabase } from '../lib/supabase'
 import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
+import SavedViews from '../components/SavedViews'
+import SessionRecord from '../components/SessionRecord'
+import { MultiSelect } from '../components/inputs/MultiSelect'
+import { Legend } from '../components/Legend'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { php, daysUntil } from '../lib/format'
 import { lt, formatSegments, LEARNING_TYPES } from '../lib/labels'
 import { healthMeta, healthNeedsAction, signalMeta } from '../lib/health'
+import { updateUrlParams } from '../lib/urlParams'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CURRENT_MONTH = MONTHS[new Date().getMonth()]
@@ -173,7 +179,8 @@ function WeekGrid({ days, sessions, onOpen, healthMap }: { days: Date[]; session
 // cancel) and the full record deep-link to the session page.
 function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?: Map<string, string>; canEdit: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => { ref.current?.querySelector<HTMLElement>('a, button, select')?.focus() }, [])
+  // Full Tab focus-trap + focus restore on close (#135).
+  useFocusTrap(ref)
   const trainers = useTrainers()
   const venues = useVenues()
   const invalidate = useInvalidate()
@@ -184,6 +191,9 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
   const [status, setStatus] = useState<string>(r.status)
   const [trainerClash, setTrainerClash] = useState<string | null>(null)
   const [venueClash, setVenueClash] = useState<string | null>(null)
+  // Local, not URL-backed: the calendar already spends ?session= on the drawer,
+  // and a tab within a transient panel is not worth a history entry.
+  const [tab, setTab] = useState('overview')
   const hm = healthMeta(healthMap?.get(r.schedule_id))
 
   // The session's date blocks in the shape fn_find_conflicts expects (mirrors
@@ -316,11 +326,15 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
 
           <div className="drawer-section">
             <div className="toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
-              <Link href={`/session/${r.schedule_id}`} className="btn">Open full session →</Link>
               {canEdit && <Link href={`/session/${r.schedule_id}/edit`} className="btn btn-ghost">Edit dates / reschedule</Link>}
-              {canEdit && <Link href={`/session/${r.schedule_id}`} className="btn btn-ghost">Cancel session</Link>}
             </div>
           </div>
+
+          {/* The same tabbed record the full page shows (Overview · Orders ·
+              Participants · Files · Activity) — the drawer used to stop at a
+              hand-rolled summary, so anything past trainer/venue meant leaving
+              the calendar. Tab state is local here; the page keeps it in ?tab=. */}
+          <SessionRecord scheduleId={r.schedule_id} tab={tab} onTabChange={setTab} variant="drawer" />
         </div>
       </div>
     </div>
@@ -377,7 +391,7 @@ function SessionRows({ rows, pax, onOpen, canEdit, canSell, healthMap }: { rows:
             <HealthChip h={healthMap?.get(r.schedule_id)} />
           </div>
         </td>
-        <td data-label="Go" className="hide-m"><GoPill value={r.go_status} /></td>
+        <td data-label="Go"><GoPill value={r.go_status} /></td>
         <td data-label="Fee" className="right hide-m">{php(r.price)}</td>
         <td data-label="Links" className="right" onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -409,7 +423,8 @@ export default function Calendar() {
   const cal = get('cal', 'grid') // grid | week | day | list
   const month = get('month', CURRENT_MONTH)
   const dateStr = get('date', toISO(new Date())) // week/day anchor (yyyy-mm-dd)
-  const status = get('status', 'all')
+  // Status is now a multi-select — a comma-joined list in the URL (empty = all).
+  const statusParam = params.get('status') || ''
   const category = get('category', 'all')
   const ltype = get('lt', 'all')
   const q = get('q', '')
@@ -417,12 +432,11 @@ export default function Calendar() {
   const sortDir = get('dir', 'asc')
   const gridMonth = month === 'all' ? CURRENT_MONTH : month
 
-  const setParam = (k: string, v: any) => {
-    const next = new URLSearchParams(params.toString())
-    if (v === 'all' || v === '' || v == null) next.delete(k)
-    else next.set(k, v)
+  const setParams = (updates: Record<string, any>) => {
+    const next = updateUrlParams(params, updates)
     router.replace(`${pathname}?${next.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: any) => setParams({ [k]: v })
 
   const sched = useSchedules(year)
   const pax = useChannelPax()
@@ -432,9 +446,26 @@ export default function Calendar() {
     [health.data]
   )
   const { profile } = useAuth()
-  const [drawer, setDrawer] = useState<any | null>(null)
+  // The open session drawer lives in the URL (?session=<schedule_id>) so a
+  // specific session's drawer is shareable and survives a reload (#139). Derived
+  // from the unfiltered schedule set, so a deep link opens even when the current
+  // filters would hide the row.
+  const drawerId = params.get('session') || ''
+  const drawer = useMemo(() => (sched.data || []).find((s: any) => s.schedule_id === drawerId) || null, [sched.data, drawerId])
+  const openDrawer = (s: any) => setParam('session', s.schedule_id)
+  const closeDrawer = () => setParam('session', '')
+  // Session editing stays with the roles RLS lets write the schedule
+  // (p_sched_w = operations/super_admin). Every other role reads the calendar —
+  // it is the single source of truth for what we sell — and acts on the orders
+  // hanging off a session instead.
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
-  const canSell = ['sales', 'super_admin'].includes(profile?.role as string)
+  // "Book" links into /sales-entry, so it may only appear for roles that can
+  // actually create an order. The gate is fn_create_order's own allowlist, not
+  // the orders INSERT policies — that RPC is SECURITY DEFINER and bypasses RLS,
+  // which is why operations can create orders with no INSERT policy at all.
+  // sales_manager joined the allowlist in 20260814080000 so a supervisor can
+  // sell for their own team.
+  const canSell = ['sales', 'sales_manager', 'coordinator', 'super_admin'].includes(profile?.role as string)
 
   const categories = useMemo(
     () => [...new Set((sched.data || []).map((r: any) => r.course?.category).filter(Boolean))].sort(),
@@ -443,17 +474,18 @@ export default function Calendar() {
 
   // Filter by everything except the month; the grid slices by start date and
   // the list applies the month text on top.
+  const statusList = useMemo(() => statusParam.split(',').map((s) => s.trim()).filter(Boolean), [statusParam])
   const base = useMemo(() => {
     if (!sched.data) return []
     const term = q.trim().toLowerCase()
     return sched.data.filter(
       (r: any) =>
-        (status === 'all' || r.status === status) &&
+        (statusList.length === 0 || statusList.includes(r.status)) &&
         (category === 'all' || r.course?.category === category) &&
         (ltype === 'all' || r.modality === ltype) &&
         (!term || r.course?.course_name?.toLowerCase().includes(term))
     )
-  }, [sched.data, status, category, ltype, q])
+  }, [sched.data, statusList, category, ltype, q])
 
   const rows = useMemo(() => {
     let out = base.filter((r: any) => month === 'all' || r.month === month)
@@ -477,18 +509,18 @@ export default function Calendar() {
   }).length
 
   // Week/day anchor and the seven Sun–Sat days around it.
-  const anchor = new Date(`${dateStr}T00:00:00`)
+  const anchor = useMemo(() => new Date(`${dateStr}T00:00:00`), [dateStr])
   const weekDays = useMemo(() => {
     const start = new Date(anchor)
     start.setDate(anchor.getDate() - anchor.getDay())
     return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
-  }, [dateStr])
+  }, [anchor])
   const weekLabel = `${shortDate(weekDays[0])} – ${shortDate(weekDays[6])}, ${weekDays[6].getFullYear()}`
   const dayLabel = `${WEEKDAYS[anchor.getDay()]}, ${shortDate(anchor)}, ${anchor.getFullYear()}`
   const weekCount = useMemo(() => base.filter((r: any) => weekDays.some((d) => sameDay(r.start_date, d))).length, [base, weekDays])
   const dayRows = useMemo(
     () => base.filter((r: any) => sameDay(r.start_date, anchor)).sort((a: any, b: any) => (a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0)),
-    [base, dateStr]
+    [base, anchor]
   )
 
   if (sched.isLoading || years.isLoading) return <Spinner label="Loading calendar" />
@@ -508,12 +540,12 @@ export default function Calendar() {
   const sortBtn = (key: string, label: string, align?: string) => {
     const toggleSort = () => {
       if (sortKey === key) setParam('dir', sortDir === 'asc' ? 'desc' : 'asc')
-      else { setParam('sort', key); setParam('dir', 'asc') }
+      else setParams({ sort: key, dir: 'asc' })
     }
     const ariaSort = sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
     return (
       <th className={align} style={{ cursor: 'pointer', userSelect: 'none' }}
-        role="button" tabIndex={0} aria-sort={ariaSort as any}
+        tabIndex={0} aria-sort={ariaSort as any}
         onClick={toggleSort}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort() } }}>
         {label}{sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
@@ -528,7 +560,7 @@ export default function Calendar() {
         {sortBtn('date', 'Dates')}
         <th className="hide-m">Learning type</th>
         {sortBtn('fill', 'Fill')}
-        <th className="hide-m">Channels</th><th>Status</th><th className="hide-m">Go</th>
+        <th className="hide-m">Channels</th><th>Status</th><th>Go</th>
         {sortBtn('fee', 'Fee', 'right hide-m')}
         <th className="right">Links</th>
       </tr>
@@ -580,10 +612,9 @@ export default function Calendar() {
           {/* Degrade quietly if the year list fails to load — keep the current year selectable. */}
           {(years.data?.length ? years.data : [{ year_id: year, year }]).map((y: any) => (<option key={y.year_id} value={y.year}>{y.year}</option>))}
         </select>
-        <select value={status} aria-label="Filter by status" onChange={(e) => setParam('status', e.target.value)}>
-          <option value="all">All statuses</option>
-          {['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => (<option key={s}>{s}</option>))}
-        </select>
+        <MultiSelect ariaLabel="Filter by status" allLabel="All statuses"
+          options={['Tentative', 'Confirmed', 'Running', 'Completed', 'Cancelled'].map((s) => ({ value: s, label: s }))}
+          values={statusList} onChange={(vals) => setParam('status', vals.join(','))} />
         <select value={category} aria-label="Filter by category" onChange={(e) => setParam('category', e.target.value)}>
           <option value="all">All categories</option>
           {categories.map((c: any) => (<option key={c}>{c}</option>))}
@@ -592,11 +623,25 @@ export default function Calendar() {
           <option value="all">All learning types</option>
           {LEARNING_TYPES.map((m) => (<option key={m} value={m}>{lt(m)}</option>))}
         </select>
+        <div style={{ marginLeft: 'auto' }}>
+          <Legend title="What session health means" ariaLabel="What session health means"
+            items={[
+              { label: <span className="pill health-blocked">Blocked</span>, desc: 'Can’t proceed — needs action now.' },
+              { label: <span className="pill health-risk">At risk</span>, desc: 'Undersold with the start date approaching.' },
+              { label: <span className="pill health-risk">Needs attention</span>, desc: 'Something on the session needs a look.' },
+              { label: <span className="pill health-ok">Healthy</span>, desc: 'On track — no action needed.' },
+              { label: <span className="pill health-done">Completed / Cancelled</span>, desc: 'Closed — no action.' },
+            ]} />
+        </div>
+      </div>
+
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="calendar" paramKeys={['cal', 'month', 'year', 'status', 'category', 'lt', 'q', 'sort', 'dir']} />
       </div>
 
       {cal === 'grid' && (
         <>
-          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={setDrawer} healthMap={healthMap} />
+          <MonthGrid year={year} monthName={gridMonth} sessions={base} onOpen={openDrawer} healthMap={healthMap} />
           {gridCount === 0 && (
             <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions in {gridMonth} {year}. Use the arrows or switch month.</div></div>
           )}
@@ -605,7 +650,7 @@ export default function Calendar() {
 
       {cal === 'week' && (
         <>
-          <WeekGrid days={weekDays} sessions={base} onOpen={setDrawer} healthMap={healthMap} />
+          <WeekGrid days={weekDays} sessions={base} onOpen={openDrawer} healthMap={healthMap} />
           {weekCount === 0 && (
             <div className="card" style={{ marginTop: 12 }}><div className="empty">No sessions this week. Use the arrows or jump to Today.</div></div>
           )}
@@ -615,7 +660,7 @@ export default function Calendar() {
       {cal === 'day' && (
         dayRows.length > 0 ? (
           <div className="card cal-card">
-            <table className="cal-table">{head}<tbody><SessionRows rows={dayRows} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={dayRows} pax={pax.data} onOpen={openDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
           </div>
         ) : (
           <div className="card"><div className="empty">No sessions on {dayLabel}. Use the arrows or jump to Today.</div></div>
@@ -627,7 +672,7 @@ export default function Calendar() {
           // One combined list — the Training-type column already distinguishes
           // PersCert vs Professional, so the two split tables collapse into one.
           <div className="card cal-card">
-            <table className="cal-table">{head}<tbody><SessionRows rows={rows} pax={pax.data} onOpen={setDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
+            <table className="cal-table">{head}<tbody><SessionRows rows={rows} pax={pax.data} onOpen={openDrawer} canEdit={canEdit} canSell={canSell} healthMap={healthMap} /></tbody></table>
           </div>
         ) : (
           <div className="card"><div className="empty">
@@ -636,7 +681,7 @@ export default function Calendar() {
         )
       )}
 
-      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} canEdit={canEdit} onClose={() => setDrawer(null)} />}
+      {drawer && <SessionDrawer r={drawer} healthMap={healthMap} canEdit={canEdit} onClose={closeDrawer} />}
     </>
   )
 }

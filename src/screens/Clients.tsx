@@ -1,31 +1,60 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useClients, useAttribution } from '../hooks/data'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { useClientsPaged, useAttribution } from '../hooks/data'
 import { ErrorNote } from '../components/ui'
 import { TableSkeleton } from '../components/Skeleton'
 import { shortDate, num } from '../lib/format'
-import { useSort } from '../hooks/useSort'
 import { exportCsv } from '../lib/csv'
+import { updateUrlParams } from '../lib/urlParams'
+
+const PAGE_SIZE = 50
 
 export default function Clients() {
   const router = useRouter()
-  const clients = useClients()
+  const params = useSearchParams()
+  const pathname = usePathname()
   const attribution = useAttribution()
   const [tab, setTab] = useState('clients')
-  const [q, setQ] = useState('')
+  const [page, setPage] = useState(0)
 
-  const filtered = useMemo(() => {
-    // Hide soft-deleted customers. deleted_at is undefined before the migration,
-    // so this is a no-op until the column exists.
-    const live = (clients.data || []).filter((c: any) => !c.deleted_at)
-    const t = q.trim().toLowerCase()
-    if (!t) return live
-    return live.filter(
-      (c: any) => c.company?.toLowerCase().includes(t) || c.name?.toLowerCase().includes(t) || c.email?.toLowerCase().includes(t)
-    )
-  }, [clients.data, q])
+  // Search and sort live in the URL so a view survives navigation (#128).
+  const q = params.get('q') || ''
+  const [searchInput, setSearchInput] = useState(q)
+  const sortKey = params.get('sort') || 'company'
+  const sortDir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc'
+  useEffect(() => setSearchInput(q), [q])
+  useEffect(() => {
+    if (searchInput === q) return
+    const current = params.toString()
+    const timer = window.setTimeout(() => {
+      const next = updateUrlParams({ toString: () => current }, { q: searchInput }, [''])
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput, q, params, pathname, router])
+  // Sorting runs in the database across every match, not just the visible page.
+  // Clicking a header sets the sort in the URL and resets paging; clicking the
+  // active column flips the direction.
+  const toggleSort = (key: string) => {
+    const n = new URLSearchParams(params.toString())
+    if (sortKey === key) n.set('dir', sortDir === 'asc' ? 'desc' : 'asc')
+    else { n.set('sort', key); n.set('dir', 'asc') }
+    setPage(0)
+    router.replace(`${pathname}?${n.toString()}`, { scroll: false })
+  }
+  const sortIndicator = (key: string) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
+
+  // Reset to the first page whenever the search changes.
+  useEffect(() => setPage(0), [q])
+
+  const clients = useClientsPaged({ page, pageSize: PAGE_SIZE, q, sortKey, sortDir })
+  const rows: any[] = clients.data?.rows || []
+  const count = clients.data?.count ?? 0
+  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE))
+  const from = count === 0 ? 0 : page * PAGE_SIZE + 1
+  const to = Math.min(count, (page + 1) * PAGE_SIZE)
 
   const bySales = useMemo(() => {
     if (!attribution.data) return []
@@ -37,16 +66,12 @@ export default function Clients() {
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [attribution.data])
 
-  const clientSort = useSort(filtered, (c: any, k: string) => (k === 'owner' ? c.salesperson?.name : c[k]), { key: 'company', dir: 'asc' })
   const exportClients = () =>
     exportCsv(
       'clients-' + new Date().toISOString().slice(0, 10),
       ['Company', 'Contact', 'Email', 'Phone', 'Owner'],
-      clientSort.sorted.map((c: any) => [c.company, c.name, c.email, c.phone, c.salesperson?.name || ''])
+      rows.map((c: any) => [c.company, c.name, c.email, c.phone, c.salesperson?.name || ''])
     )
-
-  if (clients.isLoading) return <TableSkeleton rows={8} cols={5} />
-  if (clients.error) return <ErrorNote error={clients.error} />
 
   return (
     <>
@@ -65,45 +90,62 @@ export default function Clients() {
         ))}
         {tab === 'clients' && (
           <>
-            <input placeholder="Search company, name, email…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 240 }} />
-            <button className="btn btn-ghost btn-sm" onClick={exportClients} disabled={filtered.length === 0}>Export CSV</button>
+            <input placeholder="Search company, name, email…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} style={{ minWidth: 240 }} />
+            <button className="btn btn-ghost btn-sm" onClick={exportClients} disabled={rows.length === 0}
+              title="Exports only the clients on the current page, not all matches.">Export this page</button>
           </>
         )}
       </div>
 
       {tab === 'clients' ? (
-        <div className="card">
-          <table>
-            <thead>
-              <tr>
-                {([['company', 'Company'], ['name', 'Contact'], ['email', 'Email'], ['phone', 'Phone'], ['owner', 'Owner']] as const).map(([key, label]) => (
-                  <th key={key} className="clickable" role="button" tabIndex={0}
-                    aria-sort={clientSort.sort.key === key ? (clientSort.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    onClick={() => clientSort.toggle(key)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clientSort.toggle(key) } }}>
-                    {label}{clientSort.indicator(key)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {clientSort.sorted.slice(0, 300).map((c: any) => (
-                <tr key={c.client_id} className="clickable" role="button" tabIndex={0}
-                  aria-label={`Open ${c.company || c.name || 'client'}`}
-                  onClick={() => router.push(`/clients/${c.client_id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/clients/${c.client_id}`) } }}>
-                  <td style={{ fontWeight: 600 }}>{c.company || '—'}</td>
-                  <td>{c.name || '—'}</td>
-                  <td>{c.email || '—'}</td>
-                  <td>{c.phone || '—'}</td>
-                  <td>{c.salesperson?.name || <span className="muted">—</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length === 0 && <div className="empty">No clients match.</div>}
-          {filtered.length > 300 && <div className="empty muted">Showing first 300 of {filtered.length}.</div>}
-        </div>
+        clients.error ? (
+          <ErrorNote error={clients.error} />
+        ) : clients.isLoading && !clients.data ? (
+          <TableSkeleton rows={8} cols={5} />
+        ) : (
+          <>
+            <div className="card" style={{ opacity: clients.isFetching ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+              <table>
+                <thead>
+                  <tr>
+                    {([['company', 'Company'], ['name', 'Contact'], ['email', 'Email'], ['phone', 'Phone'], ['owner', 'Owner']] as const).map(([key, label]) => (
+                    <th key={key} className="clickable" tabIndex={0}
+                        aria-sort={sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        onClick={() => toggleSort(key)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}>
+                        {label}{sortIndicator(key)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c: any) => (
+                    <tr key={c.client_id} className="clickable" role="button" tabIndex={0}
+                      aria-label={`Open ${c.company || c.name || 'client'}`}
+                      onClick={() => router.push(`/clients/${c.client_id}`)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/clients/${c.client_id}`) } }}>
+                      <td style={{ fontWeight: 600 }}>{c.company || '—'}</td>
+                      <td>{c.name || '—'}</td>
+                      <td>{c.email || '—'}</td>
+                      <td>{c.phone || '—'}</td>
+                      <td>{c.salesperson?.name || <span className="muted">—</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.length === 0 && <div className="empty">No clients match.</div>}
+            </div>
+
+            <div className="toolbar" style={{ justifyContent: 'space-between', marginTop: 14 }}>
+              <span className="fill-label">{from}–{to} of {count}</span>
+              <div className="toolbar">
+                <button className="btn btn-ghost btn-sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>← Prev</button>
+                <span className="fill-label">Page {page + 1} of {pageCount}</span>
+                <button className="btn btn-ghost btn-sm" disabled={page + 1 >= pageCount} onClick={() => setPage((p) => p + 1)}>Next →</button>
+              </div>
+            </div>
+          </>
+        )
       ) : attribution.error ? (
         <ErrorNote error={attribution.error} />
       ) : (

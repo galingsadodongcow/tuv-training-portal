@@ -15,7 +15,7 @@ import { useConfirm } from '../components/Confirm'
 import { taskEvents, notificationEvents, auditEvents, mergeActivity } from '../lib/activity'
 import { php, shortDate } from '../lib/format'
 import { formatSegments } from '../lib/labels'
-import { collectionState, collectionTone } from '../lib/orderState'
+import { collectionState, collectionTone, stageLabel } from '../lib/orderState'
 
 // Customer 360: one page that gathers everything about a client. Contacts,
 // orders, the sessions those orders booked, and the money position, all read
@@ -40,6 +40,9 @@ export default function ClientDetail() {
   const [saving, setSaving] = useState(false)
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [newOrgName, setNewOrgName] = useState('')
+  // Inline edit of the customer's core fields (#130).
+  const [editingCore, setEditingCore] = useState(false)
+  const [core, setCore] = useState({ contact: '', email: '', phone: '', industry: '' })
   const client = useClient(id)
   const orgOptions = useOrgOptions()
   const hist = useClientHistory(id)
@@ -76,6 +79,22 @@ export default function ClientDetail() {
   // the control until then.
   const orgReady = c.org_id !== undefined
   const canSetOrg = orgReady && (['super_admin', 'coordinator', 'operations', 'business_owner'].includes(profile?.role as string) || isOwnerSales)
+  // The DB (RLS 20260812210000) lets these roles UPDATE a client; the owning sales
+  // rep too. RLS stays authoritative — this only decides whether to show the form.
+  const canEditCore = ['super_admin', 'coordinator', 'operations', 'business_owner'].includes(profile?.role as string) || isOwnerSales
+  const startEditCore = () => { setCore({ contact: c.contact || '', email: c.email || '', phone: c.phone || '', industry: c.industry || '' }); setEditingCore(true) }
+  const saveCore = async () => {
+    const email = core.email.trim()
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast.error('Enter a valid email.'); return }
+    setSaving(true)
+    const { error } = await supabase.from('client').update({
+      contact: core.contact.trim() || null, email: email || null,
+      phone: core.phone.trim() || null, industry: core.industry.trim() || null,
+    }).eq('client_id', id)
+    if (error) toast.error(error.message)
+    else { toast.success('Customer details saved.'); invalidate(['client', 'clients', 'clients_paged']); setEditingCore(false) }
+    setSaving(false)
+  }
   // Creating a new org (vs. assigning an existing one) keeps the old
   // Organizations-screen gate: super_admin, or the owning sales rep.
   const canCreateOrg = canSetOrg && (profile?.role === 'super_admin' || (profile?.role === 'sales' && isOwnerSales))
@@ -193,11 +212,34 @@ export default function ClientDetail() {
         </div>
 
         <RecordSection title="Details">
+          {canEditCore && (
+            <div className="toolbar" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
+              {editingCore ? (
+                <>
+                  <button className="btn btn-sm" onClick={saveCore} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingCore(false)} disabled={saving}>Cancel</button>
+                </>
+              ) : (
+                <button className="btn btn-ghost btn-sm" onClick={startEditCore}>Edit details</button>
+              )}
+            </div>
+          )}
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-            <KeyVal label="Contact">{c.contact || c.name || '—'}</KeyVal>
-            <KeyVal label="Email">{c.email || '—'}</KeyVal>
-            <KeyVal label="Phone">{c.phone || '—'}</KeyVal>
-            <KeyVal label="Industry">{c.industry || '—'}</KeyVal>
+            {editingCore ? (
+              <>
+                <label className="field"><span>Contact</span><input value={core.contact} onChange={(e) => setCore({ ...core, contact: e.target.value })} /></label>
+                <label className="field"><span>Email</span><input type="email" value={core.email} onChange={(e) => setCore({ ...core, email: e.target.value })} /></label>
+                <label className="field"><span>Phone</span><input value={core.phone} onChange={(e) => setCore({ ...core, phone: e.target.value })} /></label>
+                <label className="field"><span>Industry</span><input value={core.industry} onChange={(e) => setCore({ ...core, industry: e.target.value })} /></label>
+              </>
+            ) : (
+              <>
+                <KeyVal label="Contact">{c.contact || c.name || '—'}</KeyVal>
+                <KeyVal label="Email">{c.email || '—'}</KeyVal>
+                <KeyVal label="Phone">{c.phone || '—'}</KeyVal>
+                <KeyVal label="Industry">{c.industry || '—'}</KeyVal>
+              </>
+            )}
             {orgReady && (
               <KeyVal label="Organization">
                 {canSetOrg ? (
@@ -275,7 +317,7 @@ export default function ClientDetail() {
                     <tr key={o.order_id}>
                       <td>
                         <Link href={`/orders/${o.order_id}`} style={{ fontWeight: 600 }}>{o.order_id}</Link>
-                        <div className="fill-label">{shortDate(o.order_date)} · {o.fulfillment_stage}</div>
+                        <div className="fill-label">{shortDate(o.order_date)} · {stageLabel(o.fulfillment_stage)}</div>
                       </td>
                       <td className="fill-label">{o.lines?.map((l: any) => l.course?.course_name).filter(Boolean).join(', ') || '—'}</td>
                       <td>

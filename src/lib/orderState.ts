@@ -30,6 +30,31 @@ const STALL_DAYS = 14
 const NOT_STARTED = ['New', 'In Communication', 'For Order Creation']
 const TERMINAL_STAGE = ['SAP Created', 'Cancelled', 'No Feedback']
 
+// Human-readable labels for the order fulfilment-stage enum (#126). The enum
+// value is stored and written unchanged — only the display text changes — so
+// users read "Ready to create order" instead of the raw "For Order Creation".
+export const STAGE_LABEL: Record<string, string> = {
+  'New': 'New',
+  'In Communication': 'In communication',
+  'For Order Creation': 'Ready to create order',
+  'Endorsed to Ops': 'Sent to Operations',
+  'SAP Created': 'Booked in SAP',
+  'No Feedback': 'Awaiting customer reply',
+  'Cancelled': 'Cancelled',
+}
+export const stageLabel = (s?: string | null): string => (s ? STAGE_LABEL[s] ?? s : '—')
+
+// One-line meaning per stage, for the "?" legend on Orders (#139).
+export const STAGE_MEANING: Record<string, string> = {
+  'New': 'Just created — not yet worked.',
+  'In Communication': 'A rep is talking with the customer.',
+  'For Order Creation': 'Complete and ready to become a SAP order.',
+  'Endorsed to Ops': 'Handed to Operations for fulfilment.',
+  'SAP Created': 'Recorded in SAP; fulfilment is underway.',
+  'No Feedback': 'Waiting on the customer to reply.',
+  'Cancelled': 'The order was cancelled.',
+}
+
 const rawAge = (d?: string | null): number | null =>
   d ? Math.floor((Date.now() - +new Date(d)) / 86400000) : null
 
@@ -88,7 +113,11 @@ export function orderBlockers(o: any): OrderFlag[] {
 // The collection state expressed as a flag, when it needs attention.
 function collectionFlag(o: any): OrderFlag | null {
   const s = collectionState(o)
-  if (s === 'Overdue') return { label: 'Payment overdue', tone: 'danger', kind: 'collection' }
+  // Show the day count with "overdue" so the word is self-defining (#139).
+  if (s === 'Overdue') {
+    const a = orderAge(o)
+    return { label: a != null ? `Payment overdue ${a}d` : 'Payment overdue', tone: 'danger', kind: 'collection' }
+  }
   if (s === 'Due soon') return { label: 'Payment due soon', tone: 'warn', kind: 'collection' }
   return null
 }

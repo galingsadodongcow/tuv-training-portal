@@ -1,6 +1,6 @@
 // Small line icons for the navigation, drawn in currentColor so they follow the
 // link's own color in light and dark. One path set per nav icon key.
-const PATHS: Record<string, JSX.Element> = {
+const PATHS: Record<string, React.JSX.Element> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
   calendar: <><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v3M16 3v3" /></>,
   orders: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,

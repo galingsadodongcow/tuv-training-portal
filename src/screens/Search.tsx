@@ -28,7 +28,25 @@ export default function Search() {
   const [error, setError] = useState<string | null>(null)
   // The last term we actually searched, so the "no matches" copy names it.
   const [searched, setSearched] = useState('')
+  // Recent searches (#136) — kept in localStorage so a repeat lookup is one click.
+  const [recent, setRecent] = useState<string[]>([])
   const timer = useRef<any>(null)
+  const requestId = useRef(0)
+
+  useEffect(() => {
+    try {
+      const r = JSON.parse(localStorage.getItem('search_recent') || '[]')
+      if (Array.isArray(r)) setRecent(r.filter((t) => typeof t === 'string').slice(0, 8))
+    } catch { /* ignore */ }
+  }, [])
+  const pushRecent = (term: string) => {
+    setRecent((prev) => {
+      const next = [term, ...prev.filter((t) => t.toLowerCase() !== term.toLowerCase())].slice(0, 8)
+      try { localStorage.setItem('search_recent', JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
+  const clearRecent = () => { setRecent([]); try { localStorage.removeItem('search_recent') } catch { /* ignore */ } }
 
   // Keep the input in sync when the URL changes underneath us (e.g. a shared
   // link or the browser back button), without clobbering active typing.
@@ -38,6 +56,7 @@ export default function Search() {
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
     const t = q.trim()
+    const id = ++requestId.current
     // Reflect the term in the URL (replace, so typing doesn't stack history).
     const next = t ? `${pathname}?q=${encodeURIComponent(t)}` : pathname
     const current = `${pathname}${urlQ ? `?q=${encodeURIComponent(urlQ)}` : ''}`
@@ -47,12 +66,19 @@ export default function Search() {
     setLoading(true)
     timer.current = setTimeout(async () => {
       const { data, error } = await supabase.rpc('fn_global_search', { p_q: t })
+      if (id !== requestId.current) return
       if (error) { setError(error.message); setResults([]) }
-      else { setError(null); setResults(visibleHits((data || []) as any, role)) }
+      else {
+        const hits = visibleHits((data || []) as any, role)
+        setError(null); setResults(hits)
+        if (hits.length > 0) pushRecent(t)
+      }
       setSearched(t)
       setLoading(false)
     }, 200)
-    return () => timer.current && clearTimeout(timer.current)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, role])
 
@@ -95,13 +121,28 @@ export default function Search() {
       {error && <ErrorNote error={error} />}
 
       {trimmed.length < 2 ? (
-        <Empty title="Type to search">Enter at least two characters to search across the portal.</Empty>
+        recent.length > 0 ? (
+          <div className="card card-pad">
+            <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+              <div className="k-label">Recent searches</div>
+              <button className="linkbtn" onClick={clearRecent}>Clear</button>
+            </div>
+            <div className="chip-row">
+              {recent.map((t) => (
+                <button key={t} className="btn btn-ghost btn-sm" onClick={() => setQ(t)}>{t}</button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <Empty title="Type to search">Enter at least two characters to search across the portal.</Empty>
+        )
       ) : loading ? (
         <Spinner label="Searching" />
       ) : groups.length === 0 ? (
         <Empty title="No matches">Nothing matches “{searched || trimmed}”.</Empty>
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
+          <div className="fill-label">{results.length} result{results.length === 1 ? '' : 's'} for “{searched}” — upcoming sessions first.</div>
           {groups.map((g) => (
             <div key={g.kind} className="card">
               <div className="k-label" style={{ padding: '12px 14px 0' }}>{g.label}</div>

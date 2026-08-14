@@ -11,16 +11,16 @@ import { noteEvents, taskEvents, notificationEvents, auditEvents, mergeActivity 
 import { ChannelPill, Spinner, ErrorNote } from '../components/ui'
 import { RecordHeader, RecordTabs, RecordSection, KeyVal, RecordNotice, Badge } from '../components/record'
 import BlockerBar from '../components/BlockerBar'
+import OwnerAssign from '../components/OwnerAssign'
 import ReceivablePanel from '../components/ReceivablePanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { php, shortDate } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
-import { collectionState, collectionTone } from '../lib/orderState'
+import { collectionState, collectionTone, stageLabel } from '../lib/orderState'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback', 'Cancelled']
-const PAYMENTS = ['Unpaid', 'Partial', 'Paid']
 
 function LineTransfer({ line, onDone, onCancel }: { line: any; onDone: () => void; onCancel: () => void }) {
   const targets = useTransferTargets(line.course_id, line.schedule_id)
@@ -159,7 +159,7 @@ export default function OrderDetail() {
     let overrideReason: string | undefined
     if (comp && comp.ok === false) {
       if (profile?.role !== 'super_admin') { toast.error('Order is not complete — resolve the blockers first.'); return }
-      const res = await confirm({ title: 'Endorse despite blockers?', body: 'This order has open completeness blockers. As super admin you may override.', confirmLabel: 'Override and endorse', tone: 'danger', reason: 'optional', reasonLabel: 'Override reason (required)' })
+      const res = await confirm({ title: 'Endorse despite blockers?', body: 'This order has open completeness blockers. As super admin you may override.', confirmLabel: 'Override and endorse', tone: 'danger', reason: 'required', reasonLabel: 'Override reason (required)' })
       if (!res.ok) return
       if (!res.reason?.trim()) { toast.error('An override reason is required.'); return }
       overrideReason = res.reason.trim()
@@ -172,7 +172,7 @@ export default function OrderDetail() {
     catch (e: any) { toast.error(e.message || 'Could not accept the endorsement.') }
   }
   const doReturn = async () => {
-    const res = await confirm({ title: 'Return for correction?', body: 'This sends the order back to “For Order Creation”.', confirmLabel: 'Return', tone: 'danger', reason: 'optional', reasonLabel: 'Reason (required)' })
+    const res = await confirm({ title: 'Return for correction?', body: 'This sends the order back to “Ready to create order”.', confirmLabel: 'Return', tone: 'danger', reason: 'required', reasonLabel: 'Reason (required)' })
     if (!res.ok) return
     if (!res.reason?.trim()) { toast.error('A reason is required to return an order.'); return }
     try { await returnForCorrection.mutateAsync({ orderId: id, reason: res.reason.trim() }); toast.success('Returned for correction.') }
@@ -182,7 +182,7 @@ export default function OrderDetail() {
   const save = async () => {
     setBusy(true); setMsg(null); setConflict(false)
     let q = supabase.from('orders')
-      .update({ fulfillment_stage: stage, sap_order_no: sap.trim() || null, payment_status: pay })
+      .update({ fulfillment_stage: stage, sap_order_no: sap.trim() || null })
       .eq('order_id', o.order_id)
     // Optimistic concurrency: only overwrite the row we actually read. If the
     // updated_at token is absent (migration not applied), fall back to a plain
@@ -229,10 +229,13 @@ export default function OrderDetail() {
         badges={
           <>
             <ChannelPill value={o.channel} />
-            <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+            <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
             <span className="pill pill-cancelled">{o.payment_status}</span>
             {collection !== 'None' && collection !== 'Not due' && <Badge tone={collectionTone(collection)}>{collection}</Badge>}
-            {assignee && <span className="fill-label">{assignee}</span>}
+            {/* Ownership is editable here, not just displayed: an unowned order
+                used to read "no owner assigned" with no way to fix it without
+                going back to the queue. */}
+            <OwnerAssign orderId={o.order_id} ownerSalesId={o.assignment?.[0]?.sales_id} ownerName={assignee} />
             {o.client?.email && <span className="fill-label">{o.client.email}</span>}
           </>
         }
@@ -249,17 +252,15 @@ export default function OrderDetail() {
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <label className="field"><span>Stage</span>
                   <select value={stage} onChange={(e) => setStage(e.target.value)}>
-                    {STAGES.map((s) => (<option key={s}>{s}</option>))}
+                    {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)}</option>))}
                   </select>
                 </label>
                 <label className="field"><span>Payment</span>
-                  {isSales ? (
-                    <input value={pay} readOnly disabled aria-label="Payment status (read-only)" />
-                  ) : (
-                    <select value={pay} onChange={(e) => setPay(e.target.value)}>
-                      {PAYMENTS.map((p) => (<option key={p}>{p}</option>))}
-                    </select>
-                  )}
+                  {/* Payment status is derived from the AR ledger and locked by a DB
+                      trigger (#127) — it can't be set by hand. Record a payment on
+                      the Payments tab to change it. Read-only for every role. */}
+                  <input value={pay} readOnly disabled aria-label="Payment status (set automatically from recorded payments)" />
+                  <span className="fill-label">Set automatically from recorded payments (Payments tab).</span>
                 </label>
               </div>
               <label className="field"><span>SAP reference{isSales ? '' : ' (optional)'}</span>
@@ -289,6 +290,15 @@ export default function OrderDetail() {
               {hstatus && (
                 <div className="fill-label" style={{ marginBottom: 8 }}>
                   Status: <Badge tone={hstatus === 'Accepted' ? 'ok' : hstatus === 'Returned' ? 'danger' : 'info'}>{hstatus}</Badge>
+                  {' · '}
+                  {/* Make the ownership transfer explicit rather than implied by the
+                      stage — and tell the reader whose court the order is in now (#121). */}
+                  <strong style={{ color: 'var(--text)' }}>
+                    {hstatus === 'Endorsed' ? 'Now with Operations · awaiting acceptance'
+                      : hstatus === 'Accepted' ? 'Accepted by Operations'
+                      : hstatus === 'Returned' ? 'Returned to the coordinator'
+                      : hstatus}
+                  </strong>
                   {hstatus === 'Returned' && handoff.data?.return_reason ? ` · ${handoff.data.return_reason}` : ''}
                 </div>
               )}

@@ -1,51 +1,24 @@
 'use client'
-import { useMemo, useState, ReactNode } from 'react'
+import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import Link from 'next/link'
 import {
-  useSchedules,
-  useOrders,
   useActiveYear,
-  useFulfillmentQueue,
-  useSessionHealth,
-  useUnstaffed,
-  useApprovals,
-  useDuplicates,
-  useReceivables,
-  useFunnel,
-  useInquiries,
-  useCertsExpiring,
-  useSlaBreaches,
-  useAuditSearch,
+  useDashboardMetrics,
 } from '../hooks/data'
 import { useAuth } from '../hooks/useAuth'
 import { ErrorNote } from '../components/ui'
 import { KpiSkeleton } from '../components/Skeleton'
 import ChartTable, { ChartTableToggle } from '../components/ChartTable'
 import { php, num } from '../lib/format'
-import { isStalled, isOverdue, isPaidUnendorsed, isNoFeedback } from '../lib/orderState'
-import { healthNeedsAction } from '../lib/health'
 import type { Role } from '../lib/roles'
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 // Webshop reads the theme accent token so it tracks light/dark; the rest are a
 // fixed palette chosen to stay legible on both backgrounds.
 const CH_COLORS: Record<string, string> = { Webshop: 'var(--accent)', 'Inside Sales': '#8b5cf6', 'Field Sales': '#ec4899', 'In-house Request': '#f5a623' }
 
-// Open inquiry statuses (mirrors fn_funnel) — the live pipeline.
-const OPEN_INQ = ['Received', 'Responded', 'RFQ or P Sent', 'Awaiting Feedback']
-// Tables whose changes count as high-risk writes for the auditor view.
-const HIGH_RISK_TABLES = ['payment', 'refund', 'course_fee', 'discount_rule', 'pricing_rule']
 // Roles that get the revenue/channel charts under the KPI band.
 const CHART_ROLES: Role[] = ['business_owner', 'management', 'super_admin']
-
-// Days a receivable is overdue — invoice due date, else order date + 30d.
-// (mirrors Reports.overdueDaysOf so the aging matches the receivables report.)
-const overdueDaysOf = (r: any) => {
-  const base = r.due_date || (r.order_date ? new Date(+new Date(r.order_date) + 30 * 86400000).toISOString().slice(0, 10) : null)
-  if (!base) return 0
-  return Math.floor((Date.now() - +new Date(base)) / 86400000)
-}
 
 interface CardDef {
   label: string
@@ -75,8 +48,6 @@ function DashCard({ c }: { c: CardDef }) {
 export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
   const { profile } = useAuth()
   const role = profile?.role as Role | undefined
-  const myCode = profile?.salesperson?.code
-  const mySalesId = profile?.sales_id
 
   // Derive the dashboard year from the active calendar year (highest, if more
   // than one is active), falling back to the current calendar year. Avoids a
@@ -84,114 +55,42 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
   const activeYear = useActiveYear()
   const YEAR = activeYear.data?.at(-1)?.year ?? new Date().getFullYear()
 
-  // Every hook is called unconditionally; the role only decides what we RENDER.
-  const sched = useSchedules(YEAR)
-  const orders = useOrders()
-  const queue = useFulfillmentQueue()
-  const health = useSessionHealth()
-  const unstaffed = useUnstaffed()
-  const approvals = useApprovals()
-  const dups = useDuplicates()
-  const receivables = useReceivables()
-  const funnel = useFunnel()
-  const inquiries = useInquiries()
-  const certs = useCertsExpiring()
-  const sla = useSlaBreaches()
-  const audit = useAuditSearch({ limit: 500 })
-
-  // ---- Revenue model (schedules + orders), reused by the charts and the money
-  // KPIs. Scoped to the dashboard year so a prior/next-year order can't leak in.
-  const model = useMemo(() => {
-    if (!sched.data || !orders.data) return null
-    const live = orders.data.filter(
-      (o: any) =>
-        ['New', 'Confirmed', 'Completed'].includes(o.order_status) &&
-        o.order_date && new Date(o.order_date).getFullYear() === YEAR
-    )
-    const revenue = live.reduce((s: number, o: any) => s + (o.total_amount || 0), 0)
-    const forecast = sched.data.reduce((s: number, r: any) => s + (r.forecast_revenue || 0), 0)
-    const delivered = sched.data
-      .filter((r: any) => r.status === 'Completed')
-      .reduce((s: number, r: any) => s + Number(r.actual_revenue || 0), 0)
-    const deliveredPax = sched.data
-      .filter((r: any) => r.status === 'Completed')
-      .reduce((s: number, r: any) => s + (r.actual_participants || 0), 0)
-
-    const byMonth = MONTHS.map((m) => ({ month: m, revenue: 0 }))
-    for (const o of live) {
-      const mi = new Date(o.order_date).getMonth()
-      if (byMonth[mi]) byMonth[mi].revenue += o.total_amount || 0
-    }
-    const byChannel: Record<string, number> = {}
-    for (const o of live) {
-      const chan = o.channel || 'Other'
-      byChannel[chan] = (byChannel[chan] || 0) + (o.total_amount || 0)
-    }
-    const channelData = Object.entries(byChannel).map(([name, value]) => ({ name, value }))
-
-    const cancelled = orders.data.filter((o: any) => o.order_status === 'Cancelled').length
-    const cancelRate = orders.data.length ? Math.round((cancelled / orders.data.length) * 100) : 0
-
-    return { revenue, forecast, delivered, deliveredPax, byMonth, channelData, cancelRate }
-  }, [sched.data, orders.data, YEAR])
-
-  // ---- Order-queue metrics, computed once from the fulfillment queue.
-  const q: any[] = queue.data || []
-  const unassigned = q.filter((o) => !o.owner_code).length
-  const mine = q.filter((o) => o.owner_code === myCode).length
-  const myStalled = q.filter((o) => o.owner_code === myCode && isStalled(o)).length
-  const myOverdue = q.filter((o) => o.owner_code === myCode && isOverdue(o)).length
-  const stalledAll = q.filter(isStalled).length
-  const overdueAll = q.filter(isOverdue).length
-  const paidUnendorsed = q.filter(isPaidUnendorsed).length
-  const noFeedback = q.filter(isNoFeedback).length
-  const awaitingEndorsement = q.filter((o) => ['For Order Creation', 'Endorsed to Ops'].includes(o.fulfillment_stage)).length
-
-  // ---- Sessions / staffing.
-  const needsAttentionSessions = (health.data || []).filter((r: any) => healthNeedsAction(r.health)).length
-  const unstaffedNear = (unstaffed.data || []).filter((u: any) => u.days_out <= 21).length
-
-  // ---- Approvals / dedup / SLA / certs.
-  const pendingApprovals = (approvals.data || []).filter((a: any) => a.decision === 'Pending').length
-  const dupCount = (dups.data || []).length
-  const slaBreaches = (sla.data || []).length
-  const certsExpiring = (certs.data || []).length
-
-  // ---- Receivables aging.
-  const ar = useMemo(() => {
-    const rows = (receivables.data || []).map((r: any) => ({ ...r, od: overdueDaysOf(r) }))
-    const outstanding = rows.reduce((n: number, r: any) => n + Number(r.balance || 0), 0)
-    const overdueCount = rows.filter((r: any) => r.od > 0).length
-    const over60 = rows.filter((r: any) => r.od > 60).reduce((n: number, r: any) => n + Number(r.balance || 0), 0)
-    return { outstanding, overdueCount, over60 }
-  }, [receivables.data])
-
-  // ---- Pipeline (open inquiries, est_value), all and self-scoped.
-  const pipeline = useMemo(() => {
-    const open = (inquiries.data || []).filter((i: any) => OPEN_INQ.includes(i.status))
-    const value = open.reduce((n: number, i: any) => n + Number(i.est_value || 0), 0)
-    const mineValue = open
-      .filter((i: any) => i.sales_id && i.sales_id === mySalesId)
-      .reduce((n: number, i: any) => n + Number(i.est_value || 0), 0)
-    return { value, mineValue }
-  }, [inquiries.data, mySalesId])
-
-  // ---- Conversion (inquiry → order), from the funnel RPC.
-  const conversion = funnel.data && Number(funnel.data.won) + Number(funnel.data.lost) > 0
-    ? Math.round((Number(funnel.data.won) / (Number(funnel.data.won) + Number(funnel.data.lost))) * 100)
-    : 0
-
-  // ---- Audit governance counts (auditor view).
-  const gov = useMemo(() => {
-    const rows: any[] = audit.data?.rows || []
-    const today = new Date().toDateString()
-    const weekAgo = Date.now() - 7 * 86400000
-    const changesToday = rows.filter((r) => r.changed_at && new Date(r.changed_at).toDateString() === today).length
-    const deletesWeek = rows.filter((r) => r.action === 'DELETE' && r.changed_at && +new Date(r.changed_at) >= weekAgo).length
-    const roleChanges = rows.filter((r) => r.table_name === 'profiles').length
-    const highRisk = rows.filter((r) => HIGH_RISK_TABLES.includes(r.table_name)).length
-    return { changesToday, deletesWeek, roleChanges, highRisk }
-  }, [audit.data])
+  const metrics = useDashboardMetrics(YEAR, !!role)
+  const data = metrics.data || {}
+  const q = data.queue || {}
+  const sessions = data.sessions || {}
+  const ar = data.receivables || {}
+  const pipeline = data.pipeline || {}
+  const gov = data.governance || {}
+  const revenue = data.revenue
+  const model = revenue ? {
+    revenue: Number(revenue.booked || 0),
+    forecast: Number(revenue.forecast || 0),
+    delivered: Number(revenue.delivered || 0),
+    deliveredPax: Number(revenue.delivered_pax || 0),
+    byMonth: revenue.by_month || [],
+    channelData: revenue.by_channel || [],
+    cancelRate: Number(revenue.total_orders) > 0
+      ? Math.round((Number(revenue.cancelled || 0) / Number(revenue.total_orders)) * 100)
+      : 0,
+  } : null
+  const unassigned = Number(q.unassigned || 0)
+  const mine = Number(q.mine || 0)
+  const myStalled = Number(q.my_stalled || 0)
+  const myOverdue = Number(q.my_overdue || 0)
+  const stalledAll = Number(q.stalled || 0)
+  const overdueAll = Number(q.overdue || 0)
+  const paidUnendorsed = Number(q.paid_unendorsed || 0)
+  const noFeedback = Number(q.no_feedback || 0)
+  const awaitingEndorsement = Number(q.awaiting_endorsement || 0)
+  const needsAttentionSessions = Number(sessions.needs_attention || 0)
+  const unstaffedNear = Number(sessions.unstaffed_near || 0)
+  const pendingApprovals = Number(data.pending_approvals || 0)
+  const dupCount = Number(data.duplicate_candidates || 0)
+  const slaBreaches = Number(data.sla_breaches || 0)
+  const certsExpiring = Number(data.certs_expiring || 0)
+  const conversionBase = Number(pipeline.won || 0) + Number(pipeline.lost || 0)
+  const conversion = conversionBase ? Math.round((Number(pipeline.won || 0) / conversionBase) * 100) : 0
 
   // Money helpers — safe before the revenue model has loaded.
   const booked = model?.revenue ?? 0
@@ -207,12 +106,12 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
       { label: 'My open orders', value: mine, sub: 'Assigned to me', href: '/worklist?who=mine' },
       { label: 'My stalled orders', value: myStalled, sub: 'Over 14 days in stage', href: '/worklist?who=mine&view=stalled', alert: true },
       { label: 'My overdue collections', value: myOverdue, sub: 'Past terms, chase these', href: '/worklist?who=mine&view=overdue', alert: true },
-      { label: 'My open pipeline', value: php(pipeline.mineValue), sub: 'Open inquiries I own', href: '/crm?tab=pipeline' },
+      { label: 'My open pipeline', value: php(Number(pipeline.mine_value || 0)), sub: 'Open inquiries I own', href: '/crm?tab=pipeline' },
       { label: 'Sessions needing pax', value: needsAttentionSessions, sub: 'Below minimum, sell seats', href: '/calendar?month=all&sort=fill&dir=asc', alert: true },
       { label: 'Unassigned orders', value: unassigned, sub: 'Claim these', href: '/worklist?who=unassigned' },
     ],
     sales_manager: [
-      { label: 'Team pipeline', value: php(pipeline.value), sub: 'Open inquiry value', href: '/crm?tab=pipeline' },
+      { label: 'Team pipeline', value: php(Number(pipeline.value || 0)), sub: 'Open inquiry value', href: '/crm?tab=pipeline' },
       { label: 'Team stalled orders', value: stalledAll, sub: 'Over 14 days in stage', href: '/worklist?who=all&view=stalled', alert: true },
       { label: 'Unassigned orders', value: unassigned, sub: 'Need an owner', href: '/worklist?who=unassigned', alert: true },
       { label: 'Team overdue collections', value: overdueAll, sub: 'Past terms across the team', href: '/worklist?who=all&view=overdue', alert: true },
@@ -245,7 +144,7 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
     ],
     management: [
       { label: 'Booked revenue', value: php(booked), sub: `${attain}% of forecast`, href: '/analytics?tab=revenue' },
-      { label: 'Pipeline', value: php(pipeline.value), sub: 'Open inquiry value', href: '/crm?tab=pipeline' },
+      { label: 'Pipeline', value: php(Number(pipeline.value || 0)), sub: 'Open inquiry value', href: '/crm?tab=pipeline' },
       { label: 'Conversion', value: `${conversion}%`, sub: 'Inquiry to order', href: '/analytics?tab=pipeline' },
       { label: 'Delivered revenue', value: php(delivered), sub: `${num(deliveredPax)} participants trained`, href: '/analytics?tab=revenue' },
       { label: 'AR outstanding', value: php(ar.outstanding), sub: `${php(ar.over60)} over 60 days`, href: '/analytics?tab=receivables', alert: ar.over60 > 0 },
@@ -270,28 +169,19 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
     ],
   }
 
-  // A synthetic query-like object so audit's inner {error} surfaces in the band.
-  const auditDep = { isLoading: audit.isLoading, error: audit.error || audit.data?.error }
-  // Which queries gate each role's band loading/error state.
-  const depsByRole: Partial<Record<Role, { isLoading: boolean; error: any }[]>> = {
-    sales: [queue, health, inquiries],
-    sales_manager: [queue, inquiries, health],
-    coordinator: [queue, dups],
-    operations: [queue, health, unstaffed, sla, certs],
-    business_owner: [orders, sched, queue, health, approvals, receivables],
-    management: [orders, sched, receivables, health, inquiries, sla],
-    auditor: [auditDep],
-    super_admin: [orders, sched, queue, health, approvals, receivables, dups, sla],
-  }
-
   // A role with no configured cards falls back to the super_admin superset —
   // never a blank page. Empty until the role resolves so a sales user can't
   // flash another role's metrics.
   const cards = role ? (cardsByRole[role] || cardsByRole.super_admin!) : []
-  const deps = role ? (depsByRole[role] || depsByRole.super_admin!) : []
-  const bandLoading = deps.some((d) => d.isLoading)
-  const bandError = deps.map((d) => d.error).find(Boolean)
+  const bandLoading = metrics.isLoading
+  const bandError = metrics.error
   const showCharts = !!role && CHART_ROLES.includes(role)
+
+  // "Needs you now": the alert cards whose count is non-zero, lifted above the
+  // quieter metrics so the one thing that needs the user is unmissable (#132).
+  const isHot = (c: CardDef) => !!c.alert && typeof c.value === 'number' && c.value > 0
+  const needsNow = cards.filter(isHot)
+  const quietCards = cards.filter((c) => !isHot(c))
 
   const HEAD: Partial<Record<Role, { title: string; sub: string }>> = {
     sales: { title: 'Dashboard', sub: 'Your pipeline and the work that is slipping.' },
@@ -321,13 +211,23 @@ export default function Dashboard({ embedded }: { embedded?: boolean } = {}) {
       ) : !role || bandLoading ? (
         <KpiSkeleton count={cards.length || 6} />
       ) : (
-        <div className="grid kpis">
-          {cards.map((c) => (<DashCard key={c.label} c={c} />))}
-        </div>
+        <>
+          {needsNow.length > 0 && (
+            <div className="section needs-now">
+              <div className="k-label needs-now-label" style={{ marginBottom: 8 }}>Needs you now</div>
+              <div className="grid kpis">
+                {needsNow.map((c) => (<DashCard key={c.label} c={c} />))}
+              </div>
+            </div>
+          )}
+          <div className="grid kpis">
+            {quietCards.map((c) => (<DashCard key={c.label} c={c} />))}
+          </div>
+        </>
       )}
 
       {showCharts && (
-        <RevenueCharts YEAR={YEAR} model={model} loading={sched.isLoading || orders.isLoading} error={sched.error || orders.error} />
+        <RevenueCharts YEAR={YEAR} model={model} loading={metrics.isLoading} error={metrics.error} />
       )}
     </>
   )

@@ -5,12 +5,15 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useFulfillmentQueue, useSalespeople, useInvalidate, useSlaBreaches } from '../hooks/data'
-import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
+import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
+import SavedViews from '../components/SavedViews'
+import OwnerAssign, { canAssignAnyOwner } from '../components/OwnerAssign'
 import { php, shortDate } from '../lib/format'
-import { primaryFlag, ORDER_VIEWS, orderView } from '../lib/orderState'
+import { primaryFlag, ORDER_VIEWS, orderView, stageLabel } from '../lib/orderState'
+import { updateUrlParams } from '../lib/urlParams'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback']
 const NEXT: Record<string, string> = {
@@ -50,15 +53,17 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
   const who = params.get('who')
     || ((profile?.salesperson?.code && !profile?.salesperson?.is_supervisor) ? 'mine' : 'all')
   const view = params.get('view') || 'all'
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v || v === 'all') n.delete(k)
-    else n.set(k, v)
+  const setParams = (updates: Record<string, string>) => {
+    const n = updateUrlParams(params, updates)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: string) => setParams({ [k]: v })
 
   const myCode = profile?.salesperson?.code
-  const canAssignAny = ['super_admin', 'operations', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
+  // Shared with the per-row control so the bulk toolbar and the row picker can
+  // never disagree about who may assign (this also picks up the coordinator,
+  // which p_asg_coord allows but the old local check missed).
+  const canAssignAny = canAssignAnyOwner(profile)
   // Fulfillment is a write action; management + auditor are read-only (RLS rejects
   // their stage writes) so the advance/select controls are hidden from them.
   const canAct = !['management', 'auditor'].includes(profile?.role as string)
@@ -111,44 +116,20 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
     setBusy('')
   }
 
-  const selfAssign = async (orderId: string) => {
-    setBusy(orderId); setMsg(null)
-    // upsert keyed on order_id: one assignment per order, no check-then-act race.
-    const { error } = await supabase.from('order_assignment')
-      .upsert({ order_id: orderId, sales_id: profile?.sales_id }, { onConflict: 'order_id' })
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
-    setBusy('')
-  }
-
-  const reassign = async (orderId: string, salesId: string) => {
-    // Reassignment is a destructive action: confirm and take a reason first.
-    const who = salesId ? (people.data?.find((p: any) => p.sales_id === salesId)?.name || 'another owner') : 'no one'
-    const res = await confirm({
-      title: salesId ? 'Reassign this order?' : 'Unassign this order?',
-      body: `Ownership changes to ${who}.`,
-      confirmLabel: salesId ? 'Reassign' : 'Unassign',
-      tone: salesId ? 'default' : 'danger',
-      reason: 'optional',
-    })
-    if (!res.ok) return
-    setBusy(orderId); setMsg(null)
-    // Empty selection means unassign: delete the row rather than writing an empty FK.
-    const { error } = salesId
-      ? await supabase.from('order_assignment')
-          .upsert({ order_id: orderId, sales_id: salesId }, { onConflict: 'order_id' })
-      : await supabase.from('order_assignment').delete().eq('order_id', orderId)
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
-    setBusy('')
-  }
+  // Per-row assign/reassign lives in components/OwnerAssign, shared with the
+  // order record. Bulk assignment over the selection stays here.
 
   // ---- bulk selection over the visible rows ----
   const shown = rows.slice(0, 250)
   const visibleIds = shown.map((o: any) => o.order_id)
   const selectedVisible = visibleIds.filter((id: string) => selected.has(id))
   const allSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length
-  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggle = (id: string) => setSelected((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
   const toggleAll = () => setSelected((s) => {
     const n = new Set(s)
     if (allSelected) visibleIds.forEach((id: string) => n.delete(id))
@@ -247,7 +228,7 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
         ))}
         <select aria-label="Filter by stage" value={stage} onChange={(e) => setParam('stage', e.target.value)} style={{ marginLeft: 'auto' }}>
           <option value="all">All stages ({Object.values(stageCounts).reduce((a, b) => a + b, 0)})</option>
-          {STAGES.map((s) => (<option key={s} value={s}>{s} ({stageCounts[s] || 0})</option>))}
+          {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)} ({stageCounts[s] || 0})</option>))}
         </select>
       </div>
 
@@ -257,6 +238,10 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
             {v.label} ({viewCounts[v.key] || 0})
           </button>
         ))}
+      </div>
+
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="worklist" paramKeys={['who', 'view', 'stage']} />
       </div>
 
       {selectedVisible.length > 0 && (
@@ -300,7 +285,7 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
                   <div className="fill-label">{o.email}</div>
                 </td>
                 <td>
-                  <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                  <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                   {(() => {
                     const f = primaryFlag(o)
                     return f ? (
@@ -317,19 +302,14 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
                   </div>
                 </td>
                 <td>
-                  {canAssignAny ? (
-                    <select aria-label={`Owner for order ${o.order_id}`}
-                      value={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id || ''}
-                      disabled={busy === o.order_id}
-                      onChange={(e) => reassign(o.order_id, e.target.value)} style={{ minWidth: 120 }}>
-                      <option value="">Unassigned</option>
-                      {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
-                    </select>
-                  ) : o.owner ? o.owner : profile?.sales_id ? (
-                    <button className="btn btn-sm" disabled={busy === o.order_id} onClick={() => selfAssign(o.order_id)}>Pick up</button>
-                  ) : (
-                    <span className="fill-label">Unassigned</span>
-                  )}
+                  {/* Same control as the order record — see components/OwnerAssign. */}
+                  <OwnerAssign
+                    orderId={o.order_id}
+                    ownerSalesId={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id}
+                    ownerName={o.owner}
+                    invalidateKeys={['fulfillment_queue', 'orders']}
+                    compact
+                  />
                 </td>
                 <td className="right">{php(o.total_amount)}</td>
                 <td>
@@ -337,10 +317,10 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
                     canAct ? (
                       <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
                         onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
-                        → {NEXT[o.fulfillment_stage]}
+                        → {stageLabel(NEXT[o.fulfillment_stage])}
                       </button>
                     ) : (
-                      <span className="fill-label">→ {NEXT[o.fulfillment_stage]}</span>
+                      <span className="fill-label">→ {stageLabel(NEXT[o.fulfillment_stage])}</span>
                     )
                   ) : (
                     <span className="fill-label">Awaiting collection</span>
@@ -350,11 +330,19 @@ export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
+        {rows.length === 0 ? (
           <div className="empty">
-            {who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
+            {view !== 'all' || stage !== 'all' ? (
+              <>Nothing matches the current filters{whoScoped.length > 0 ? ` — ${whoScoped.length} hidden` : ''}.{' '}
+                <button className="linkbtn" onClick={() => setParams({ view: 'all', stage: 'all' })}>Clear filters</button></>
+            ) : who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
           </div>
-        )}
+        ) : (whoScoped.length - rows.length > 0 && (view !== 'all' || stage !== 'all')) ? (
+          <div className="fill-label" style={{ padding: '10px 12px' }}>
+            {whoScoped.length - rows.length} hidden by the current filters —{' '}
+            <button className="linkbtn" onClick={() => setParams({ view: 'all', stage: 'all' })}>Clear filters</button>
+          </div>
+        ) : null}
       </div>
     </>
   )

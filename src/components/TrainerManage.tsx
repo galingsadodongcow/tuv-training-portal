@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTrainerCourses, useTrainerAvailability, useCourses, useInvalidate } from '../hooks/data'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useToast } from './Toast'
 import { useConfirm } from './Confirm'
 import { shortDate } from '../lib/format'
@@ -18,6 +19,8 @@ export default function TrainerManage({ trainer, onClose }: { trainer: any; onCl
   const courses = useCourses()
   const [bl, setBl] = useState({ start_date: '', end_date: '', reason: '' })
   const [busy, setBusy] = useState(false)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useFocusTrap(dialogRef)
 
   const taught = new Set((competencies.data || []).map((c: any) => c.course_id))
 
@@ -52,7 +55,7 @@ export default function TrainerManage({ trainer, onClose }: { trainer: any; onCl
 
   return (
     <div className="cmdk-scrim" onClick={onClose}>
-      <div className="card card-pad" role="dialog" aria-modal="true" aria-label={`Manage ${trainer.name}`}
+      <div ref={dialogRef} className="card card-pad" role="dialog" aria-modal="true" aria-label={`Manage ${trainer.name}`}
         style={{ maxWidth: 640, width: '100%', margin: '6vh auto', maxHeight: '86vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
         <div className="page-head" style={{ marginBottom: 8 }}>

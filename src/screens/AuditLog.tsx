@@ -38,7 +38,7 @@ export default function AuditLog() {
   })
   const reset = () => { setDraft({ table: '', action: '', role: '', from: '', to: '', search: '' }); setFilters({ limit: 200 }) }
 
-  const rows = q.data?.rows || []
+  const rows = useMemo(() => q.data?.rows || [], [q.data?.rows])
   const rpcError = q.data?.error
   const csv = useMemo(() => () => exportCsv(
     'audit-log-' + new Date().toISOString().slice(0, 10),

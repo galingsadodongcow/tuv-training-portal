@@ -15,6 +15,7 @@ import {
   useInquiries,
   useQuotes,
   useDuplicates,
+  useReturnedHandoffs,
 } from '../hooks/data'
 import { inquiryHealth, quoteHealth } from '../lib/leadHealth'
 import { Spinner, ErrorNote, Empty } from '../components/ui'
@@ -26,8 +27,9 @@ import {
   isOverdue,
   isPaidUnendorsed,
   isNoFeedback,
+  stageLabel,
 } from '../lib/orderState'
-import { healthMeta, healthNeedsAction, Health } from '../lib/health'
+import { healthMeta, healthNeedsAction, signalFromTone, Health, Signal } from '../lib/health'
 
 // Days since a timestamp, floored. Used for item age. (mirrors Home)
 const ageDays = (iso?: string) => (iso ? Math.floor((Date.now() - +new Date(iso)) / 86400000) : null)
@@ -49,6 +51,26 @@ const TONE_ORDER: Record<string, number> = { danger: 0, warn: 1, info: 2, ok: 3,
 // An order is "on my plate" when any actionable order-state predicate fires.
 const orderNeedsAttention = (o: any) =>
   isStalled(o) || isUnowned(o) || isOverdue(o) || isPaidUnendorsed(o) || isNoFeedback(o)
+
+// Reverse of signalMeta().cls — lead/quote badges carry a health-* class, so map
+// it back onto the shared scale for the row's severity stripe.
+const signalFromCls = (cls?: string): Signal =>
+  cls === 'health-blocked' ? 'blocked' : cls === 'health-risk' ? 'risk' : cls === 'health-ok' ? 'ok' : 'done'
+
+// Task priority → the shared attention scale (an overdue task is always blocked).
+const taskSignal = (t: any): Signal =>
+  isTaskOverdue(t.due_date) || t.priority === 'urgent' ? 'blocked' : t.priority === 'high' ? 'risk' : 'ok'
+
+// The leading cell for every My Work row: a single verb (Do / Decide / Review /
+// Resolve) + a left severity stripe on the shared scale, so "what is this and is
+// it mine?" reads at a glance (#132).
+function LeadCell({ verb }: { verb: string }) {
+  return (
+    <td className="mywork-lead">
+      <span className="verb">{verb}</span>
+    </td>
+  )
+}
 
 // Best-effort drill-through from a task entity to a screen. (mirrors Home)
 function entityHref(entityType?: string, entityId?: string): string | null {
@@ -151,6 +173,17 @@ export default function MyWork() {
     [approvals.data]
   )
 
+  // Orders returned-for-correction (#129) — a distinct queue, not just "stalled".
+  // Join the handoff rows to the fulfilment queue we already hold for order detail.
+  const returnedQ = useReturnedHandoffs()
+  const returnedRows = useMemo(() => {
+    const byId = new Map<string, any>()
+    for (const o of queue.data || []) byId.set(o.order_id, o)
+    return (returnedQ.data || [])
+      .map((h: any) => ({ ...h, order: byId.get(h.order_id) }))
+      .filter((r: any) => !selfScoped || !r.order || r.order.owner_code === myCode)
+  }, [returnedQ.data, queue.data, selfScoped, myCode])
+
   // Orders needing attention, kept to the current user's scope where the data
   // supports it, ordered most severe first.
   const attentionOrders = useMemo(() => {
@@ -181,14 +214,19 @@ export default function MyWork() {
 
   const slaRows = sla.data || []
 
-  const completeTask = async (taskId: string) => {
+  const completeTask = async (task: any) => {
+    const prior = task.status || 'open'
     const { error } = await supabase
       .from('task')
       .update({ status: 'done', completed_at: new Date().toISOString(), completed_by: userId })
-      .eq('task_id', taskId)
+      .eq('task_id', task.task_id)
     if (error) toast.error(error.message)
     else {
-      toast.success('Task marked done.')
+      // #137: symmetric undo — reopen the task and clear the completion stamp.
+      toast.success('Task marked done.', { label: 'Undo', onClick: async () => {
+        await supabase.from('task').update({ status: prior, completed_at: null, completed_by: null }).eq('task_id', task.task_id)
+        invalidate(['my_tasks'])
+      } })
       invalidate(['my_tasks'])
     }
   }
@@ -201,6 +239,32 @@ export default function MyWork() {
           <p>Everything waiting on you — tasks, orders, sessions and exceptions in one place.</p>
         </div>
       </div>
+
+      {/* Returned for correction — orders Operations sent back. Surfaced as its own
+          band (not buried in "stalled") so a return is never silently lost (#129). */}
+      {returnedRows.length > 0 && (
+        <Section
+          title="Returned for correction"
+          count={returnedRows.length}
+          isEmpty={false}
+          emptyLabel="No returned orders."
+        >
+          <table><tbody>
+            {returnedRows.map((r: any) => (
+              <tr key={r.order_id} className="stripe-blocked">
+                <LeadCell verb="Fix" />
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <Link href={`/orders/${r.order_id}`}>{r.order_id}</Link>
+                  <div className="fill-label">
+                    {r.order?.company || r.order?.contact || '—'}{r.returned_at ? ` · returned ${shortDate(r.returned_at)}` : ''}
+                  </div>
+                </td>
+                <td className="fill-label" style={{ color: 'var(--tr-red)' }}>{r.return_reason || 'Returned for correction'}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        </Section>
+      )}
 
       {/* Sales queues — surfaced only for sales-facing roles so a rep gets the same
           "what needs me" completeness ops already has. */}
@@ -217,7 +281,8 @@ export default function MyWork() {
             {inquiryFollowups.map((q: any) => {
               const h = inquiryHealth(q)
               return (
-                <tr key={q.inquiry_id}>
+                <tr key={q.inquiry_id} className={`stripe-${h ? signalFromCls(h.cls) : 'ok'}`}>
+                  <LeadCell verb="Do" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{q.company}</div>
                     <div className="fill-label">{q.course?.course_name || 'No course yet'} · <Link href="/crm?tab=pipeline">open pipeline</Link></div>
@@ -244,7 +309,8 @@ export default function MyWork() {
             {quoteFollowups.map((q: any) => {
               const h = quoteHealth(q)
               return (
-                <tr key={q.quote_id}>
+                <tr key={q.quote_id} className={`stripe-${h ? signalFromCls(h.cls) : 'ok'}`}>
+                  <LeadCell verb="Do" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{q.quote_number}</div>
                     <div className="fill-label">{q.client?.company || q.client?.name || '—'} · <Link href={`/quotations/${q.quote_id}`}>open quote</Link></div>
@@ -273,7 +339,8 @@ export default function MyWork() {
             {(tasks.data || []).map((t: any) => {
               const href = entityHref(t.entity_type, t.entity_id)
               return (
-                <tr key={t.task_id}>
+                <tr key={t.task_id} className={`stripe-${taskSignal(t)}`}>
+                  <LeadCell verb="Do" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{t.title}</div>
                     <div className="fill-label">
@@ -301,7 +368,7 @@ export default function MyWork() {
                     )}
                   </td>
                   <td className="right">
-                    <button className="btn btn-ghost btn-sm" onClick={() => completeTask(t.task_id)}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => completeTask(t)}>
                       Mark done
                     </button>
                   </td>
@@ -325,7 +392,8 @@ export default function MyWork() {
           <table>
             <tbody>
               {pending.map((a: any) => (
-                <tr key={a.approval_id}>
+                <tr key={a.approval_id} className="stripe-risk">
+                  <LeadCell verb="Decide" />
                   <td>
                     <div style={{ fontWeight: 600 }}>{a.object_type}</div>
                     <div className="fill-label">
@@ -359,7 +427,8 @@ export default function MyWork() {
             {attentionOrders.slice(0, 50).map((o: any) => {
               const flag = primaryFlag(o)
               return (
-                <tr key={o.order_id} className={o.days_in_stage > 14 ? 'risk-amber' : ''}>
+                <tr key={o.order_id} className={`stripe-${signalFromTone(flag?.tone)}${o.days_in_stage > 14 ? ' risk-amber' : ''}`}>
+                  <LeadCell verb="Review" />
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                     <Link href={`/orders/${o.order_id}`}>{o.order_id}</Link>
                     <div className="fill-label">
@@ -367,7 +436,7 @@ export default function MyWork() {
                     </div>
                   </td>
                   <td>
-                    <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                    <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                     {flag && (
                       <div className="fill-label" style={{ marginTop: 4, color: toneColor(flag.tone) }}>
                         {flag.label}
@@ -400,7 +469,8 @@ export default function MyWork() {
         <table>
           <tbody>
             {sessionRows.slice(0, 50).map((s: any) => (
-              <tr key={s.schedule_id}>
+              <tr key={s.schedule_id} className={`stripe-${healthMeta(s.health).signal}`}>
+                <LeadCell verb="Review" />
                 <td>
                   <div style={{ fontWeight: 600 }}>
                     <Link href={`/session/${s.schedule_id}`}>{s.course?.course_name || 'Session'}</Link>
@@ -431,7 +501,8 @@ export default function MyWork() {
         <table>
           <tbody>
             {slaRows.map((b: any) => (
-              <tr key={b.order_id} className="risk-amber">
+              <tr key={b.order_id} className="stripe-blocked risk-amber">
+                <LeadCell verb="Resolve" />
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                   <Link href={`/orders/${b.order_id}`}>{b.order_id}</Link>
                   <div className="fill-label">
@@ -440,7 +511,7 @@ export default function MyWork() {
                   </div>
                 </td>
                 <td>
-                  <span className="pill pill-webshop">{b.fulfillment_stage}</span>
+                  <span className="pill pill-webshop">{stageLabel(b.fulfillment_stage)}</span>
                 </td>
                 <td className="right fill-label">
                   <span style={{ color: 'var(--tr-red)', fontWeight: 600 }}>{b.days_over}d over</span>
@@ -468,7 +539,8 @@ export default function MyWork() {
           <table>
             <tbody>
               {dupRows.map((d: any) => (
-                <tr key={d.candidate_id}>
+                <tr key={d.candidate_id} className="stripe-risk">
+                  <LeadCell verb="Resolve" />
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {d.order_id_a} <span className="fill-label">vs</span> {d.order_id_b}
                     <div className="fill-label">{d.match_basis}</div>
