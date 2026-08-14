@@ -9,6 +9,7 @@ import { Spinner, ErrorNote, StatusPill, GoPill, ChannelPill, FillBar } from '..
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import SavedViews from '../components/SavedViews'
+import SessionRecord from '../components/SessionRecord'
 import { MultiSelect } from '../components/inputs/MultiSelect'
 import { Legend } from '../components/Legend'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -190,6 +191,9 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
   const [status, setStatus] = useState<string>(r.status)
   const [trainerClash, setTrainerClash] = useState<string | null>(null)
   const [venueClash, setVenueClash] = useState<string | null>(null)
+  // Local, not URL-backed: the calendar already spends ?session= on the drawer,
+  // and a tab within a transient panel is not worth a history entry.
+  const [tab, setTab] = useState('overview')
   const hm = healthMeta(healthMap?.get(r.schedule_id))
 
   // The session's date blocks in the shape fn_find_conflicts expects (mirrors
@@ -322,11 +326,15 @@ function SessionDrawer({ r, healthMap, canEdit, onClose }: { r: any; healthMap?:
 
           <div className="drawer-section">
             <div className="toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
-              <Link href={`/session/${r.schedule_id}`} className="btn">Open full session →</Link>
               {canEdit && <Link href={`/session/${r.schedule_id}/edit`} className="btn btn-ghost">Edit dates / reschedule</Link>}
-              {canEdit && <Link href={`/session/${r.schedule_id}`} className="btn btn-ghost">Cancel session</Link>}
             </div>
           </div>
+
+          {/* The same tabbed record the full page shows (Overview · Orders ·
+              Participants · Files · Activity) — the drawer used to stop at a
+              hand-rolled summary, so anything past trainer/venue meant leaving
+              the calendar. Tab state is local here; the page keeps it in ?tab=. */}
+          <SessionRecord scheduleId={r.schedule_id} tab={tab} onTabChange={setTab} variant="drawer" />
         </div>
       </div>
     </div>
@@ -446,8 +454,17 @@ export default function Calendar() {
   const drawer = useMemo(() => (sched.data || []).find((s: any) => s.schedule_id === drawerId) || null, [sched.data, drawerId])
   const openDrawer = (s: any) => setParam('session', s.schedule_id)
   const closeDrawer = () => setParam('session', '')
+  // Session editing stays with the roles RLS lets write the schedule
+  // (p_sched_w = operations/super_admin). Every other role reads the calendar —
+  // it is the single source of truth for what we sell — and acts on the orders
+  // hanging off a session instead.
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
-  const canSell = ['sales', 'super_admin'].includes(profile?.role as string)
+  // "Book" links into /sales-entry, so it may only appear for roles that can
+  // actually create an order: RLS allows INSERT on orders to sales
+  // (p_orders_sales_i), coordinator (p_orders_coord_i) and super_admin only.
+  // sales_manager supervises but cannot create, so it is deliberately absent —
+  // offering the link would raise an RLS error on save.
+  const canSell = ['sales', 'coordinator', 'super_admin'].includes(profile?.role as string)
 
   const categories = useMemo(
     () => [...new Set((sched.data || []).map((r: any) => r.course?.category).filter(Boolean))].sort(),

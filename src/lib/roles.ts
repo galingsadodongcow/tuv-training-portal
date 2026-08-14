@@ -53,10 +53,14 @@ export const NAV: NavItem[] = [
   { path: '/overview', label: 'Overview', roles: ['management'], icon: 'dashboard' },
   { path: '/search', label: 'Search', roles: ['auditor'], icon: 'search' },
 
-  // Calendar — the scheduling tool. Dropped from the pure-commercial roles
-  // (sales/sales_manager reach a specific session from its order/course record)
-  // and from oversight (management/auditor).
-  { path: '/calendar', label: 'Calendar', roles: ['super_admin', 'operations', 'business_owner', 'coordinator'], icon: 'calendar' },
+  // Calendar — the single source of truth for the trainings we sell, so every
+  // role gets it (owner feedback). Authority still differs and is enforced
+  // below the nav: operations/super_admin edit sessions (RLS p_sched_w),
+  // business_owner and the oversight roles read, and the selling roles act on
+  // the orders/line items hanging off a session. Read access was never the
+  // blocker — RLS p_sched_r is `using (true)` and /calendar carries no Guard;
+  // this list was the only thing hiding it.
+  { path: '/calendar', label: 'Calendar', roles: ['super_admin', 'operations', 'business_owner', 'coordinator', 'sales', 'sales_manager', 'management', 'auditor'], icon: 'calendar' },
 
   // CRM — the commercial pipeline in one destination (#7): Pipeline · Quotes ·
   // Orders tabs, "New order" an action inside. This is where "Orders" lives; a
@@ -94,7 +98,10 @@ export const NAV: NavItem[] = [
   { path: '/pricing', label: 'Pricing rules', roles: ['super_admin', 'operations', 'business_owner'], icon: 'pricing', group: 'Admin' },
   { path: '/communications', label: 'Communications', roles: ['super_admin', 'operations'], icon: 'comms', group: 'Admin' },
   { path: '/rollover', label: 'Annual rollover', roles: ['super_admin', 'operations'], icon: 'rollover', group: 'Admin' },
-  { path: '/admin', label: 'Users and access', roles: ['super_admin'], icon: 'admin', group: 'Admin' },
+  // Users and access — delegated (20260814060000). Operations and sales
+  // supervisors manage their own people; the DB scopes what they can see and
+  // grant, so this is safe to surface beyond super_admin.
+  { path: '/admin', label: 'Users and access', roles: ['super_admin', 'operations', 'sales_manager'], icon: 'admin', group: 'Admin' },
 
   // Audit log — the auditor's second home, and governance for super_admin.
   { path: '/audit', label: 'Audit log', roles: ['super_admin', 'auditor'], icon: 'audit' },
