@@ -42,10 +42,11 @@ daily use**.
 
 Full breakdown in `20-production-readiness.md`. Target for general deployment: **85**.
 
-## The single most serious finding
+## The single most serious finding — ✅ FIXED 2026-08-14
 
-**P0-1 — Commercial cost and margin data is readable by every authenticated
-role, including Sales.**
+**P0-1 — Commercial cost and margin data was readable by every authenticated
+role, including Sales.** Resolved by migration `20260814090000`; verification at
+the end of this section.
 
 Simulating the Sales account against production, a sales rep can read:
 
@@ -67,10 +68,28 @@ directly. Trainer daily rates are effectively **individual compensation data**.
 This is exactly the class of defect CLAUDE.md warns about: *"A UI-only block
 with a permissive DB policy is a bug."*
 
-**Not fixed in this pass — deliberately.** Restricting cost visibility changes a
-business rule (who may see margin), so per the brief's §41 it is documented for
-decision rather than changed unilaterally. Recommended fix in
-`13-data-integrity-audit.md` and backlog item **IMM-1**.
+**Fixed after owner sign-off** (`20260814090000_restrict_cost_visibility.sql`,
+applied to production and verified):
+
+- `fn_cost_visible()` gates on the same audience the Analytics screen already
+  used for its reporting tabs — super_admin, operations, business_owner,
+  management, auditor. Deliberately narrower than `fn_role_reads_all()`, which
+  also includes coordinator.
+- Cost is now read by two `SECURITY DEFINER` helpers, so `v_session_pnl` keeps
+  the repo's `security_invoker` convention and returns **NULL** (not 0) cost and
+  margin to everyone else.
+- The `SELECT` grant on `trainer`/`venue` was replaced with an explicit column
+  list excluding the rate columns. Column privileges alone could not have solved
+  this: every app role shares the single Postgres role `authenticated`.
+- Revenue is intentionally **not** masked — `schedule.price` and
+  `booked_participants` are already visible on the calendar, so session revenue
+  is derivable regardless; masking it would be theatre.
+
+**Verified on production after applying:** as Sales, `fn_cost_visible()` is
+false and **0 of 161** rows carry cost or margin; a direct read of
+`trainer.daily_rate` returns `42501 permission denied`. As Operations, the
+figures are **unchanged** (₱21,907,500 margin) — no regression for the roles
+that should see them.
 
 ## Which role experiences the most friction
 
@@ -97,7 +116,7 @@ handoff correctly but does not enforce the precondition.
 
 | # | Finding | Sev | Evidence |
 |---|---|---|---|
-| 1 | Cost/margin/trainer rates readable by all roles | **P0** | Live simulation, §above |
+| 1 | ~~Cost/margin/trainer rates readable by all roles~~ **FIXED** | ~~P0~~ | Live simulation; re-verified closed |
 | 2 | No authenticated automated test coverage at all | **P1** | 0 signed-in tests exist |
 | 3 | 40/163 orders unowned | **P1** | Live query |
 | 4 | No test account → no repeatable QA of any signed-in screen | **P1** | — |
@@ -120,7 +139,7 @@ handoff correctly but does not enforce the precondition.
 
 ## Recommended sequence
 
-1. **Decide and fix cost visibility** (IMM-1) — the only item that should block a pilot.
+1. ~~Decide and fix cost visibility (IMM-1)~~ — **done 2026-08-14**, verified on production.
 2. **Create a least-privileged test account**, restore E2E secrets, and let the
    authenticated Playwright suite (already built and wired) start running.
    Scope it **read-only**: there is no staging database and, by decision, there
