@@ -137,3 +137,56 @@ Both migrations are **committed but not deployed**. They are idempotent, but the
 delegation one changes who can grant roles, so it should be applied through
 `.github/workflows/apply-supabase.yml` after review — then re-run the Security
 and Performance advisors and re-check role behaviour against live profile data.
+
+---
+
+## Live verification of the admin screen (2026-08-14, after deployment)
+
+Both migrations were applied to the live project and the delegation was checked
+by simulating each role against the real database (`set local role authenticated`
+plus a `request.jwt.claims` sub), because no browser test account exists.
+
+**Operations behaved correctly out of the box.** The ops account saw itself
+(read-only), the two sales people, and — before the fix below — the business
+owner. Both super admins were correctly hidden. Grant set was
+`{sales, coordinator, sales_manager}`, and `can_manage_self` was false.
+
+Three findings came out of it:
+
+### 1. Oversight roles were exposed to operations — fixed
+`fn_can_manage_member(<business owner>)` returned true for the ops account. Not a
+privilege escalation (operations still cannot *grant* business_owner, so they
+could not take the role), but operations could have demoted the business owner
+and stripped senior oversight access. `20260814070000_protect_oversight_roles.sql`
+extends the super_admin ring-fence to `business_owner`, `management` and
+`auditor`. Re-verified live: the business owner no longer appears in the ops
+list at all, and super_admin still sees all six users.
+
+### 2. Supervisors were locked out of their own screen — fixed
+The live "Test Supervisor" held the legacy `is_supervisor` flag while her *role*
+was `sales`. The database treated her as a team lead (`fn_is_team_lead()` true,
+grant set `{sales}`) but the route and nav were gated on `role = 'sales_manager'`,
+so the UI blocked a capability the database granted. The two definitions of
+"supervisor" were unified onto the `sales_manager` role.
+
+### 3. sales_manager could not sell — fixed
+Promoting a supervisor to `sales_manager` would have removed order creation.
+**The gate is `fn_create_order`'s own allowlist, not RLS**: that function is
+`SECURITY DEFINER` and bypasses the `orders` INSERT policies entirely, which is
+why `operations` can create orders while having no INSERT policy at all. Adding
+an RLS policy for `sales_manager` would have been dead code.
+`20260814080000_sales_manager_can_sell.sql` adds `sales_manager` to the allowlist
+with the same Inside Sales / Field Sales channel restriction as `sales`, and the
+`/sales-entry` guard and calendar `canSell` were widened to match.
+
+Verified with a write-free probe: as the supervisor, `fn_create_order` now fails
+with `22004 An order reference is required` (past the role check) instead of
+`42501 Your role may not create orders`; as the business owner it still returns
+`42501`.
+
+### Outstanding — data setup, not code
+**Every salesperson record has a null `team`.** `fn_current_team()` returns null
+for everyone, so a supervisor sees only themselves (0 manageable) and
+`fn_upsert_team_member` refuses with "Your account has no team". Supervisor
+delegation is correct but inert until teams are populated; operations and
+super_admin are unaffected.

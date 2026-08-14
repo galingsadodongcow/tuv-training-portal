@@ -460,11 +460,12 @@ export default function Calendar() {
   // hanging off a session instead.
   const canEdit = ['operations', 'super_admin'].includes(profile?.role as string)
   // "Book" links into /sales-entry, so it may only appear for roles that can
-  // actually create an order: RLS allows INSERT on orders to sales
-  // (p_orders_sales_i), coordinator (p_orders_coord_i) and super_admin only.
-  // sales_manager supervises but cannot create, so it is deliberately absent —
-  // offering the link would raise an RLS error on save.
-  const canSell = ['sales', 'coordinator', 'super_admin'].includes(profile?.role as string)
+  // actually create an order. The gate is fn_create_order's own allowlist, not
+  // the orders INSERT policies — that RPC is SECURITY DEFINER and bypasses RLS,
+  // which is why operations can create orders with no INSERT policy at all.
+  // sales_manager joined the allowlist in 20260814080000 so a supervisor can
+  // sell for their own team.
+  const canSell = ['sales', 'sales_manager', 'coordinator', 'super_admin'].includes(profile?.role as string)
 
   const categories = useMemo(
     () => [...new Set((sched.data || []).map((r: any) => r.course?.category).filter(Boolean))].sort(),

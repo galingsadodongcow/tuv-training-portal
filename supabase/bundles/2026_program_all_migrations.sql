@@ -4563,3 +4563,159 @@ grant execute on function public.fn_team_members()                              
 grant execute on function public.fn_grant_member_role(uuid, text, text)             to authenticated;
 grant execute on function public.fn_link_member_salesperson(uuid, uuid)             to authenticated;
 grant execute on function public.fn_upsert_team_member(text, text, text, text, uuid, boolean) to authenticated;
+
+-- ===========================================================================
+-- 20260814070000_protect_oversight_roles.sql
+-- Only a super_admin may act on super_admin / business_owner / management /
+-- auditor. Operations keeps sales, coordinator and sales_manager.
+-- ===========================================================================
+-- Protect the oversight roles from operations (owner decision, follow-up to
+-- 20260814060000).
+--
+-- The first cut of fn_can_manage_member only ring-fenced super_admin, so
+-- operations could act on anyone else — including demoting the business owner.
+-- Verified live: as the operations account, fn_can_manage_member(<business
+-- owner>) returned true. That is not a privilege *escalation* (operations still
+-- cannot grant business_owner, so they cannot take the role themselves), but it
+-- does let operations strip senior oversight access, which is not the intent.
+--
+-- Oversight roles — business_owner, management, auditor — now join super_admin
+-- as roles only a super_admin may act on. Operations keeps full control of the
+-- operational roles it is meant to run: sales, coordinator, sales_manager.
+--
+-- Only the guard changes; the grant matrix in fn_member_grantable_roles is
+-- already correct (operations was never able to grant these roles).
+-- Idempotent: create or replace.
+
+create or replace function public.fn_can_manage_member(p_user uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  target_role public.user_role;
+  target_team text;
+begin
+  -- No self-management: a delegator must never be able to raise their own role.
+  if p_user is null or p_user = (select auth.uid()) then
+    return false;
+  end if;
+
+  select p.role, s.team
+    into target_role, target_team
+    from public.profiles p
+    left join public.salesperson s on s.sales_id = p.sales_id
+   where p.user_id = p_user;
+
+  if not found then
+    return false;
+  end if;
+
+  -- super_admin plus the oversight roles: super_admin only. This blocks a
+  -- lateral takedown (operations demoting the business owner) as well as the
+  -- upward path already covered by the grant matrix.
+  if target_role in ('super_admin', 'business_owner', 'management', 'auditor') then
+    return public.fn_current_role() = 'super_admin';
+  end if;
+
+  if public.fn_current_role() in ('super_admin', 'operations') then
+    return true;
+  end if;
+
+  -- A supervisor manages the sales reps on their own team, nobody else. A null
+  -- team on either side is not a match — it would otherwise pair up every
+  -- unassigned person with every teamless supervisor.
+  if public.fn_is_team_lead() then
+    return target_role = 'sales'
+       and target_team is not null
+       and target_team is not distinct from public.fn_current_team();
+  end if;
+
+  return false;
+end;
+$function$;
+
+-- ===========================================================================
+-- 20260814080000_sales_manager_can_sell.sql
+-- sales_manager joins the fn_create_order allowlist (that RPC is SECURITY
+-- DEFINER and bypasses the orders INSERT policies, so it is the real gate).
+-- ===========================================================================
+-- Let a sales supervisor sell as well as supervise (owner decision).
+--
+-- Context: sales supervisors were being unified onto the sales_manager role, but
+-- sales_manager could not create orders — so promoting a working seller would
+-- have taken their day job away.
+--
+-- The gate is this function, not RLS. fn_create_order is SECURITY DEFINER, so it
+-- bypasses the orders INSERT policies entirely and enforces its own allowlist —
+-- which is why `operations` can create orders despite having no INSERT policy.
+-- Adding an RLS policy for sales_manager would therefore be dead code; the
+-- allowlist here is the only thing that matters.
+--
+-- sales_manager is added to the allowlist and inherits the same channel
+-- restriction as sales: a selling role may only raise Inside Sales / Field Sales
+-- orders, leaving the other channels to coordinator/operations/super_admin.
+--
+-- Reproduced verbatim from the live definition with those two lines changed, so
+-- nothing else about order creation shifts. Idempotent: create or replace.
+
+create or replace function public.fn_create_order(
+  p_order_id text,
+  p_channel text,
+  p_order_date date,
+  p_client_id uuid,
+  p_lines jsonb,
+  p_sales_id uuid default null::uuid,
+  p_country text default 'PH'::text
+)
+returns text
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare r text := fn_current_role()::text; v_line jsonb; v_no int := 0;
+begin
+  -- sales_manager joins the selling roles (was: sales, coordinator, operations,
+  -- super_admin) so a supervisor can raise an order for their own team.
+  if r is null or r not in ('sales','sales_manager','coordinator','operations','super_admin') then
+    raise exception 'Your role may not create orders' using errcode = '42501';
+  end if;
+  -- Same channel restriction for both selling roles.
+  if r in ('sales','sales_manager') and p_channel not in ('Inside Sales','Field Sales') then
+    raise exception 'Sales may only create Inside Sales or Field Sales orders' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_order_id),'') = '' then
+    raise exception 'An order reference is required' using errcode = '22004';
+  end if;
+  if exists (select 1 from orders where order_id = p_order_id) then
+    raise exception 'Order % already exists', p_order_id using errcode = '23505';
+  end if;
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
+    raise exception 'At least one line is required' using errcode = '22004';
+  end if;
+
+  insert into orders (order_id, order_date, channel, modality, seats, amount_php,
+                      client_id, created_by, country, fulfillment_stage)
+  values (p_order_id, coalesce(p_order_date, current_date), p_channel::channel_t,
+          (p_lines->0->>'modality')::modality_t, 1, 0, p_client_id, auth.uid(),
+          coalesce(p_country,'PH')::country_t, 'New');
+
+  for v_line in select * from jsonb_array_elements(p_lines) loop
+    v_no := v_no + 1;
+    insert into order_line (order_id, line_no, course_id, schedule_id, modality,
+                            seats, amount_php, line_status)
+    values (p_order_id, v_no, (v_line->>'course_id')::uuid,
+            nullif(v_line->>'schedule_id','')::uuid, (v_line->>'modality')::modality_t,
+            coalesce((v_line->>'seats')::int, 1), coalesce((v_line->>'amount_php')::numeric, 0),
+            coalesce(nullif(v_line->>'line_status',''), 'New')::order_status_t);
+  end loop;
+
+  if p_sales_id is not null then
+    insert into order_assignment (order_id, sales_id) values (p_order_id, p_sales_id)
+      on conflict (order_id) do nothing;
+  end if;
+
+  return p_order_id;
+end $function$;
