@@ -23,6 +23,11 @@ import { php, shortDate } from '../lib/format'
 
 const canForecast = (r: any) => ['business_owner', 'super_admin'].includes(r)
 const canOps = (r: any) => ['operations', 'super_admin'].includes(r)
+// Mirrors fn_cost_visible() in 20260814090000 and the Analytics REPORT list.
+// The database masks cost regardless — this only avoids rendering a
+// Profitability panel full of dashes to a role that may not see it.
+const canSeeCost = (r: any) =>
+  ['super_admin', 'operations', 'business_owner', 'management', 'auditor'].includes(r)
 
 // Tab keys, plus the legacy deep-links that were folded into Activity.
 export const SESSION_TABS = ['overview', 'orders', 'participants', 'files', 'activity'] as const
@@ -204,7 +209,7 @@ export default function SessionRecord({
             ))}
           </div>
 
-          {pnl.data && (
+          {pnl.data && canSeeCost(role) && (
             <RecordSection title="Profitability">
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
                 <KeyVal label="Revenue">{php(Number(pnl.data.revenue))}</KeyVal>

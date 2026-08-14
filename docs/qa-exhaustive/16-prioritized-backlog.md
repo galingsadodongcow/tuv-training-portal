@@ -7,7 +7,7 @@ Effort: S <1d · M 1–3d · L >3d.
 
 | ID | Issue | Role | Module | Sev | Impact | Effort | Recommendation | Depends on | Acceptance |
 |---|---|---|---|---|---|---|---|---|---|
-| IMM-1 | Cost/margin/trainer rates readable by all roles | all | Analytics, Session | **P0** | High | S | Route P&L through a `security definer` RPC gated on `fn_role_reads_all()`, or move rate columns behind a restricted view | **Business decision on who may see margin** | As `sales`, `v_session_pnl`/rates return no cost or margin; management/BO/ops unchanged |
+| ~~IMM-1~~ | ~~Cost/margin/trainer rates readable by all roles~~ **✅ DONE 2026-08-14** | all | Analytics, Session | ~~P0~~ | High | S | Shipped as `20260814090000`: `fn_cost_visible()` + SECURITY DEFINER cost readers + narrowed column grants | — | ✅ Met: as `sales`, 0/161 rows carry cost or margin and `daily_rate` returns 42501; ops unchanged at ₱21.9M |
 | IMM-2 | No authenticated test coverage | QA | whole app | P1 | High | S | Create a least-privileged test account; restore `E2E_USER_EMAIL`/`PASSWORD` + `STAGING_BASE_URL` | test account | `authenticated-browser` job runs (not skips) and passes |
 | IMM-3 | 40/163 orders unowned | sales, ops | Orders | P1 | High | S | Backfill owners; default owner to creator (QW-1) | — | 0 unowned active orders; new orders get an owner |
 | IMM-4 | Order can be endorsed with no owner | sales→ops | Workflow | P1 | High | S | Add owner blocker to `fn_order_completeness` | IMM-3 | Endorsing an unowned order returns a blocker |

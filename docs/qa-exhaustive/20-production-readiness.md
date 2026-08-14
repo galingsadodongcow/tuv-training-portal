@@ -1,13 +1,13 @@
 # 20 — Production readiness
 
-## Score: 72 / 100 · Target for general deployment: 85
+## Score: 75 / 100 (was 72 before the cost-visibility fix) · Target: 85
 
 | Dimension | Score | Reasoning |
 |---|---:|---|
 | Functional completeness | 78 | Core flows exist end to end; trainer self-service absent by design; quote→order manual |
 | Reliability | 80 | Build/lint/type/unit/E2E all green; 0 orphans; no runtime error data (no telemetry) |
 | Business-process alignment | 70 | Handoff modelled well but preconditions unenforced; 24.5% of orders unowned |
-| Role / permission accuracy | 65 | RLS scoping is correct almost everywhere — but P&L and rates leak to all roles; 5 unguarded screens |
+| Role / permission accuracy | 85 | P&L and rate exposure **fixed and verified** (20260814090000); residual: 5 unguarded screens (data still RLS-scoped) |
 | Data integrity | 88 | Flawless referential integrity, real constraints, audit trail; minor staging-table gaps |
 | Operations usability | 76 | Best-served role; missing recurring/duplicate/competency-in-picker |
 | Sales usability | 62 | Unowned backlog, manual quote re-entry, split commercial context |
@@ -20,7 +20,7 @@
 | Maintainability | 85 | Clear conventions, documented decisions, migrations disciplined, RLS regression suite |
 | Automated test coverage | 45 | 40 public E2E + 7 unit + RLS suite; **zero authenticated coverage** |
 
-**Weighted overall: 72.**
+**Weighted overall: 75.**
 
 ## Is it ready for real employee use?
 
@@ -29,9 +29,10 @@ IMM-1 (cost exposure) is decided and fixed first.
 
 **Not yet for unrestricted deployment**, for three reasons — in order:
 
-1. **A confirmed data-exposure defect.** Every authenticated role can read
-   company-wide margin and individual trainer day rates. This is a decision
-   plus a small change, not a large project.
+1. ~~A confirmed data-exposure defect.~~ **Resolved 2026-08-14** — cost and
+   margin are now masked to non-reporting roles and the rate columns are no
+   longer directly readable. Verified on production for both a restricted and a
+   permitted role.
 2. **No authenticated test coverage.** 22 screens and every CRUD path have never
    been exercised by an automated test or, in this audit, by any signed-in
    session. The risk is unknown rather than known-bad — but unknown is not a
@@ -48,7 +49,7 @@ better than typical.
 
 | Action | Moves | Δ |
 |---|---|---|
-| Fix cost/margin exposure (IMM-1) | Role accuracy 65→85 | +3 |
+| ~~Fix cost/margin exposure (IMM-1)~~ **done** | Role accuracy 65→85 | ✅ +3 banked |
 | Test account + authenticated E2E running (IMM-2) | Coverage 45→70 | +4 |
 | Owner defaults + endorse blocker (IMM-3/4) | Process 70→85, Sales 62→75 | +3 |
 | axe + viewport matrix on all screens | A11y 60→75, Responsive 55→75 | +3 |

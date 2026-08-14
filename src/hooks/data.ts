@@ -1297,11 +1297,20 @@ export function useApprovedCancellation(scheduleId?: string) {
 }
 
 // ---- Phase 3: trainers, venues, conflicts ----
+// These list columns explicitly rather than using select('*') because
+// 20260814090000 narrowed the SELECT grant on trainer/venue to exclude the rate
+// columns (daily_rate / day_rate) — a `select *` would now fail with
+// "permission denied for column". The rates are write-only in this app: the
+// Resources screen sets them and no surface ever displays them. Cost reaches
+// the UI only through v_session_pnl, which masks it per role.
+const TRAINER_COLS = 'trainer_id, name, code, email, phone, trainer_type, active, notes, created_at, country'
+const VENUE_COLS = 'venue_id, name, address, city, capacity, venue_type, active, created_at, country'
+
 export function useTrainers(activeOnly = true) {
   return useQuery({
     queryKey: ['trainers', activeOnly],
     queryFn: () => {
-      let q = supabase.from('trainer').select('*').order('name')
+      let q = supabase.from('trainer').select(TRAINER_COLS).order('name')
       if (activeOnly) q = q.eq('active', true)
       return sel(q)
     },
@@ -1312,7 +1321,7 @@ export function useVenues(activeOnly = true) {
   return useQuery({
     queryKey: ['venues', activeOnly],
     queryFn: () => {
-      let q = supabase.from('venue').select('*').order('name')
+      let q = supabase.from('venue').select(VENUE_COLS).order('name')
       if (activeOnly) q = q.eq('active', true)
       return sel(q)
     },
