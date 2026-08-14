@@ -49,3 +49,50 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+
+  # Authenticated browser coverage against a real staging deployment. This runs
+  # the auth-setup + authenticated-chromium Playwright projects, which only
+  # activate when E2E_USER_EMAIL and E2E_USER_PASSWORD are set (see
+  # playwright.config.ts). It targets a DEPLOYED url (BASE_URL) whose backend is a
+  # real Supabase, so auth.setup.ts can actually sign in — placeholder Supabase
+  # values cannot authenticate. Configure these repo secrets to enable it:
+  #   STAGING_BASE_URL       - a deployed staging/preview URL (real Supabase backend)
+  #   E2E_USER_EMAIL         - a least-privileged staging test account
+  #   E2E_USER_PASSWORD      - its password
+  # Until STAGING_BASE_URL and the credentials are present the job self-skips, so
+  # merely creating the secrets — not this workflow edit — is what turns it on.
+  # Never point this at production or run destructive flows from it.
+  authenticated-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check whether authenticated coverage is configured
+        id: gate
+        env:
+          STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+        run: |
+          if [ -n "$STAGING_BASE_URL" ] && [ -n "$E2E_USER_EMAIL" ] && [ -n "$E2E_USER_PASSWORD" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Authenticated coverage secrets not set — skipping." >&2
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.gate.outputs.enabled == 'true'
+      - run: npx playwright install --with-deps chromium
+        if: steps.gate.outputs.enabled == 'true'
+      - name: Run authenticated Playwright tests against staging
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+        run: npm run test:e2e
