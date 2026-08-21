@@ -1,11 +1,10 @@
 'use client'
 import { useEffect } from 'react'
+import { reportError } from '@/lib/telemetry'
 
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
-    // Surface for debugging; wire to Sentry/console here.
-    // eslint-disable-next-line no-console
-    console.error(error)
+    reportError(error, 'app-error-boundary')
   }, [error])
 
   return (

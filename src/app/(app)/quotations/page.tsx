@@ -1,10 +1,7 @@
-import Quotations from '@/screens/Quotations'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
+// Quotations folded into the single /crm area (Quotes tab) — third-pass #7.
+// The quote record route (/quotations/[id]) is unchanged.
 export default function Page() {
-  return (
-    <Guard roles={['super_admin', 'operations', 'business_owner', 'sales']}>
-      <Quotations />
-    </Guard>
-  )
+  redirect('/crm?tab=quotes')
 }

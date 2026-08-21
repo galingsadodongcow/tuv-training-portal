@@ -38,7 +38,7 @@ function CheckCard({ c }: { c: Check }) {
 // missing an owner, stalling, overdue, or unmatched. Every tile drills through
 // to the exact records behind the number. All derived from existing views, so
 // no schema change.
-export default function DataQuality() {
+export default function DataQuality({ embedded }: { embedded?: boolean } = {}) {
   const queue = useFulfillmentQueue()
   const health = useSessionHealth()
   const unstaffed = useUnstaffed()
@@ -67,7 +67,7 @@ export default function DataQuality() {
     <>
       <div className="page-head">
         <div>
-          <h1>Data quality</h1>
+          {!embedded && <h1>Data quality</h1>}
           <p>
             {error ? 'A check could not be loaded.' : loading ? 'Checking the data…' : totalIssues === 0
               ? 'No issues found. The data is clean.'

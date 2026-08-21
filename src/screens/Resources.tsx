@@ -3,11 +3,11 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useTrainers, useVenues, useTrainerLoad, useUnstaffed, useInvalidate } from '../hooks/data'
-import { Spinner, ErrorNote } from '../components/ui'
+import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
-import { shortDate, num } from '../lib/format'
+import { shortDate } from '../lib/format'
 import Link from 'next/link'
 import TrainerManage from '../components/TrainerManage'
 
@@ -24,7 +24,12 @@ export default function Resources() {
   const toast = useToast()
   const confirm = useConfirm()
   const [tab, setTab] = useState('trainers')
-  const [tForm, setTForm] = useState({ name: '', code: '', email: '', trainer_type: 'Internal', daily_rate: '' })
+  // Manage-surface filters: these registers grow long and were previously an
+  // unfiltered dump with inactive rows greyed out but still in the way.
+  const [q, setQ] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
+  // No `code` — the database assigns it (trg_trainer_autocode / trg_venue_autocode).
+  const [tForm, setTForm] = useState({ name: '', email: '', trainer_type: 'Internal', daily_rate: '' })
   const [vForm, setVForm] = useState({ name: '', city: '', capacity: '', venue_type: 'Training Room', day_rate: '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -36,15 +41,16 @@ export default function Resources() {
     if (!tForm.name.trim()) return
     if (tForm.daily_rate !== '' && Number(tForm.daily_rate) < 0) { setMsg('Daily rate cannot be negative.'); return }
     setBusy(true); setMsg(null)
+    // `code` is intentionally omitted: the insert trigger assigns the next
+    // TR-nn. Sending null here is what makes the trigger fill it.
     const { error } = await supabase.from('trainer').insert({
       name: tForm.name.trim(),
-      code: tForm.code.trim() || null,
       email: tForm.email.trim() || null,
       trainer_type: tForm.trainer_type,
       daily_rate: tForm.daily_rate === '' ? null : Number(tForm.daily_rate),
     })
     if (error) { setMsg(error.message); toast.error(error.message) }
-    else { setTForm({ name: '', code: '', email: '', trainer_type: 'Internal', daily_rate: '' }); invalidate(['trainers', 'trainer_load']); toast.success('Trainer added.') }
+    else { setTForm({ name: '', email: '', trainer_type: 'Internal', daily_rate: '' }); invalidate(['trainers', 'trainer_load']); toast.success('Trainer added.') }
     setBusy(false)
   }
 
@@ -89,6 +95,22 @@ export default function Resources() {
 
   const loadFor = (id: any) => load.data?.find((l: any) => l.trainer_id === id)
 
+  // Name/code/email/city contains-match, plus the active-only default. Applied
+  // client-side: both registers are small enough that a round trip per keystroke
+  // would cost more than it saves.
+  const needle = q.trim().toLowerCase()
+  const match = (...fields: any[]) =>
+    !needle || fields.some((f) => String(f ?? '').toLowerCase().includes(needle))
+  const visibleTrainers = (trainers.data || []).filter(
+    (t: any) => (showInactive || t.active) && match(t.name, t.code, t.email),
+  )
+  const visibleVenues = (venues.data || []).filter(
+    (v: any) => (showInactive || v.active) && match(v.name, v.code, v.city),
+  )
+  const hiddenCount =
+    (tab === 'trainers' ? (trainers.data || []).length : (venues.data || []).length) -
+    (tab === 'trainers' ? visibleTrainers.length : visibleVenues.length)
+
   return (
     <>
       <div className="page-head">
@@ -109,11 +131,26 @@ export default function Resources() {
       )}
 
       <div className="filters">
-        {['trainers', 'venues', 'load'].map((t) => (
+        {['trainers', 'venues'].map((t) => (
           <button key={t} className={`btn btn-sm ${tab === t ? '' : 'btn-ghost'}`} onClick={() => setTab(t)}>
-            {t === 'load' ? 'Trainer load' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
+        <input
+          type="search"
+          aria-label={`Search ${tab}`}
+          placeholder={tab === 'trainers' ? 'Search name, code or email' : 'Search name, code or city'}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          style={{ minWidth: 240 }}
+        />
+        <label className="toolbar" style={{ gap: 6 }}>
+          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+          <span className="fill-label">Show inactive</span>
+        </label>
+        {hiddenCount > 0 && (
+          <span className="fill-label">{hiddenCount} hidden</span>
+        )}
       </div>
 
       {msg && <div className="notice notice-error" style={{ marginBottom: 12 }}>{msg}</div>}
@@ -122,9 +159,9 @@ export default function Resources() {
         <>
           <div className="card" style={{ marginBottom: 16 }}>
             <table>
-              <thead><tr><th>Name</th><th>Type</th><th>Contact</th><th className="right">Sessions</th><th className="right">Next</th><th></th></tr></thead>
+              <thead><tr><th>Name</th><th>Type</th><th>Contact</th><th className="right">Sessions (delivered)</th><th className="right">Next</th><th></th></tr></thead>
               <tbody>
-                {trainers.data.map((t: any) => {
+                {visibleTrainers.map((t: any) => {
                   const l = loadFor(t.trainer_id)
                   return (
                     <tr key={t.trainer_id} style={{ opacity: t.active ? 1 : 0.5 }}>
@@ -134,7 +171,7 @@ export default function Resources() {
                       </td>
                       <td><span className="pill pill-webshop">{t.trainer_type}</span></td>
                       <td className="fill-label">{t.email || '—'}</td>
-                      <td className="right">{l ? `${l.sessions} · ${l.training_days}d` : '—'}</td>
+                      <td className="right">{l ? `${l.sessions} · ${l.training_days}d (${l.delivered} done)` : '—'}</td>
                       <td className="right fill-label">{l?.next_session ? shortDate(l.next_session) : '—'}</td>
                       <td className="right">
                         {canEdit && (
@@ -151,15 +188,23 @@ export default function Resources() {
                 })}
               </tbody>
             </table>
-            {trainers.data.length === 0 && <div className="empty">No trainers yet. Add your first below.</div>}
+            {visibleTrainers.length === 0 && (
+              <div className="empty">
+                {trainers.data.length === 0
+                  ? 'No trainers yet. Add your first below.'
+                  : 'No trainers match this search.'}
+              </div>
+            )}
           </div>
 
           {canEdit && (
             <div className="card card-pad" style={{ maxWidth: 620 }}>
               <div className="k-label" style={{ marginBottom: 10 }}>Add trainer</div>
+              <p className="fill-label" style={{ marginTop: -4, marginBottom: 10 }}>
+                The trainer code (TR-nn) is assigned automatically on save.
+              </p>
               <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
                 <input aria-label="Trainer full name" placeholder="Full name" value={tForm.name} onChange={(e) => setTForm({ ...tForm, name: e.target.value })} />
-                <input aria-label="Trainer code" placeholder="Code" value={tForm.code} onChange={(e) => setTForm({ ...tForm, code: e.target.value })} />
                 <input aria-label="Trainer email" placeholder="Email" value={tForm.email} onChange={(e) => setTForm({ ...tForm, email: e.target.value })} />
                 <select aria-label="Trainer type" value={tForm.trainer_type} onChange={(e) => setTForm({ ...tForm, trainer_type: e.target.value })}>
                   {T_TYPES.map((x) => (<option key={x}>{x}</option>))}
@@ -178,9 +223,12 @@ export default function Resources() {
             <table>
               <thead><tr><th>Venue</th><th>Type</th><th>City</th><th className="right">Capacity</th><th></th></tr></thead>
               <tbody>
-                {venues.data?.map((v: any) => (
+                {visibleVenues.map((v: any) => (
                   <tr key={v.venue_id} style={{ opacity: v.active ? 1 : 0.5 }}>
-                    <td style={{ fontWeight: 600 }}>{v.name}{!v.active && <span className="fill-label"> · inactive</span>}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{v.name}</div>
+                      <div className="fill-label">{v.code || '—'}{!v.active && ' · inactive'}</div>
+                    </td>
                     <td><span className="pill pill-inside">{v.venue_type}</span></td>
                     <td className="fill-label">{v.city || '—'}</td>
                     <td className="right">{v.capacity ?? '—'}</td>
@@ -195,12 +243,19 @@ export default function Resources() {
                 ))}
               </tbody>
             </table>
-            {venues.data?.length === 0 && <div className="empty">No venues yet.</div>}
+            {visibleVenues.length === 0 && (
+              <div className="empty">
+                {(venues.data?.length ?? 0) === 0 ? 'No venues yet.' : 'No venues match this search.'}
+              </div>
+            )}
           </div>
 
           {canEdit && (
             <div className="card card-pad" style={{ maxWidth: 620 }}>
               <div className="k-label" style={{ marginBottom: 10 }}>Add venue</div>
+              <p className="fill-label" style={{ marginTop: -4, marginBottom: 10 }}>
+                The venue code (VN-nn) is assigned automatically on save.
+              </p>
               <div className="grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
                 <input aria-label="Venue name" placeholder="Venue name" value={vForm.name} onChange={(e) => setVForm({ ...vForm, name: e.target.value })} />
                 <select aria-label="Venue type" value={vForm.venue_type} onChange={(e) => setVForm({ ...vForm, venue_type: e.target.value })}>
@@ -214,28 +269,6 @@ export default function Resources() {
             </div>
           )}
         </>
-      )}
-
-      {tab === 'load' && (
-        <div className="card">
-          {load.error && <ErrorNote error={load.error} />}
-          <table>
-            <thead><tr><th>Trainer</th><th>Type</th><th className="right">Sessions</th><th className="right">Training days</th><th className="right">Delivered</th><th className="right">Next</th></tr></thead>
-            <tbody>
-              {load.data?.map((l: any) => (
-                <tr key={l.trainer_id}>
-                  <td style={{ fontWeight: 600 }}>{l.name}</td>
-                  <td className="fill-label">{l.trainer_type}</td>
-                  <td className="right">{num(l.sessions)}</td>
-                  <td className="right">{num(l.training_days)}</td>
-                  <td className="right">{num(l.delivered)}</td>
-                  <td className="right fill-label">{l.next_session ? shortDate(l.next_session) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {load.data?.length === 0 && <div className="empty">No trainer activity yet.</div>}
-        </div>
       )}
 
       {managing && <TrainerManage trainer={managing} onClose={() => setManaging(null)} />}

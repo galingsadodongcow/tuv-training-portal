@@ -5,12 +5,15 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useFulfillmentQueue, useSalespeople, useInvalidate, useSlaBreaches } from '../hooks/data'
-import { Spinner, ErrorNote, ChannelPill } from '../components/ui'
+import { ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
+import SavedViews from '../components/SavedViews'
+import OwnerAssign, { canAssignAnyOwner } from '../components/OwnerAssign'
 import { php, shortDate } from '../lib/format'
-import { primaryFlag, ORDER_VIEWS, orderView } from '../lib/orderState'
+import { primaryFlag, ORDER_VIEWS, orderView, stageLabel } from '../lib/orderState'
+import { updateUrlParams } from '../lib/urlParams'
 
 const STAGES = ['New', 'In Communication', 'For Order Creation', 'Endorsed to Ops', 'SAP Created', 'No Feedback']
 const NEXT: Record<string, string> = {
@@ -21,7 +24,11 @@ const NEXT: Record<string, string> = {
   'No Feedback': 'In Communication',
 }
 
-export default function Worklist() {
+// The fulfillment queue (advance / assign / bulk controls). Rendered as the
+// "Needs fulfillment" saved view of the CRM Orders tab (`embedded`), where the
+// shell owns the heading; reachable via /worklist (redirects in). Reads its own
+// who/view/stage params, which coexist with the shell's tab/queue.
+export default function Worklist({ embedded }: { embedded?: boolean } = {}) {
   const { profile } = useAuth()
   const queue = useFulfillmentQueue()
   const people = useSalespeople()
@@ -46,15 +53,20 @@ export default function Worklist() {
   const who = params.get('who')
     || ((profile?.salesperson?.code && !profile?.salesperson?.is_supervisor) ? 'mine' : 'all')
   const view = params.get('view') || 'all'
-  const setParam = (k: string, v: string) => {
-    const n = new URLSearchParams(params.toString())
-    if (!v || v === 'all') n.delete(k)
-    else n.set(k, v)
+  const setParams = (updates: Record<string, string>) => {
+    const n = updateUrlParams(params, updates)
     router.replace(`${pathname}?${n.toString()}`, { scroll: false })
   }
+  const setParam = (k: string, v: string) => setParams({ [k]: v })
 
   const myCode = profile?.salesperson?.code
-  const canAssignAny = ['super_admin', 'operations', 'business_owner'].includes(profile?.role as string) || profile?.salesperson?.is_supervisor
+  // Shared with the per-row control so the bulk toolbar and the row picker can
+  // never disagree about who may assign (this also picks up the coordinator,
+  // which p_asg_coord allows but the old local check missed).
+  const canAssignAny = canAssignAnyOwner(profile)
+  // Fulfillment is a write action; management + auditor are read-only (RLS rejects
+  // their stage writes) so the advance/select controls are hidden from them.
+  const canAct = !['management', 'auditor'].includes(profile?.role as string)
 
   // Owner scope first: mine, unassigned, or everyone.
   const whoScoped = useMemo(() => {
@@ -104,44 +116,20 @@ export default function Worklist() {
     setBusy('')
   }
 
-  const selfAssign = async (orderId: string) => {
-    setBusy(orderId); setMsg(null)
-    // upsert keyed on order_id: one assignment per order, no check-then-act race.
-    const { error } = await supabase.from('order_assignment')
-      .upsert({ order_id: orderId, sales_id: profile?.sales_id }, { onConflict: 'order_id' })
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
-    setBusy('')
-  }
-
-  const reassign = async (orderId: string, salesId: string) => {
-    // Reassignment is a destructive action: confirm and take a reason first.
-    const who = salesId ? (people.data?.find((p: any) => p.sales_id === salesId)?.name || 'another owner') : 'no one'
-    const res = await confirm({
-      title: salesId ? 'Reassign this order?' : 'Unassign this order?',
-      body: `Ownership changes to ${who}.`,
-      confirmLabel: salesId ? 'Reassign' : 'Unassign',
-      tone: salesId ? 'default' : 'danger',
-      reason: 'optional',
-    })
-    if (!res.ok) return
-    setBusy(orderId); setMsg(null)
-    // Empty selection means unassign: delete the row rather than writing an empty FK.
-    const { error } = salesId
-      ? await supabase.from('order_assignment')
-          .upsert({ order_id: orderId, sales_id: salesId }, { onConflict: 'order_id' })
-      : await supabase.from('order_assignment').delete().eq('order_id', orderId)
-    if (error) { setMsg(error.message); toast.error(error.message) }
-    else { invalidate(['fulfillment_queue', 'orders']); toast.success('Assignment updated.') }
-    setBusy('')
-  }
+  // Per-row assign/reassign lives in components/OwnerAssign, shared with the
+  // order record. Bulk assignment over the selection stays here.
 
   // ---- bulk selection over the visible rows ----
   const shown = rows.slice(0, 250)
   const visibleIds = shown.map((o: any) => o.order_id)
   const selectedVisible = visibleIds.filter((id: string) => selected.has(id))
   const allSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length
-  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggle = (id: string) => setSelected((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
   const toggleAll = () => setSelected((s) => {
     const n = new Set(s)
     if (allSelected) visibleIds.forEach((id: string) => n.delete(id))
@@ -198,17 +186,19 @@ export default function Worklist() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Fulfillment</h1>
-          <p>
-            {rows.length} order{rows.length === 1 ? '' : 's'} · {php(value)}
-            {view !== 'all' ? ` · ${orderView(view).label.toLowerCase()}` : ''}
-            {who === 'unassigned' ? ' · unassigned, ready to claim' : ''}. Oldest first.
-          </p>
-          <span className="k-sub">All amounts in PHP (₱)</span>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>Fulfillment</h1>
+            <p>
+              {rows.length} order{rows.length === 1 ? '' : 's'} · {php(value)}
+              {view !== 'all' ? ` · ${orderView(view).label.toLowerCase()}` : ''}
+              {who === 'unassigned' ? ' · unassigned, ready to claim' : ''}. Oldest first.
+            </p>
+            <span className="k-sub">All amounts in PHP (₱)</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {stalled > 0 && (
         <div className="notice notice-info" style={{ marginBottom: 14 }}>
@@ -238,7 +228,7 @@ export default function Worklist() {
         ))}
         <select aria-label="Filter by stage" value={stage} onChange={(e) => setParam('stage', e.target.value)} style={{ marginLeft: 'auto' }}>
           <option value="all">All stages ({Object.values(stageCounts).reduce((a, b) => a + b, 0)})</option>
-          {STAGES.map((s) => (<option key={s} value={s}>{s} ({stageCounts[s] || 0})</option>))}
+          {STAGES.map((s) => (<option key={s} value={s}>{stageLabel(s)} ({stageCounts[s] || 0})</option>))}
         </select>
       </div>
 
@@ -250,10 +240,14 @@ export default function Worklist() {
         ))}
       </div>
 
+      <div className="filters" style={{ marginTop: -6 }}>
+        <SavedViews surface="worklist" paramKeys={['who', 'view', 'stage']} />
+      </div>
+
       {selectedVisible.length > 0 && (
         <div className="notice notice-info" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <strong>{selectedVisible.length} selected</strong>
-          <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={bulkAdvance}>Advance to next stage</button>
+          {canAct && <button className="btn btn-sm" disabled={busy === 'bulk'} onClick={bulkAdvance}>Advance to next stage</button>}
           {canAssignAny && (
             <select aria-label="Assign selected orders to" value={bulkTo} disabled={busy === 'bulk'} onChange={(e) => bulkAssign(e.target.value)}>
               <option value="">Assign to…</option>
@@ -271,7 +265,7 @@ export default function Worklist() {
         <table className="sticky-1">
           <thead>
             <tr>
-              <th style={{ width: 32 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" /></th>
+              <th style={{ width: 32 }}>{canAct && <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />}</th>
               <th>Order</th><th>Customer</th><th>Stage</th><th className="right">Age</th>
               <th>Owner</th><th className="right">Value</th><th>Next step</th>
             </tr>
@@ -279,7 +273,7 @@ export default function Worklist() {
           <tbody>
             {shown.map((o: any) => (
               <tr key={o.order_id} className={o.days_in_stage > 14 ? 'risk-amber' : ''}>
-                <td><input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggle(o.order_id)} aria-label={`Select ${o.order_id}`} /></td>
+                <td>{canAct && <input type="checkbox" checked={selected.has(o.order_id)} onChange={() => toggle(o.order_id)} aria-label={`Select ${o.order_id}`} />}</td>
                 <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                   <button className="linkbtn" style={{ padding: 0 }} onClick={() => router.push(`/orders/${o.order_id}`)}>
                     {o.order_id}
@@ -291,7 +285,7 @@ export default function Worklist() {
                   <div className="fill-label">{o.email}</div>
                 </td>
                 <td>
-                  <span className="pill pill-webshop">{o.fulfillment_stage}</span>
+                  <span className="pill pill-webshop">{stageLabel(o.fulfillment_stage)}</span>
                   {(() => {
                     const f = primaryFlag(o)
                     return f ? (
@@ -308,27 +302,26 @@ export default function Worklist() {
                   </div>
                 </td>
                 <td>
-                  {canAssignAny ? (
-                    <select aria-label={`Owner for order ${o.order_id}`}
-                      value={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id || ''}
-                      disabled={busy === o.order_id}
-                      onChange={(e) => reassign(o.order_id, e.target.value)} style={{ minWidth: 120 }}>
-                      <option value="">Unassigned</option>
-                      {people.data?.map((p: any) => (<option key={p.sales_id} value={p.sales_id}>{p.name}</option>))}
-                    </select>
-                  ) : o.owner ? o.owner : profile?.sales_id ? (
-                    <button className="btn btn-sm" disabled={busy === o.order_id} onClick={() => selfAssign(o.order_id)}>Pick up</button>
-                  ) : (
-                    <span className="fill-label">Unassigned</span>
-                  )}
+                  {/* Same control as the order record — see components/OwnerAssign. */}
+                  <OwnerAssign
+                    orderId={o.order_id}
+                    ownerSalesId={people.data?.find((p: any) => p.code === o.owner_code)?.sales_id}
+                    ownerName={o.owner}
+                    invalidateKeys={['fulfillment_queue', 'orders']}
+                    compact
+                  />
                 </td>
                 <td className="right">{php(o.total_amount)}</td>
                 <td>
                   {NEXT[o.fulfillment_stage] ? (
-                    <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
-                      onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
-                      → {NEXT[o.fulfillment_stage]}
-                    </button>
+                    canAct ? (
+                      <button className="btn btn-ghost btn-sm" disabled={busy === o.order_id}
+                        onClick={() => advance(o.order_id, NEXT[o.fulfillment_stage])}>
+                        → {stageLabel(NEXT[o.fulfillment_stage])}
+                      </button>
+                    ) : (
+                      <span className="fill-label">→ {stageLabel(NEXT[o.fulfillment_stage])}</span>
+                    )
                   ) : (
                     <span className="fill-label">Awaiting collection</span>
                   )}
@@ -337,11 +330,19 @@ export default function Worklist() {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
+        {rows.length === 0 ? (
           <div className="empty">
-            {who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
+            {view !== 'all' || stage !== 'all' ? (
+              <>Nothing matches the current filters{whoScoped.length > 0 ? ` — ${whoScoped.length} hidden` : ''}.{' '}
+                <button className="linkbtn" onClick={() => setParams({ view: 'all', stage: 'all' })}>Clear filters</button></>
+            ) : who === 'unassigned' ? 'No unassigned orders. Everything has an owner.' : 'Nothing in this view.'}
           </div>
-        )}
+        ) : (whoScoped.length - rows.length > 0 && (view !== 'all' || stage !== 'all')) ? (
+          <div className="fill-label" style={{ padding: '10px 12px' }}>
+            {whoScoped.length - rows.length} hidden by the current filters —{' '}
+            <button className="linkbtn" onClick={() => setParams({ view: 'all', stage: 'all' })}>Clear filters</button>
+          </div>
+        ) : null}
       </div>
     </>
   )

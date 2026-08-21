@@ -1,6 +1,6 @@
 // Small line icons for the navigation, drawn in currentColor so they follow the
 // link's own color in light and dark. One path set per nav icon key.
-const PATHS: Record<string, JSX.Element> = {
+const PATHS: Record<string, React.JSX.Element> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
   calendar: <><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v3M16 3v3" /></>,
   orders: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
@@ -24,6 +24,9 @@ const PATHS: Record<string, JSX.Element> = {
   'quality-star': <><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" /></>,
   pricing: <><circle cx="12" cy="12" r="9" /><path d="M14.5 9a2.5 2.5 0 0 0-2.5-1.6c-1.6 0-2.5.9-2.5 2 0 2.8 5 1.4 5 4.2 0 1.2-1 2-2.5 2A2.6 2.6 0 0 1 9 15.8M12 6v1.4M12 16.6V18" /></>,
   audit: <><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5" /><circle cx="11" cy="14" r="2.4" /><path d="M13 16l2 2" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
+  team: <><circle cx="9" cy="8" r="3" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17.5" cy="8.5" r="2.3" /><path d="M16.5 20a5.4 5.4 0 0 0-2.3-4.4" /></>,
+  financial: <><rect x="2.5" y="6" width="19" height="12" rx="2" /><circle cx="12" cy="12" r="2.6" /><path d="M6 9.5v5M18 9.5v5" /></>,
 }
 
 export default function NavIcon({ name }: { name: string }) {

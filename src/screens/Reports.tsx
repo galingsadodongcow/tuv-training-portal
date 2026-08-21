@@ -1,12 +1,14 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useDigest, useOrderFacts, useReceivables, useCertsExpiring, useProfitability, useFunnel, useForecastVsActual, useTrainerLoad, useCountryRevenue } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import ChartTable, { ChartTableToggle } from '../components/ChartTable'
+import { DateRange } from '../components/inputs/DateRange'
 import { php, money, num, shortDate } from '../lib/format'
 import { exportCsv } from '../lib/csv'
+import { stageLabel } from '../lib/orderState'
 
 const monthLabel = (d: string) => {
   const dt = new Date(d)
@@ -47,24 +49,86 @@ const AGING = [
   { key: '60+', label: 'Over 60 days', test: (d: number) => d > 60 },
 ]
 
-export default function Reports() {
-  const [tab, setTab] = useState<'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'>('digest')
+export type ReportSection = 'digest' | 'revenue' | 'receivables' | 'certs' | 'margin' | 'analytics'
+
+// Rendered standalone at /reports historically; now embedded as the Revenue /
+// Receivables / Certificates / Profitability / Pipeline panels of the single
+// Analytics shell. When `embedded`, the parent picks the section and owns the
+// tab strip, so we render just that one section without our own chrome.
+export default function Reports({ embedded, section }: { embedded?: boolean; section?: ReportSection } = {}) {
+  const [tab, setTab] = useState<ReportSection>('digest')
+  const activeTab: ReportSection = embedded && section ? section : tab
   const [funnelTable, setFunnelTable] = useState(false)
-  const digest = useDigest()
-  const facts = useOrderFacts()
-  const receivables = useReceivables()
-  const certs = useCertsExpiring()
-  const pnl = useProfitability()
-  const funnel = useFunnel()
-  const forecast = useForecastVsActual()
-  const trainerLoad = useTrainerLoad()
-  const countryRev = useCountryRevenue()
+
+  // Period filter (RPT01). Presets resolve to a {from,to} of yyyy-mm; a custom
+  // range is driven by the two month inputs. Default 'all' == whole dataset, so
+  // nothing changes until the user picks a range. Only the date-bearing tabs
+  // (revenue, margin) read this; snapshot/future-dated tabs ignore it.
+  const [period, setPeriod] = useState<'all' | 'year' | 'ytd' | '12m' | 'custom'>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const range = useMemo<{ from: string; to: string }>(() => {
+    const ym = (d: Date) => d.toISOString().slice(0, 7)
+    const now = new Date()
+    const y = now.getFullYear()
+    switch (period) {
+      case 'year': return { from: `${y}-01`, to: `${y}-12` }
+      case 'ytd': return { from: `${y}-01`, to: ym(now) }
+      case '12m': return { from: ym(new Date(y, now.getMonth() - 11, 1)), to: ym(now) }
+      case 'custom': return { from: customFrom, to: customTo }
+      default: return { from: '', to: '' }
+    }
+  }, [period, customFrom, customTo])
+  const inPeriod = useCallback((d?: string | null) => {
+    if (!range.from && !range.to) return true
+    if (!d) return false
+    const m = String(d).slice(0, 7)
+    if (range.from && m < range.from) return false
+    if (range.to && m > range.to) return false
+    return true
+  }, [range])
+  const periodLabel = useMemo(() => {
+    if (!range.from && !range.to) return 'All time'
+    const fmt = (m: string) => (m ? monthLabel(`${m}-01`) : '—')
+    if (range.from && range.to) return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`
+    return range.from ? `From ${fmt(range.from)}` : `Through ${fmt(range.to)}`
+  }, [range])
+  // The period filter is a DateRange primitive (#140) at month granularity. The
+  // presets resolve here (they depend on "now"); editing an input flips to custom.
+  const onPeriodPreset = (key: string) => {
+    if (['all', 'year', 'ytd', '12m', 'custom'].includes(key)) setPeriod(key as typeof period)
+  }
+  const periodBar = (
+    <DateRange
+      granularity="month"
+      presets={[{ key: 'all', label: 'All' }, { key: 'year', label: 'This year' }, { key: 'ytd', label: 'Year to date' }, { key: '12m', label: 'Last 12 months' }]}
+      preset={period}
+      value={range}
+      onChange={(v) => { setCustomFrom(v.from); setCustomTo(v.to); setPeriod('custom') }}
+      onPreset={onPeriodPreset}
+      fromLabel="Period from"
+      toLabel="Period to"
+      label={periodLabel}
+    />
+  )
+  // Only load the active report. The analytics tab intentionally uses its four
+  // summary datasets together; hidden tabs no longer download thousands of rows.
+  const digest = useDigest(activeTab === 'digest')
+  const facts = useOrderFacts(activeTab === 'revenue', range.from, range.to)
+  const receivables = useReceivables(activeTab === 'receivables')
+  const certs = useCertsExpiring(activeTab === 'certs')
+  const pnl = useProfitability(activeTab === 'margin', range.from, range.to)
+  const analyticsEnabled = activeTab === 'analytics'
+  const funnel = useFunnel(analyticsEnabled)
+  const forecast = useForecastVsActual(analyticsEnabled)
+  const trainerLoad = useTrainerLoad(analyticsEnabled)
+  const countryRev = useCountryRevenue(analyticsEnabled)
 
   const margins = useMemo(() => {
-    const rows = (pnl.data || []).filter((r: any) => Number(r.revenue) > 0 || Number(r.total_cost) > 0)
+    const rows = (pnl.data || []).filter((r: any) => (Number(r.revenue) > 0 || Number(r.total_cost) > 0) && inPeriod(r.start_date))
     const t = rows.reduce((a: any, r: any) => ({ revenue: a.revenue + Number(r.revenue || 0), cost: a.cost + Number(r.total_cost || 0), margin: a.margin + Number(r.margin || 0) }), { revenue: 0, cost: 0, margin: 0 })
     return { rows, ...t }
-  }, [pnl.data])
+  }, [pnl.data, inPeriod])
   const [verifyNo, setVerifyNo] = useState('')
   const [verifyResult, setVerifyResult] = useState<any>(undefined)
   const [verifyError, setVerifyError] = useState<any>(null)
@@ -88,7 +152,7 @@ export default function Reports() {
   }, [receivables.data])
 
   const revenue = useMemo(() => {
-    const rows = (facts.data || []).filter((f: any) => f.order_status !== 'Cancelled')
+    const rows = (facts.data || []).filter((f: any) => f.order_status !== 'Cancelled' && inPeriod(f.order_month))
     const byMonth: Record<string, any> = {}
     const byChannel: Record<string, any> = {}
     const bySales: Record<string, any> = {}
@@ -113,7 +177,7 @@ export default function Reports() {
       return t
     }, { orders: 0, seats: 0, booked: 0, collected: 0 })
     return { months, channels, sales, totals }
-  }, [facts.data])
+  }, [facts.data, inPeriod])
 
   const stamp = () => new Date().toISOString().slice(0, 10)
   const exportMonths = () =>
@@ -161,22 +225,24 @@ export default function Reports() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Reports</h1>
-          <p>The operational digest and the revenue book. The digest is the same watch-list the nightly job runs on.</p>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>Reports</h1>
+            <p>The operational digest and the revenue book. The digest is the same watch-list the nightly job runs on.</p>
+          </div>
+          <div className="seg">
+            <button className={`seg-btn ${tab === 'digest' ? 'on' : ''}`} onClick={() => setTab('digest')}>Digest</button>
+            <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
+            <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
+            <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
+            <button className={`seg-btn ${tab === 'margin' ? 'on' : ''}`} onClick={() => setTab('margin')}>Profitability</button>
+            <button className={`seg-btn ${tab === 'analytics' ? 'on' : ''}`} onClick={() => setTab('analytics')}>Analytics</button>
+          </div>
         </div>
-        <div className="seg">
-          <button className={`seg-btn ${tab === 'digest' ? 'on' : ''}`} onClick={() => setTab('digest')}>Digest</button>
-          <button className={`seg-btn ${tab === 'revenue' ? 'on' : ''}`} onClick={() => setTab('revenue')}>Revenue</button>
-          <button className={`seg-btn ${tab === 'receivables' ? 'on' : ''}`} onClick={() => setTab('receivables')}>Receivables</button>
-          <button className={`seg-btn ${tab === 'certs' ? 'on' : ''}`} onClick={() => setTab('certs')}>Certificates</button>
-          <button className={`seg-btn ${tab === 'margin' ? 'on' : ''}`} onClick={() => setTab('margin')}>Profitability</button>
-          <button className={`seg-btn ${tab === 'analytics' ? 'on' : ''}`} onClick={() => setTab('analytics')}>Analytics</button>
-        </div>
-      </div>
+      )}
 
-      {tab === 'digest' && (
+      {activeTab === 'digest' && (
         digest.isLoading ? <Spinner label="Loading digest" /> : digest.error ? <ErrorNote error={digest.error} /> : (
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
             <DigestCard title="Sessions at risk" rows={digest.data?.atRisk || []} empty="No under-filled sessions in the next three weeks."
@@ -184,7 +250,7 @@ export default function Reports() {
             <DigestCard title="Roster gaps" rows={digest.data?.rosterGaps || []} empty="Every seat sold has a name."
               render={(r) => (<><Link href={`/session/${r.schedule_id}`}>{r.course_name}</Link> · {shortDate(r.start_date)} · {r.missing} missing</>)} />
             <DigestCard title="Stalled orders" rows={digest.data?.stalled || []} empty="Nothing sat too long in a stage."
-              render={(r) => (<><Link href={`/orders/${r.order_id}`}>{r.order_id}</Link> · {r.company || '—'} · {r.days_in_stage}d in {r.fulfillment_stage}</>)} />
+              render={(r) => (<><Link href={`/orders/${r.order_id}`}>{r.order_id}</Link> · {r.company || '—'} · {r.days_in_stage}d in {stageLabel(r.fulfillment_stage)}</>)} />
             <DigestCard title="Unstaffed sessions" rows={digest.data?.unstaffed || []} empty="Every upcoming session has a trainer."
               render={(r) => (<><Link href={`/session/${r.schedule_id}`}>{r.course_name}</Link> · {shortDate(r.start_date)} · {r.days_out}d out</>)} />
             <DigestCard title="E-learning waiting" rows={digest.data?.elearning || []} empty="No paid e-learning is waiting for access."
@@ -193,9 +259,10 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'revenue' && (
+      {activeTab === 'revenue' && (
         facts.isLoading ? <Spinner label="Loading revenue" /> : facts.error ? <ErrorNote error={facts.error} /> : (
           <>
+            {periodBar}
             <div className="card card-pad" style={{ marginBottom: 16 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
                 <div><div className="k-label">Orders</div><div className="k-value">{num(revenue.totals.orders)}</div></div>
@@ -206,7 +273,7 @@ export default function Reports() {
             </div>
 
             <div className="page-head" style={{ marginBottom: 8 }}>
-              <div><h2 style={{ fontSize: 16 }}>By month</h2></div>
+              <div><h2 style={{ fontSize: 16 }}>By month <span className="fill-label" style={{ fontWeight: 400 }}>· {periodLabel}</span></h2></div>
               <button className="btn btn-ghost btn-sm" onClick={exportMonths}>Export CSV</button>
             </div>
             <div className="card" style={{ marginBottom: 20 }}>
@@ -283,7 +350,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'receivables' && (
+      {activeTab === 'receivables' && (
         receivables.isLoading ? <Spinner label="Loading receivables" /> : receivables.error ? <ErrorNote error={receivables.error} /> : (
           <>
             <div className="card card-pad" style={{ marginBottom: 16 }}>
@@ -322,7 +389,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'certs' && (
+      {activeTab === 'certs' && (
         <>
           <div className="card card-pad" style={{ marginBottom: 16, maxWidth: 640 }}>
             <div className="k-label" style={{ marginBottom: 8 }}>Verify a certificate</div>
@@ -368,9 +435,10 @@ export default function Reports() {
         </>
       )}
 
-      {tab === 'margin' && (
+      {activeTab === 'margin' && (
         pnl.isLoading ? <Spinner label="Loading profitability" /> : pnl.error ? <ErrorNote error={pnl.error} /> : (
           <>
+            {periodBar}
             <div className="card card-pad" style={{ marginBottom: 16 }}>
               <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
                 <div><div className="k-label">Revenue</div><div className="k-value">{php(margins.revenue)}</div></div>
@@ -380,7 +448,7 @@ export default function Reports() {
               </div>
             </div>
             <div className="page-head" style={{ marginBottom: 8 }}>
-              <div><h2 style={{ fontSize: 16 }}>By session</h2></div>
+              <div><h2 style={{ fontSize: 16 }}>By session <span className="fill-label" style={{ fontWeight: 400 }}>· {periodLabel}</span></h2></div>
               <button className="btn btn-ghost btn-sm" onClick={exportMargins} disabled={margins.rows.length === 0}>Export CSV</button>
             </div>
             <div className="card">
@@ -408,7 +476,7 @@ export default function Reports() {
         )
       )}
 
-      {tab === 'analytics' && (
+      {activeTab === 'analytics' && (
         <>
           <div className="page-head" style={{ marginBottom: 8 }}>
             <div><h2 style={{ fontSize: 16 }}>Conversion funnel</h2></div>

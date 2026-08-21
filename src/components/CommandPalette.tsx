@@ -4,16 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { NAV, Role } from '@/lib/roles'
-
-// What each record kind is called, where it links, and which roles may open it.
-const KIND: Record<string, { label: string; href: (id: string) => string; roles: Role[] }> = {
-  order: { label: 'Order', href: (id) => `/orders/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  client: { label: 'Client', href: (id) => `/clients/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  session: { label: 'Session', href: (id) => `/session/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  organization: { label: 'Organization', href: (id) => `/organizations/${id}`, roles: ['super_admin', 'operations', 'business_owner', 'sales'] },
-  course: { label: 'Course', href: () => `/courses`, roles: ['super_admin', 'operations'] },
-  inquiry: { label: 'Inquiry', href: () => `/inquiries`, roles: ['super_admin', 'sales'] },
-}
+import { SEARCH_KINDS as KIND, visibleHits } from '@/lib/search'
 
 type Entry = { key: string; label: string; sub: string; group: string; go: () => void }
 
@@ -24,6 +15,7 @@ export default function CommandPalette() {
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const [results, setResults] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
   const router = useRouter()
   const { profile } = useAuth()
   const role = profile?.role as Role | undefined
@@ -59,7 +51,7 @@ export default function CommandPalette() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   useEffect(() => setActive(0), [q])
@@ -67,24 +59,31 @@ export default function CommandPalette() {
   // Debounced record search. Two characters minimum. Tolerant of the function
   // not existing yet, in which case it simply returns no records.
   const timer = useRef<any>(null)
+  const requestId = useRef(0)
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
     const t = q.trim()
-    if (!open || t.length < 2) { setResults([]); return }
+    const id = ++requestId.current
+    if (!open || t.length < 2) { setResults([]); setSearching(false); return }
+    setSearching(true)
     timer.current = setTimeout(async () => {
       const { data, error } = await supabase.rpc('fn_global_search', { p_q: t })
+      if (id !== requestId.current) return
       if (error) setResults([])
-      else setResults((data || []).filter((r: any) => KIND[r.kind]?.roles.includes(role as Role)))
+      else setResults(visibleHits((data || []) as any, role))
+      setSearching(false)
     }, 200)
-    return () => timer.current && clearTimeout(timer.current)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
   }, [q, open, role])
 
   const go = (path: string) => { setOpen(false); router.push(path) }
 
   const entries: Entry[] = useMemo(() => {
     const nav: Entry[] = navMatches.map((it) => ({ key: 'nav:' + it.path, label: it.label, sub: it.path, group: 'Go to', go: () => go(it.path) }))
-    const recs: Entry[] = results.map((r: any) => ({
-      key: r.kind + ':' + r.id,
+    const recs: Entry[] = results.map((r: any, i: number) => ({
+      key: r.kind + ':' + r.id + ':' + i,
       label: r.title || '(untitled)',
       sub: [KIND[r.kind]?.label, r.subtitle].filter(Boolean).join(' · '),
       group: 'Records',
@@ -135,7 +134,7 @@ export default function CommandPalette() {
         />
         <div className="cmdk-list" id="cmdk-listbox" role="listbox" aria-label="Results">
           {entries.length === 0 && (
-            <div className="cmdk-empty">{q.trim().length >= 2 ? 'No matches' : 'Type to search records.'}</div>
+            <div className="cmdk-empty" aria-live="polite">{searching ? 'Searching…' : q.trim().length >= 2 ? 'No matches' : 'Type to search records.'}</div>
           )}
           {entries.map((it, i) => {
             const header = it.group !== lastGroup ? it.group : null

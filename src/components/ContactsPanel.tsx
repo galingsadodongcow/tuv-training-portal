@@ -16,7 +16,14 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
   const invalidate = useInvalidate()
   const contacts = useContacts(clientId)
   const interactions = useClientInteractions(clientId)
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  // Live RLS (20260812210000) splits contact writes: INSERT = super_admin/
+  // coordinator/sales(own); DELETE = super_admin/coordinator only. Gate each
+  // separately so no role sees a button the DB rejects (sales can add, not delete).
+  const canAdd = ['super_admin', 'coordinator', 'sales'].includes(profile?.role as string)
+  const canRemove = ['super_admin', 'coordinator'].includes(profile?.role as string)
+  // Interaction log writes a different table (client_interaction), untouched by the
+  // customer-authority migration — keep its original gate rather than widen blindly.
+  const canLogInteraction = ['super_admin', 'sales'].includes(profile?.role as string)
 
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState<any>({ name: '', title: '', email: '', phone: '', is_primary: false })
@@ -36,9 +43,18 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
   }
 
   const removeContact = async (cid: string) => {
-    const res = await confirm({ title: 'Remove this contact?', confirmLabel: 'Remove', tone: 'danger' })
+    const res = await confirm({
+      title: 'Remove this contact?',
+      body: 'The contact is flagged removed and hidden from the list — the record is kept for audit, not deleted.',
+      confirmLabel: 'Remove', tone: 'danger', reason: 'optional',
+    })
     if (!res.ok) return
-    const { error } = await supabase.from('contact').delete().eq('contact_id', cid)
+    // Soft-remove (#129): fn_remove_contact flags the row Removed, with a
+    // graceful fallback to a hard delete before the migration is applied.
+    let { error } = await supabase.rpc('fn_remove_contact', { p_contact: cid, p_reason: res.reason?.trim() || null })
+    if (error && (error.code === '42883' || /function .* does not exist/i.test(error.message || ''))) {
+      ;({ error } = await supabase.from('contact').delete().eq('contact_id', cid))
+    }
     if (error) toast.error(error.message); else { toast.success('Contact removed.'); invalidate(['contacts']) }
   }
 
@@ -55,10 +71,10 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
     <div>
       <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
         <div className="k-label">Contacts</div>
-        {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => setAdding((a) => !a)}>{adding ? 'Close' : '+ Contact'}</button>}
+        {canAdd && <button className="btn btn-ghost btn-sm" onClick={() => setAdding((a) => !a)}>{adding ? 'Close' : '+ Contact'}</button>}
       </div>
       {adding && (
-        <div className="card card-pad" style={{ marginBottom: 10, maxWidth: 640 }}>
+        <div className="subform" style={{ marginBottom: 10, maxWidth: 640 }}>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field"><span>Name</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
             <label className="field"><span>Title</span><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
@@ -78,7 +94,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
       ) : (
         <div className="scroll-x">
         <table style={{ marginBottom: 14 }}>
-          <thead><tr><th>Name</th><th>Title</th><th>Email</th><th>Phone</th>{canEdit && <th></th>}</tr></thead>
+          <thead><tr><th>Name</th><th>Title</th><th>Email</th><th>Phone</th>{canRemove && <th></th>}</tr></thead>
           <tbody>
             {contacts.data.map((c: any) => (
               <tr key={c.contact_id}>
@@ -86,7 +102,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                 <td className="fill-label">{c.title || '—'}</td>
                 <td className="fill-label">{c.email || '—'}</td>
                 <td className="fill-label">{c.phone || '—'}</td>
-                {canEdit && <td className="right"><button className="linkbtn" onClick={() => removeContact(c.contact_id)}>Remove</button></td>}
+                {canRemove && <td className="right"><button className="linkbtn" onClick={() => removeContact(c.contact_id)}>Remove</button></td>}
               </tr>
             ))}
           </tbody>
@@ -95,7 +111,7 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
       )}
 
       <div className="k-label" style={{ marginBottom: 8 }}>Interactions</div>
-      {canEdit && (
+      {canLogInteraction && (
         <div className="toolbar" style={{ marginBottom: 10 }}>
           <input aria-label="Log an interaction" placeholder="Log a call, email or meeting…" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && logInteraction()} />
           <button className="btn btn-sm" onClick={logInteraction} disabled={busy}>Log</button>

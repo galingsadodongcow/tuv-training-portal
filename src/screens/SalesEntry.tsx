@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useCourses, useCourseFees, useClients, useInvalidate, usePossibleDuplicateClients } from '../hooks/data'
+import { useCourses, useCourseFees, useClients, useInvalidate, usePossibleDuplicateClients, useQuoteLines } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { php } from '../lib/format'
@@ -40,6 +40,34 @@ export default function SalesEntry() {
   // existing client self-disables the hook. Called unconditionally at top level.
   const dupClients = usePossibleDuplicateClients(client.mode === 'new' ? client.email : '')
 
+  // When converting a quote (?quote=<id>), prefill the line editor from the
+  // quote's lines so conversion is a review step, not re-entry. Fetched
+  // unconditionally at top level; the hook self-disables when there is no quote.
+  const quoteId = sp.get('quote') || undefined
+  const quoteLines = useQuoteLines(quoteId)
+  const prefilledRef = useRef(false)
+  const coursePrefilledRef = useRef(false)
+  const [quotePrefilled, setQuotePrefilled] = useState(false)
+
+  // Map the quote's lines onto SalesEntry line objects once, guarded so a
+  // re-render or the rep's edits can't wipe what they've changed. Session is
+  // left empty — quote lines are course-level, so the rep picks the session.
+  useEffect(() => {
+    if (!quoteId || prefilledRef.current) return
+    const rows = quoteLines.data
+    if (!rows || rows.length === 0) return
+    prefilledRef.current = true
+    setLines(rows.map((r: any) => ({
+      course_id: r.course_id || '',
+      schedule_id: '',
+      modality: r.modality || blankLine().modality,
+      seats: r.seats ?? 1,
+      amount: r.unit_price ?? '',
+      sessions: [] as any[],
+    })))
+    setQuotePrefilled(true)
+  }, [quoteId, quoteLines.data])
+
   // preselected session from the calendar Book link
   useEffect(() => {
     const sid = sp.get('schedule')
@@ -55,6 +83,14 @@ export default function SalesEntry() {
   useEffect(() => {
     const cid = sp.get('client')
     if (cid) setClient((c) => ({ ...c, mode: 'existing', client_id: cid }))
+  }, [sp])
+
+  // Prefill a new client from an inquiry that isn't linked yet (convert → order).
+  // SalesEntry's new-client mode still runs its own duplicate-email check on save.
+  useEffect(() => {
+    const company = sp.get('company'); const contact = sp.get('contact'); const email = sp.get('email'); const phone = sp.get('phone')
+    if (sp.get('client') || (!company && !contact && !email && !phone)) return
+    setClient((c) => ({ ...c, mode: 'new', company: company || c.company, name: contact || c.name, email: email || c.email, phone: phone || c.phone }))
   }, [sp])
 
   // load sessions whenever a line's course changes
@@ -101,6 +137,19 @@ export default function SalesEntry() {
     setLine(idx, { modality, schedule_id: '', amount: fee ?? '' })
     loadSessions(idx, l.course_id)
   }
+
+  // Prefill the first line's course from an inquiry's interest (convert → order).
+  // One-shot once fees are loaded so the catalog fee resolves; the rep still picks
+  // the session. Guarded so it can't clobber the rep's own edits on re-render.
+  useEffect(() => {
+    const cid = sp.get('course')
+    if (!cid || coursePrefilledRef.current || !fees.data) return
+    coursePrefilledRef.current = true
+    const fee = feeFor(cid, lines[0]?.modality || blankLine().modality)
+    setLine(0, { course_id: cid, schedule_id: '', amount: fee ?? '' })
+    loadSessions(0, cid)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp, fees.data])
 
   const total = lines.reduce((n, l) => n + (Number(l.amount) || 0) * (Number(l.seats) || 0), 0)
   const totalSeats = lines.reduce((n, l) => n + (Number(l.seats) || 0), 0)
@@ -159,45 +208,28 @@ export default function SalesEntry() {
       }
       if (!clientId) throw new Error('Select or create a client.')
 
-      // header
-      const { error: oErr } = await supabase.from('orders').insert({
-        order_id: head.order_id.trim(),
-        order_date: head.order_date,
-        channel: head.channel,
-        modality: good[0].modality,
-        seats: 1,
-        amount_php: 0,
-        client_id: clientId,
-        created_by: profile?.user_id,
-        fulfillment_stage: 'New',
-      })
-      if (oErr) throw oErr
-
-      // lines
+      // Atomic create (SAL01): order + lines + self-assignment in one DB
+      // transaction, so a line failure can no longer leave a half-created order.
       const payload = good.map((l, i) => ({
-        order_id: head.order_id.trim(),
         line_no: i + 1,
         course_id: l.course_id,
         schedule_id: l.modality === 'E-learning' ? null : l.schedule_id,
         modality: l.modality,
         seats: Number(l.seats),
         amount_php: Number(l.amount) * Number(l.seats),
-        access_status: l.modality === 'E-learning' ? 'Pending' : null,
         line_status: isWaitlisted(l) ? 'Waitlist' : 'New',
       }))
-      const { error: lErr } = await supabase.from('order_line').insert(payload)
-      if (lErr) {
-        await supabase.from('orders').delete().eq('order_id', head.order_id.trim())
-        throw lErr
-      }
-
-      // self-assign (non-fatal: the order is already valid without it)
-      let assignWarning: string | null = null
-      if (profile?.sales_id) {
-        const { error: aErr } = await supabase.from('order_assignment')
-          .upsert({ order_id: head.order_id.trim(), sales_id: profile.sales_id }, { onConflict: 'order_id' })
-        if (aErr) assignWarning = 'Order saved, but it could not be auto-assigned to you. Assign it from the fulfillment screen.'
-      }
+      const { error: cErr } = await supabase.rpc('fn_create_order', {
+        p_order_id: head.order_id.trim(),
+        p_channel: head.channel,
+        p_order_date: head.order_date,
+        p_client_id: clientId,
+        p_lines: payload,
+        p_sales_id: profile?.sales_id || null,
+        p_country: 'PH',
+      })
+      if (cErr) throw cErr
+      const assignWarning: string | null = null
 
       invalidate(['orders', 'schedules', 'channel_pax', 'fulfillment_queue', 'clients'])
       const goodSeats = good.reduce((n, l) => n + (Number(l.seats) || 0), 0)
@@ -324,6 +356,12 @@ export default function SalesEntry() {
             <div className="k-label">Training lines</div>
             <div className="fill-label">{totalSeats} seat{totalSeats === 1 ? '' : 's'} · {php(total)}</div>
           </div>
+
+          {quotePrefilled && quoteId && (
+            <div className="notice notice-info" style={{ marginBottom: 12 }}>
+              Lines prefilled from quote {quoteId} — review and pick sessions before saving.
+            </div>
+          )}
 
           {lines.map((l, i) => {
             const cat = feeFor(l.course_id, l.modality)

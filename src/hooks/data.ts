@@ -13,18 +13,28 @@ const sel = async (q: any) => {
 const isMissingColumn = (error: any) =>
   !!error && (error.code === '42703' || /column .* does not exist/i.test(error.message || ''))
 
-export function useSchedules(year = 2026) {
+// #23 — the course category name now comes from the S6 hierarchy
+// (subcategory → category); the free-text course.category column is retired.
+// `withCategory` normalises a joined course object so callers keep reading
+// `course.category` (and gain `course.subcategory` for surfacing).
+const COURSE_JOIN = 'course:course_id(course_name, training_type, url, subcategory:subcategory_id(name, category:category_id(name)))'
+export const withCategory = (c: any) =>
+  c && { ...c, category: c.subcategory?.category?.name ?? c.category ?? null, subcategory: c.subcategory?.name ?? null }
+
+export function useSchedules(year = 2026, enabled = true) {
   return useQuery({
     queryKey: ['schedules', year],
+    enabled,
     queryFn: () =>
       sel(
         supabase
           .from('schedule')
           .select(
-            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+            'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, trainer_id, venue_id, trainer:trainer_id(name, code), venue:venue_id(name, capacity), ' + COURSE_JOIN + ', calendar_year:year_id!inner(year)'
           )
+          .eq('calendar_year.year', year)
           .order('start_date', { ascending: true })
-      ).then((rows: any[]) => rows.filter((r) => r.calendar_year?.year === year)),
+      ).then((rows: any[]) => rows.map((r) => ({ ...r, course: withCategory(r.course) }))),
   })
 }
 
@@ -35,7 +45,7 @@ export function useSchedule(scheduleId?: string) {
   // profiles, the sales owner from salesperson) are appended optionally and
   // stripped on error, so an older schema still returns the session.
   const BASE =
-    'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, operations_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, category, url), calendar_year:year_id(year)'
+    'schedule_id, course_id, month, start_date, end_date, date_segments, modality, private_run, price, forecast_revenue, forecast_participants, min_participants, booked_participants, status, go_status, actual_participants, actual_revenue, roster_locked, max_participants, sales_owner, operations_owner, trainer:trainer_id(name, code), venue:venue_id(name, capacity), course:course_id(course_name, training_type, url), calendar_year:year_id(year)'
   const OWNERS = ', salesOwner:sales_owner(name, code), opsOwner:operations_owner(full_name)'
   return useQuery({
     queryKey: ['schedule', scheduleId],
@@ -70,13 +80,20 @@ export function useCourses() {
   return useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const base = 'course_id, course_name, training_type, category, url'
+      // Category/subcategory come from the S6 hierarchy join; the free-text
+      // course.category column is retired (#23). withCategory maps them onto
+      // course.category / course.subcategory so callers are unchanged.
+      const base = 'course_id, course_name, training_type, url, subcategory_id, subcategory:subcategory_id(name, category:category_id(name))'
       const full = await supabase.from('course').select(base + ', is_certification, max_pax').eq('active', true).order('course_name')
-      if (!full.error) return full.data as any
-      if (!isMissingColumn(full.error)) throw full.error
-      const b = await supabase.from('course').select(base).eq('active', true).order('course_name')
-      if (b.error) throw b.error
-      return b.data as any
+      if (!full.error) return (full.data as any[]).map(withCategory)
+      if (isMissingColumn(full.error)) {
+        const b = await supabase.from('course').select(base).eq('active', true).order('course_name')
+        if (!b.error) return (b.data as any[]).map(withCategory)
+      }
+      // Legacy DBs without the S6 hierarchy: fall back to the free-text column.
+      const legacy = await supabase.from('course').select('course_id, course_name, training_type, category, url').eq('active', true).order('course_name')
+      if (legacy.error) throw legacy.error
+      return legacy.data as any
     },
   })
 }
@@ -88,6 +105,30 @@ export function useCourseFees() {
   })
 }
 
+// S6: Category → Subcategory hierarchy for the course form. Degrades to [] when
+// the tables are not live yet (okOr swallows the missing-object error), so the
+// course form falls back to the free-text category field.
+export function useCategoryTree() {
+  return useQuery({
+    queryKey: ['category_tree'],
+    queryFn: async () => {
+      const cats = await okOr(
+        supabase.from('category').select('category_id, name, sort, active').eq('active', true).order('sort').order('name'),
+        null
+      )
+      if (cats === null) return [] // tables not applied yet
+      const subs = await okOr(
+        supabase.from('subcategory').select('subcategory_id, category_id, name, sort, active').eq('active', true).order('sort').order('name'),
+        []
+      )
+      return (cats || []).map((c: any) => ({
+        ...c,
+        subcategories: (subs || []).filter((s: any) => s.category_id === c.category_id),
+      }))
+    },
+  })
+}
+
 export function useActiveYear() {
   return useQuery({
     queryKey: ['active_year'],
@@ -95,9 +136,25 @@ export function useActiveYear() {
   })
 }
 
-export function useOrders() {
+// One RLS-scoped aggregate request powers the role dashboards. Keeping the
+// aggregation in Postgres avoids downloading multiple full tables just to
+// count or sum them in the browser.
+export function useDashboardMetrics(year: number, enabled = true) {
+  return useQuery({
+    queryKey: ['dashboard_metrics', year],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_dashboard_metrics', { p_year: year })
+      if (error) throw error
+      return (data || {}) as any
+    },
+  })
+}
+
+export function useOrders(enabled = true) {
   return useQuery({
     queryKey: ['orders'],
+    enabled,
     queryFn: () =>
       sel(
         supabase
@@ -134,9 +191,10 @@ export function useOrder(orderId?: string) {
 
 // Sales inquiry pipeline. RLS scopes rows to the owning salesperson, or all for
 // the super admin.
-export function useInquiries() {
+export function useInquiries(enabled = true) {
   return useQuery({
     queryKey: ['inquiries'],
+    enabled,
     queryFn: () =>
       sel(
         supabase
@@ -185,6 +243,71 @@ export function useAllProfiles() {
   })
 }
 
+// ── Delegated team management (20260814060000) ──────────────────────────────
+// The profiles table stays readable only by yourself or a super admin; these
+// RPCs are the scoped path that lets operations and a sales supervisor manage
+// their people. Each one re-checks the caller in the database, so the UI below
+// is presentation only.
+
+// The members the signed-in user may manage, plus their own row. Each row
+// carries `manageable` so the screen can show context without offering edits.
+export function useTeamMembers() {
+  return useQuery({
+    queryKey: ['team_members'],
+    queryFn: () => okOr(supabase.rpc('fn_team_members'), []),
+  })
+}
+
+// Which roles this user is allowed to hand out. Drives the role dropdown, so a
+// delegator is never shown an option the database would reject.
+export function useGrantableRoles() {
+  return useQuery({
+    queryKey: ['grantable_roles'],
+    queryFn: () => okOr(supabase.rpc('fn_member_grantable_roles'), []),
+  })
+}
+
+export function useGrantMemberRole() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { userId: string; role: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_grant_member_role', {
+        p_user: v.userId, p_role: v.role, p_reason: v.reason ?? null,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => invalidate(['team_members', 'profiles_all']),
+  })
+}
+
+export function useLinkMemberSalesperson() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { userId: string; salesId: string | null }) => {
+      const { error } = await supabase.rpc('fn_link_member_salesperson', {
+        p_user: v.userId, p_sales_id: v.salesId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => invalidate(['team_members', 'profiles_all']),
+  })
+}
+
+export function useUpsertTeamMember() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: async (v: { name: string; code?: string | null; team?: string | null; region?: string | null; salesId?: string | null; active?: boolean | null }) => {
+      const { data, error } = await supabase.rpc('fn_upsert_team_member', {
+        p_name: v.name, p_code: v.code ?? null, p_team: v.team ?? null,
+        p_region: v.region ?? null, p_sales_id: v.salesId ?? null, p_active: v.active ?? null,
+      })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => invalidate(['team_members', 'salespeople_all', 'salespeople']),
+  })
+}
+
 // ---- Pricing, country, and audit (Phase N) ----
 export function useDiscountRules() {
   return useQuery({
@@ -211,16 +334,18 @@ export function useApplicableDiscounts(courseId?: string, type?: string, country
   })
 }
 
-export function useCountryRevenue() {
+export function useCountryRevenue(enabled = true) {
   return useQuery({
     queryKey: ['country_revenue'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_country_revenue').select('*'), []),
   })
 }
 
-export function useAuditSearch(filters: Record<string, any>) {
+export function useAuditSearch(filters: Record<string, any>, enabled = true) {
   return useQuery({
     queryKey: ['audit_search', filters],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('fn_audit_search', {
         p_table: filters.table || null,
@@ -293,16 +418,18 @@ export function useOpenSchedules(year = 2026) {
   })
 }
 
-export function useDuplicates() {
+export function useDuplicates(enabled = true) {
   return useQuery({
     queryKey: ['duplicates'],
+    enabled,
     queryFn: () => sel(supabase.from('duplicate_candidate').select('*').eq('status', 'Open')),
   })
 }
 
-export function useApprovals() {
+export function useApprovals(enabled = true) {
   return useQuery({
     queryKey: ['approvals'],
+    enabled,
     queryFn: () =>
       sel(
         supabase
@@ -601,9 +728,10 @@ export function useOrgClients(orgId?: string) {
 // The operational digest: the same at-risk lists the nightly job watches, read
 // straight from the digest views. Each view is optional, so a missing one
 // simply yields an empty list.
-export function useDigest() {
+export function useDigest(enabled = true) {
   return useQuery({
     queryKey: ['digest'],
+    enabled,
     queryFn: async () => {
       const [atRisk, rosterGaps, stalled, unstaffed, elearning] = await Promise.all([
         supabase.from('v_digest_at_risk').select('*'),
@@ -626,17 +754,27 @@ export function useDigest() {
 
 // Order facts for the revenue report, one row per order with month, channel,
 // course, seats, amount, and who sold it.
-export function useOrderFacts() {
+const monthStart = (month: string) => month ? `${month}-01` : ''
+const monthAfter = (month: string) => {
+  if (!month) return ''
+  const [year, value] = month.split('-').map(Number)
+  return new Date(Date.UTC(year, value, 1)).toISOString().slice(0, 10)
+}
+
+export function useOrderFacts(enabled = true, from = '', to = '') {
   return useQuery({
-    queryKey: ['order_facts'],
-    queryFn: () =>
-      sel(
-        supabase
-          .from('v_order_fact')
-          .select('order_id, order_date, order_month, channel, modality, seats, amount_php, payment_status, order_status, course_name, category, sales_name')
-          .order('order_date', { ascending: false })
-          .limit(5000)
-      ),
+    queryKey: ['order_facts', from, to],
+    enabled,
+    queryFn: () => {
+      let query = supabase
+        .from('v_order_fact')
+        .select('order_id, order_date, order_month, channel, modality, seats, amount_php, payment_status, order_status, course_name, category, sales_name')
+        .order('order_date', { ascending: false })
+        .limit(5000)
+      if (from) query = query.gte('order_month', monthStart(from))
+      if (to) query = query.lt('order_month', monthAfter(to))
+      return sel(query)
+    },
   })
 }
 
@@ -688,10 +826,121 @@ export function usePayments(orderId?: string) {
   })
 }
 
+export function useRefunds(orderId?: string) {
+  return useQuery({
+    queryKey: ['refunds', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('refund').select('*').eq('order_id', orderId).order('created_at', { ascending: false }), []),
+  })
+}
+
+// Keys to refresh after any money movement so AR, the order, and queues re-read.
+const MONEY_KEYS = ['payments', 'refunds', 'order_ar', 'order', 'orders', 'fulfillment_queue', 'receivables']
+
+// Void a payment (business_owner / super_admin only; enforced in the DB). The
+// payment is never deleted — its status becomes Voided with a persisted reason.
+export function useVoidPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ paymentId, reason }: { paymentId: string; reason: string }) => {
+      const { error } = await supabase.rpc('fn_void_payment', { p_payment: paymentId, p_reason: reason })
+      if (error) throw error
+    },
+    onSuccess: () => MONEY_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// Refund against a confirmed payment (business_owner / super_admin only). Writes
+// an immutable refund row; AR recomputes as confirmed − refunds + applied credits.
+export function useRefundPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ paymentId, amount, reason }: { paymentId: string; amount: number; reason: string }) => {
+      const { data, error } = await supabase.rpc('fn_refund_payment', { p_payment: paymentId, p_amount: amount, p_reason: reason })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => MONEY_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// ---- Endorsement handoff (Sales/Coordinator -> Operations) ----
+// The D2 completeness contract as data: { ok, hard: [...], warn: [...] }.
+export function useOrderCompleteness(orderId?: string) {
+  return useQuery({
+    queryKey: ['order_completeness', orderId],
+    enabled: !!orderId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_order_completeness', { p_order: orderId })
+      if (error) { if (isMissingObject(error)) return null; throw error }
+      return data
+    },
+  })
+}
+
+export function useOrderHandoff(orderId?: string) {
+  return useQuery({
+    queryKey: ['order_handoff', orderId],
+    enabled: !!orderId,
+    queryFn: () => okOr(supabase.from('order_handoff').select('*').eq('order_id', orderId).maybeSingle(), null),
+  })
+}
+
+const HANDOFF_KEYS = ['order', 'orders', 'order_handoff', 'order_completeness', 'fulfillment_queue', 'worklist']
+
+// Endorse an order to Operations. Refused unless complete (super_admin may pass
+// an override reason). Enforced in the DB by fn_endorse_order.
+export function useEndorseOrder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ orderId, overrideReason }: { orderId: string; overrideReason?: string }) => {
+      const { data, error } = await supabase.rpc('fn_endorse_order', { p_order: orderId, p_override_reason: overrideReason ?? null })
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => HANDOFF_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// Operations accepts the endorsement — the two-sided close of the handoff.
+export function useAcceptEndorsement() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase.rpc('fn_accept_endorsement', { p_order: orderId })
+      if (error) throw error
+    },
+    onSuccess: () => HANDOFF_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// Return an order for correction (regresses the stage), with a required reason.
+export function useReturnForCorrection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ orderId, reason }: { orderId: string; reason: string }) => {
+      const { error } = await supabase.rpc('fn_return_for_correction', { p_order: orderId, p_reason: reason })
+      if (error) throw error
+    },
+    onSuccess: () => HANDOFF_KEYS.forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// ---- Customer 360 ----
+// Org-level rollup (clients / contacts / active orders / booked / linked leads).
+export function useCustomer360(orgId?: string) {
+  return useQuery({
+    queryKey: ['customer_360', orgId],
+    enabled: !!orgId,
+    queryFn: () => okOr(supabase.from('v_customer_360').select('*').eq('org_id', orgId).maybeSingle(), null),
+  })
+}
+
 // ---- Analytics ----
-export function useFunnel() {
+export function useFunnel(enabled = true) {
   return useQuery({
     queryKey: ['funnel'],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('fn_funnel')
       if (error) return null
@@ -700,17 +949,19 @@ export function useFunnel() {
   })
 }
 
-export function useForecastVsActual() {
+export function useForecastVsActual(enabled = true) {
   return useQuery({
     queryKey: ['forecast_actual'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_session_forecast').select('*').order('start_date', { ascending: false }).limit(1000), []),
   })
 }
 
 // ---- SLA ----
-export function useSlaBreaches() {
+export function useSlaBreaches(enabled = true) {
   return useQuery({
     queryKey: ['sla_breaches'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_sla_breach').select('*').limit(1000), []),
   })
 }
@@ -724,10 +975,16 @@ export function useSessionPnl(scheduleId?: string) {
   })
 }
 
-export function useProfitability() {
+export function useProfitability(enabled = true, from = '', to = '') {
   return useQuery({
-    queryKey: ['profitability'],
-    queryFn: () => okOr(supabase.from('v_session_pnl').select('*').order('start_date', { ascending: false }).limit(2000), []),
+    queryKey: ['profitability', from, to],
+    enabled,
+    queryFn: () => {
+      let query = supabase.from('v_session_pnl').select('*').order('start_date', { ascending: false }).limit(2000)
+      if (from) query = query.gte('start_date', monthStart(from))
+      if (to) query = query.lt('start_date', monthAfter(to))
+      return okOr(query, [])
+    },
   })
 }
 
@@ -768,7 +1025,30 @@ export function useContacts(clientId?: string) {
   return useQuery({
     queryKey: ['contacts', clientId],
     enabled: !!clientId,
-    queryFn: () => okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), []),
+    queryFn: async () => {
+      // Hide soft-removed contacts (#129). Falls back to the unfiltered query
+      // before the contact.status migration is applied (42703).
+      const withStatus = await supabase.from('contact').select('*').eq('client_id', clientId).neq('status', 'Removed').order('is_primary', { ascending: false })
+      if (!withStatus.error) return withStatus.data
+      if (!isMissingColumn(withStatus.error)) throw withStatus.error
+      return okOr(supabase.from('contact').select('*').eq('client_id', clientId).order('is_primary', { ascending: false }), [])
+    },
+  })
+}
+
+// Orders currently returned-for-correction (order_handoff.status = 'Returned'),
+// for the distinct My Work queue (#129). RLS scopes rows to orders the user can
+// see (fn_can_see_order). The caller joins order details from the queue it holds.
+export function useReturnedHandoffs() {
+  return useQuery({
+    queryKey: ['returned_handoffs'],
+    queryFn: () => okOr(
+      supabase.from('order_handoff')
+        .select('order_id, return_reason, returned_at')
+        .eq('status', 'Returned')
+        .order('returned_at', { ascending: false }),
+      []
+    ),
   })
 }
 
@@ -843,17 +1123,19 @@ export function useAttachments(entityType?: string, entityId?: string) {
 }
 
 // Certificates expiring soon (or already expired).
-export function useCertsExpiring() {
+export function useCertsExpiring(enabled = true) {
   return useQuery({
     queryKey: ['certs_expiring'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_cert_expiring').select('*').limit(500), []),
   })
 }
 
 // Open receivables for the aging report: orders with a positive balance.
-export function useReceivables() {
+export function useReceivables(enabled = true) {
   return useQuery({
     queryKey: ['receivables'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_order_ar').select('*').gt('balance', 0).order('due_date', { ascending: true }).limit(2000), []),
   })
 }
@@ -873,6 +1155,65 @@ export function useRoster(scheduleId?: string) {
       if (error) throw error
       return data
     },
+  })
+}
+
+// ROS01: soft-remove a participant (keeps history) and transfer to another
+// session. Both are DB-enforced to ops/coordinator/super_admin.
+export function useRemoveParticipant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ participantId, reason }: { participantId: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_remove_participant', { p_participant: participantId, p_reason: reason ?? null })
+      if (error) throw error
+    },
+    onSuccess: () => ['roster', 'session_orders', 'schedules'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+export function useTransferParticipant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ participantId, newScheduleId, reason }: { participantId: string; newScheduleId: string; reason?: string }) => {
+      const { error } = await supabase.rpc('fn_transfer_participant', { p_participant: participantId, p_new_schedule: newScheduleId, p_reason: reason ?? null })
+      if (error) throw error
+    },
+    onSuccess: () => ['roster', 'session_orders', 'schedules'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  })
+}
+
+// SV01: server-persisted saved views. Returns the caller's own views for a
+// surface plus any role-default published for their role.
+export function useSavedViews(surface?: string) {
+  return useQuery({
+    queryKey: ['saved_views', surface],
+    enabled: !!surface,
+    queryFn: () => okOr(
+      supabase.from('saved_view').select('*').eq('surface', surface).order('is_default', { ascending: false }).order('name'),
+      []
+    ),
+  })
+}
+
+export function useUpsertSavedView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (view: { view_id?: string; owner_id: string; surface: string; name: string; config: any; is_default?: boolean }) => {
+      const { error } = await supabase.from('saved_view').upsert(view, { onConflict: 'view_id' })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_views'] }),
+  })
+}
+
+export function useDeleteSavedView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (viewId: string) => {
+      const { error } = await supabase.from('saved_view').delete().eq('view_id', viewId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['saved_views'] }),
   })
 }
 
@@ -956,11 +1297,20 @@ export function useApprovedCancellation(scheduleId?: string) {
 }
 
 // ---- Phase 3: trainers, venues, conflicts ----
+// These list columns explicitly rather than using select('*') because
+// 20260814090000 narrowed the SELECT grant on trainer/venue to exclude the rate
+// columns (daily_rate / day_rate) — a `select *` would now fail with
+// "permission denied for column". The rates are write-only in this app: the
+// Resources screen sets them and no surface ever displays them. Cost reaches
+// the UI only through v_session_pnl, which masks it per role.
+const TRAINER_COLS = 'trainer_id, name, code, email, phone, trainer_type, active, notes, created_at, country'
+const VENUE_COLS = 'venue_id, name, address, city, capacity, venue_type, active, created_at, country'
+
 export function useTrainers(activeOnly = true) {
   return useQuery({
     queryKey: ['trainers', activeOnly],
     queryFn: () => {
-      let q = supabase.from('trainer').select('*').order('name')
+      let q = supabase.from('trainer').select(TRAINER_COLS).order('name')
       if (activeOnly) q = q.eq('active', true)
       return sel(q)
     },
@@ -971,23 +1321,25 @@ export function useVenues(activeOnly = true) {
   return useQuery({
     queryKey: ['venues', activeOnly],
     queryFn: () => {
-      let q = supabase.from('venue').select('*').order('name')
+      let q = supabase.from('venue').select(VENUE_COLS).order('name')
       if (activeOnly) q = q.eq('active', true)
       return sel(q)
     },
   })
 }
 
-export function useTrainerLoad() {
+export function useTrainerLoad(enabled = true) {
   return useQuery({
     queryKey: ['trainer_load'],
+    enabled,
     queryFn: () => sel(supabase.from('v_trainer_load').select('*').order('training_days', { ascending: false })),
   })
 }
 
-export function useUnstaffed() {
+export function useUnstaffed(enabled = true) {
   return useQuery({
     queryKey: ['unstaffed'],
+    enabled,
     queryFn: () => sel(supabase.from('v_unstaffed_sessions').select('*').order('days_out')),
   })
 }
@@ -1028,9 +1380,10 @@ export async function checkConflicts({
 }
 
 // ---- Phase 4: fulfillment queue ----
-export function useFulfillmentQueue() {
+export function useFulfillmentQueue(enabled = true) {
   return useQuery({
     queryKey: ['fulfillment_queue'],
+    enabled,
     queryFn: () => sel(supabase.from('v_fulfillment_queue').select('*').order('age_days', { ascending: false })),
   })
 }
@@ -1053,15 +1406,29 @@ export function useSessionsForCourse(courseId?: string) {
 
 // Server-side paged orders: filters and paging run in the database,
 // so the screen stays fast as the table grows.
-export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all' }: {
+// Columns the Orders table may sort on, server-side. Maps a UI sort key to the
+// actual DB column so the whole filtered dataset is ordered in the database
+// (not just the visible page). 'customer' orders by the joined client company.
+const ORDERS_SORT_COLUMNS: Record<string, string> = {
+  order_id: 'order_id',
+  fulfillment_stage: 'fulfillment_stage',
+  sap_order_no: 'sap_order_no',
+  channel: 'channel',
+  total_seats: 'total_seats',
+  total_amount: 'total_amount',
+}
+
+export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all', pay = 'all', sortKey = '', sortDir = 'desc' }: {
   page?: number
   pageSize?: number
   q?: string
   stage?: string
   pay?: string
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
 }) {
   return useQuery({
-    queryKey: ['orders_paged', page, pageSize, q, stage, pay],
+    queryKey: ['orders_paged', page, pageSize, q, stage, pay, sortKey, sortDir],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       let query = supabase
@@ -1070,8 +1437,22 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
           'order_id, order_date, channel, payment_status, order_status, fulfillment_stage, stage_changed_at, sap_order_no, total_seats, total_amount, client:client_id(client_id, name, company, email), lines:order_line(line_id, line_no, seats, amount_php, went_live, line_status, schedule_id, course_id, course:course_id(course_name), schedule:schedule_id(start_date, end_date, date_segments, status)), assignment:order_assignment(sales_id, engagement_status, collection_status, salesperson:sales_id(name, code))',
           { count: 'exact' }
         )
-        .order('order_date', { ascending: false })
-        .range(page * pageSize, page * pageSize + pageSize - 1)
+
+      // Server-side ordering across the whole filtered set. Fall back to newest
+      // first when no (or an unknown) sort key is given.
+      const asc = sortDir === 'asc'
+      if (sortKey === 'customer') {
+        // Order the top-level orders by the joined client's company. This is the
+        // PostgREST embedded-ordering form for a to-one relationship
+        // (order=client(company)); passing { referencedTable } would instead
+        // order the embedded rows and no-op at the parent level.
+        query = query.order('client(company)' as any, { ascending: asc, nullsFirst: false })
+      } else if (ORDERS_SORT_COLUMNS[sortKey]) {
+        query = query.order(ORDERS_SORT_COLUMNS[sortKey], { ascending: asc, nullsFirst: false })
+      } else {
+        query = query.order('order_date', { ascending: false })
+      }
+      query = query.range(page * pageSize, page * pageSize + pageSize - 1)
 
       if (stage !== 'all') query = query.eq('fulfillment_stage', stage)
       if (pay !== 'all') query = query.eq('payment_status', pay)
@@ -1089,12 +1470,70 @@ export function useOrdersPaged({ page = 0, pageSize = 50, q = '', stage = 'all',
   })
 }
 
+const CLIENTS_SORT_COLUMNS: Record<string, string> = {
+  company: 'company',
+  name: 'name',
+  email: 'email',
+  phone: 'phone',
+}
+
+// Server-paged client book (#128): filtered, sorted and paged in the database
+// across every match, so the list is no longer capped at the first 300 rows.
+// Mirrors useOrdersPaged. deleted_at may not exist before its migration, so the
+// query strips it (select + is-null filter) and retries — the graceful
+// degradation pattern used throughout the data layer.
+export function useClientsPaged({ page = 0, pageSize = 50, q = '', sortKey = 'company', sortDir = 'asc' }: {
+  page?: number
+  pageSize?: number
+  q?: string
+  sortKey?: string
+  sortDir?: 'asc' | 'desc'
+}) {
+  return useQuery({
+    queryKey: ['clients_paged', page, pageSize, q, sortKey, sortDir],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const base = 'client_id, name, company, contact, email, phone, industry, owner_sales_id, salesperson:owner_sales_id(name, code)'
+      const asc = sortDir === 'asc'
+      const build = (withDeleted: boolean) => {
+        let query = supabase
+          .from('client')
+          .select(withDeleted ? base + ', deleted_at' : base, { count: 'exact' })
+        // Hide soft-deleted customers when the column is present.
+        if (withDeleted) query = query.is('deleted_at', null)
+        if (sortKey === 'owner') {
+          // Order the parent rows by the joined salesperson's name (PostgREST
+          // to-one embedded ordering, same form as useOrdersPaged's customer sort).
+          query = query.order('salesperson(name)' as any, { ascending: asc, nullsFirst: false })
+        } else if (CLIENTS_SORT_COLUMNS[sortKey]) {
+          query = query.order(CLIENTS_SORT_COLUMNS[sortKey], { ascending: asc, nullsFirst: false })
+        } else {
+          query = query.order('company', { ascending: true, nullsFirst: false })
+        }
+        query = query.range(page * pageSize, page * pageSize + pageSize - 1)
+        if (q.trim()) {
+          // Strip PostgREST-significant characters before interpolating user input
+          // into an or() filter string (same guard as useOrdersPaged).
+          const t = q.trim().replace(/[,()*%\\]/g, ' ').trim()
+          if (t) query = query.or(`company.ilike.%${t}%,name.ilike.%${t}%,email.ilike.%${t}%`)
+        }
+        return query
+      }
+      let res = await build(true)
+      if (res.error && isMissingColumn(res.error)) res = await build(false)
+      if (res.error) throw res.error
+      return { rows: res.data, count: res.count ?? 0 }
+    },
+  })
+}
+
 // ---- Phase 1/2: session health, order merge, notification center ----
 // Computed health per session (v_session_health). Consumers usually build a
 // Map<schedule_id, health> for O(1) lookup on the calendar / lists.
-export function useSessionHealth() {
+export function useSessionHealth(enabled = true) {
   return useQuery({
     queryKey: ['session_health'],
+    enabled,
     queryFn: () => okOr(supabase.from('v_session_health').select('schedule_id, health'), []),
   })
 }

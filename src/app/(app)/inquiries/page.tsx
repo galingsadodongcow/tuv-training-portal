@@ -1,10 +1,6 @@
-import Inquiries from '@/screens/Inquiries'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
+// Inquiries folded into the single /crm area (Pipeline tab) — third-pass #7.
 export default function Page() {
-  return (
-    <Guard roles={['super_admin', 'sales']}>
-      <Inquiries />
-    </Guard>
-  )
+  redirect('/crm?tab=pipeline')
 }

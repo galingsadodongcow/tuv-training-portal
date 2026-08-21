@@ -1,10 +1,7 @@
-import Quality from '@/screens/Quality'
-import Guard from '@/components/Guard'
+import { redirect } from 'next/navigation'
 
+// Feedback and quality folded into the single /analytics area (Quality tab).
+// The complaint register moved to /complaints.
 export default function Page() {
-  return (
-    <Guard roles={['super_admin', 'operations', 'business_owner']}>
-      <Quality />
-    </Guard>
-  )
+  redirect('/analytics?tab=quality')
 }

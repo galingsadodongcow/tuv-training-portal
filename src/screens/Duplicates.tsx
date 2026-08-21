@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useDuplicates, useMergeOrders } from '../hooks/data'
-import { Spinner, ErrorNote, Empty } from '../components/ui'
+import { ErrorNote, Empty } from '../components/ui'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { TableSkeleton } from '../components/Skeleton'
@@ -29,7 +29,8 @@ export default function Duplicates() {
       body: `Order ${dup} and all of its lines will be CANCELLED — freeing its seats and revenue — and order ${keep} will be kept as the surviving booking. This fixes the double-count and cannot be undone here.`,
       confirmLabel: 'Merge & cancel duplicate',
       tone: 'danger',
-      reason: 'optional',
+      reason: 'required',
+      reasonLabel: 'Reason (required)',
     })
     if (!res.ok) return
     try {

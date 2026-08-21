@@ -22,7 +22,7 @@ export default function FeedbackPanel({ scheduleId }: { scheduleId: string }) {
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<any>({ nps: '', content_rating: '', trainer_rating: '', venue_rating: '', comments: '' })
 
-  const rows = list.data || []
+  const rows = useMemo(() => list.data || [], [list.data])
   const summary = useMemo(() => {
     const withNps = rows.filter((r: any) => r.nps != null)
     const promoters = withNps.filter((r: any) => r.nps >= 9).length
@@ -68,7 +68,7 @@ export default function FeedbackPanel({ scheduleId }: { scheduleId: string }) {
       </div>
 
       {canManage && (
-        <div className="card card-pad" style={{ marginBottom: 16, background: 'var(--surface-2, transparent)' }}>
+        <div className="record-section" style={{ marginTop: 0, marginBottom: 4 }}>
           <div className="k-label" style={{ marginBottom: 10 }}>Record a response</div>
           <div className="toolbar" style={{ flexWrap: 'wrap', gap: 12 }}>
             <label className="fill-label">NPS (0–10)

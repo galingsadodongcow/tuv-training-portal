@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useCancelReadiness, useApprovedCancellation, useTransferTargets, useInvalidate } from '../hooks/data'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { Spinner } from './ui'
 import { php } from '../lib/format'
 import { formatSegments, lt } from '../lib/labels'
@@ -22,11 +23,8 @@ export default function CancelSession({ schedule, onDone, onClose }: { schedule:
   const [msg, setMsg] = useState(null)
   const [result, setResult] = useState(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
-
-  // On open, move focus into the dialog.
-  useEffect(() => {
-    dialogRef.current?.querySelector<HTMLElement>('select, input, button')?.focus()
-  }, [])
+  // Focus-in + Tab focus-trap + restore on close (#135).
+  useFocusTrap(dialogRef)
 
   const rows = ready.data || []
   const hasApproval = (approved.data?.length || 0) > 0

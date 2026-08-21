@@ -1,76 +1,45 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
-import { useNpsSummary, useTrainerQuality, useComplaints, useInvalidate } from '../hooks/data'
-import { useToast } from '../components/Toast'
+import { useNpsSummary, useTrainerQuality } from '../hooks/data'
 import { Spinner, ErrorNote } from '../components/ui'
 import ChartTable, { ChartTableToggle } from '../components/ChartTable'
-import { shortDate } from '../lib/format'
-
-const SEVERITY = ['Low', 'Medium', 'High'] as const
-const STATUS = ['Open', 'In Progress', 'Resolved', 'Closed'] as const
 
 function Stars({ value }: { value: number | null }) {
   if (value == null) return <span className="fill-label">—</span>
   return <span title={`${value} of 5`}>{'★'.repeat(Math.round(value))}<span style={{ color: 'var(--text-faint)' }}>{'★'.repeat(5 - Math.round(value))}</span> <span className="fill-label">{Number(value).toFixed(1)}</span></span>
 }
 
-const statusTone: Record<string, string> = { Open: 'var(--danger)', 'In Progress': 'var(--warning)', Resolved: 'var(--text)', Closed: 'var(--text-faint)' }
-
-export default function Quality() {
-  const { profile } = useAuth()
+// The feedback/quality analytics: post-course sentiment and trainer scores.
+// Rendered as the "Quality" tab of the single Analytics shell (`embedded`). The
+// complaint register moved out to its own record list (/complaints) — it is a
+// list of records to work, not an analytics view.
+export default function Quality({ embedded }: { embedded?: boolean } = {}) {
   const nps = useNpsSummary()
   const trainers = useTrainerQuality()
-  const complaints = useComplaints()
-  const invalidate = useInvalidate()
-  const toast = useToast()
-  const [tab, setTab] = useState<'overview' | 'trainers' | 'complaints'>('overview')
-  const canManage = ['operations', 'business_owner', 'super_admin'].includes(profile?.role as string)
-
-  const [form, setForm] = useState({ subject: '', description: '', severity: 'Medium' })
-  const [busy, setBusy] = useState<string | null>(null)
-  const [showNew, setShowNew] = useState(false)
+  const [tab, setTab] = useState<'overview' | 'trainers'>('overview')
   const [npsTable, setNpsTable] = useState(false)
 
-  const addComplaint = async () => {
-    if (!form.subject.trim()) return
-    setBusy('new')
-    const { error } = await supabase.from('complaint').insert({
-      subject: form.subject.trim(),
-      description: form.description.trim() || null,
-      severity: form.severity,
-      opened_by: profile?.user_id || null,
-    })
-    setBusy(null)
-    if (error) toast.error(error.message)
-    else { setForm({ subject: '', description: '', severity: 'Medium' }); setShowNew(false); invalidate(['complaints']); toast.success('Complaint logged.') }
-  }
-
-  const setComplaintStatus = async (id: string, status: string) => {
-    setBusy(id)
-    const { error } = await supabase.from('complaint').update({ status }).eq('complaint_id', id)
-    setBusy(null)
-    if (error) toast.error(error.message)
-    else { invalidate(['complaints']); toast.success('Updated.') }
-  }
-
-  const open = useMemo(() => (complaints.data || []).filter((c: any) => c.status === 'Open' || c.status === 'In Progress'), [complaints.data])
+  const seg = (
+    <div className="seg">
+      <button className={`seg-btn ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>Overview</button>
+      <button className={`seg-btn ${tab === 'trainers' ? 'on' : ''}`} onClick={() => setTab('trainers')}>Trainers</button>
+    </div>
+  )
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Feedback and quality</h1>
-          <p>Post-course sentiment, trainer scores, and the complaint register.</p>
+      {embedded ? (
+        <div className="toolbar" style={{ justifyContent: 'flex-end', marginBottom: 16 }}>{seg}</div>
+      ) : (
+        <div className="page-head">
+          <div>
+            <h1>Feedback and quality</h1>
+            <p>Post-course sentiment and trainer scores. Complaints live in the <Link href="/complaints">complaint register</Link>.</p>
+          </div>
+          {seg}
         </div>
-        <div className="seg">
-          <button className={`seg-btn ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>Overview</button>
-          <button className={`seg-btn ${tab === 'trainers' ? 'on' : ''}`} onClick={() => setTab('trainers')}>Trainers</button>
-          <button className={`seg-btn ${tab === 'complaints' ? 'on' : ''}`} onClick={() => setTab('complaints')}>Complaints{open.length ? ` (${open.length})` : ''}</button>
-        </div>
-      </div>
+      )}
 
       {tab === 'overview' && (
         nps.isLoading ? <Spinner label="Loading feedback" /> : nps.error ? <ErrorNote error={nps.error} /> : !nps.data || Number(nps.data.responses) === 0 ? (
@@ -130,59 +99,6 @@ export default function Quality() {
             )}
           </div>
         )
-      )}
-
-      {tab === 'complaints' && (
-        <>
-          <div className="page-head" style={{ marginBottom: 8 }}>
-            <div><h2 style={{ fontSize: 16 }}>Complaint register</h2></div>
-            <button className="btn btn-sm" onClick={() => setShowNew((v) => !v)}>{showNew ? 'Cancel' : 'Log complaint'}</button>
-          </div>
-          {showNew && (
-            <div className="card card-pad" style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input aria-label="Complaint subject" placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
-                <textarea aria-label="Complaint description" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
-                <div className="toolbar">
-                  <select aria-label="Complaint severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-                    {SEVERITY.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <button className="btn btn-sm" disabled={busy === 'new' || !form.subject.trim()} onClick={addComplaint}>Save</button>
-                </div>
-              </div>
-            </div>
-          )}
-          {complaints.isLoading ? <Spinner /> : complaints.error ? <ErrorNote error={complaints.error} /> : (
-            <div className="card">
-              {(complaints.data?.length || 0) === 0 ? <div className="empty">No complaints logged.</div> : (
-                <table>
-                  <thead><tr><th>Subject</th><th>Severity</th><th>Context</th><th>Opened</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {(complaints.data || []).map((c: any) => (
-                      <tr key={c.complaint_id} style={{ opacity: busy === c.complaint_id ? 0.5 : 1 }}>
-                        <td style={{ fontWeight: 600 }}>{c.subject}{c.description && <div className="fill-label" style={{ fontWeight: 400 }}>{c.description}</div>}</td>
-                        <td><span className="pill" style={{ borderColor: c.severity === 'High' ? 'var(--danger)' : undefined }}>{c.severity}</span></td>
-                        <td className="fill-label">
-                          {c.client?.company || '—'}
-                          {c.schedule && <> · <Link href={`/session/${c.schedule_id}`}>{c.schedule.course?.course_name}</Link></>}
-                          {c.order_id && <> · <Link href={`/orders/${c.order_id}`}>{c.order_id}</Link></>}
-                        </td>
-                        <td className="fill-label">{shortDate(c.opened_at)}</td>
-                        <td>
-                          {canManage ? (
-                            <select aria-label={`Status for ${c.subject}`} value={c.status} onChange={(e) => setComplaintStatus(c.complaint_id, e.target.value)} style={{ color: statusTone[c.status] }}>
-                              {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          ) : <span style={{ color: statusTone[c.status] }}>{c.status}</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </>
       )}
     </>
   )

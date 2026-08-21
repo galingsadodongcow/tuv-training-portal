@@ -19,13 +19,14 @@
   --border-soft: #f2f2f2;
   --border-strong: #d4d4d4;
 
-  --accent: #0070f3;
-  --accent-hover: #0761d1;
-  --accent-tint: #e8f1ff;
-  --accent-tint-2: #f4f9ff;
+  /* TÜV Rheinland brand blue as the primary/accent colour. */
+  --accent: #00629b;
+  --accent-hover: #004f7e;
+  --accent-tint: #e4eff6;
+  --accent-tint-2: #f1f7fb;
 
-  --btn-bg: #171717;
-  --btn-bg-hover: #383838;
+  --btn-bg: #00629b;
+  --btn-bg-hover: #004f7e;
   --btn-fg: #ffffff;
 
   --success: #17803d;
@@ -45,7 +46,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --ring: 0 0 0 3px rgba(0, 112, 243, 0.25);
+  --ring: 0 0 0 3px rgba(0, 98, 155, 0.30);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -84,14 +85,16 @@
     --border-soft: #1c1c1c;
     --border-strong: #2e2e2e;
 
-    --accent: #3291ff;
-    --accent-hover: #52a8ff;
-    --accent-tint: #10233b;
-    --accent-tint-2: #0d1a2b;
+    /* Lighter TÜV blue for links/accents on dark; the primary button stays brand
+       blue with white text (not the old inverted light button). */
+    --accent: #57a9d8;
+    --accent-hover: #78bce4;
+    --accent-tint: #0e2c3f;
+    --accent-tint-2: #0b2230;
 
-    --btn-bg: #ededed;
-    --btn-bg-hover: #ffffff;
-    --btn-fg: #0a0a0a;
+    --btn-bg: #0a72b0;
+    --btn-bg-hover: #1a86c8;
+    --btn-fg: #ffffff;
 
     --success: #3fb950;
     --danger: #f0616d;
@@ -101,7 +104,7 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
-    --ring: 0 0 0 3px rgba(50, 145, 255, 0.35);
+    --ring: 0 0 0 3px rgba(87, 169, 218, 0.38);
     color-scheme: dark;
   }
 }
@@ -137,7 +140,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   gap: 1px;
 }
 .brand { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px 18px; }
-.brand-mark { font-weight: 700; color: var(--text); letter-spacing: -0.03em; font-size: 17px; }
+.brand-mark { font-weight: 700; color: var(--accent); letter-spacing: -0.03em; font-size: 17px; }
 .brand-sub { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 500; }
 .nav-link {
   display: flex; align-items: center; gap: 10px;
@@ -150,7 +153,7 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   transition: background 0.13s var(--ease), color 0.13s var(--ease);
 }
 .nav-link:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); text-decoration: none; }
-.nav-link.active { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-weight: 550; }
+.nav-link.active { background: var(--accent-tint); color: var(--accent); font-weight: 550; }
 
 /* --------------------------------------------- Navigation list */
 .nav-list { display: flex; flex-direction: column; gap: 2px; }
@@ -185,6 +188,15 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
 }
 .card-pad { padding: 20px; }
+/* Inline pop-open form (record payment, add contact, refund…) that lives inside
+   a record-detail card. Lighter than a full .card — a soft-bordered inset, no
+   elevation — so it doesn't double-box within the surrounding card (DEN1 /
+   third-pass #21). */
+.subform { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-subtle); padding: 14px; }
+:root[data-density='compact'] .subform { padding: 10px; }
+/* Stacked worklist section (title + its card), single-sourced vertical rhythm
+   shared by My Work / Operations today instead of repeated inline margins. */
+.section { margin-bottom: 22px; }
 /* Wide tables scroll horizontally inside their card instead of overflowing */
 .card:has(> table) { overflow-x: auto; }
 /* Horizontal-scroll wrapper for tables that are not a direct child of .card
@@ -260,7 +272,11 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg-subtle
 .btn:hover { background: var(--btn-bg-hover); border-color: var(--btn-bg-hover); }
 .btn:active { transform: translateY(1px); }
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+/* A soft brand-tinted lift on the primary button gives the filled TÜV-blue
+   buttons depth without a hard drop shadow. Ghost/danger keep their flat look. */
+.btn:not(.btn-ghost):not(.btn-danger) { box-shadow: 0 1px 2px color-mix(in srgb, var(--btn-bg) 35%, transparent); }
+.btn:not(.btn-ghost):not(.btn-danger):hover { box-shadow: 0 2px 6px color-mix(in srgb, var(--btn-bg) 32%, transparent); }
 .btn-ghost { background: var(--card); color: var(--text); border-color: var(--border-strong); }
 .btn-ghost:hover { background: var(--bg-subtle); border-color: var(--text-faint); color: var(--text); }
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -313,7 +329,10 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 /* --------------------------------------------------------------- Drawer */
 .drawer-scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px); display: flex; justify-content: flex-end; z-index: 50; animation: fade 0.15s var(--ease); }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-.drawer { width: 500px; max-width: 94vw; background: var(--card); height: 100vh; overflow-y: auto; box-shadow: var(--shadow-lg); border-left: 1px solid var(--border); animation: slidein 0.22s var(--ease); }
+/* Wide enough for the full session record the drawer now hosts (order tables,
+   roster, timeline) rather than the old summary-only panel; still capped to the
+   viewport on small screens. */
+.drawer { width: 760px; max-width: 94vw; background: var(--card); height: 100vh; overflow-y: auto; box-shadow: var(--shadow-lg); border-left: 1px solid var(--border); animation: slidein 0.22s var(--ease); }
 @keyframes slidein { from { transform: translateX(28px); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
 .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 22px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(8px); z-index: 1; }
 .drawer-body { padding: 20px 22px 44px; }
@@ -328,11 +347,17 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 18px; overflow-x: auto; }
 .tab { background: none; border: none; padding: 9px 13px; font-size: 13px; font-weight: 550; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit; transition: color 0.13s var(--ease); }
 .tab:hover { color: var(--text); }
-.tab-on { color: var(--text); border-bottom-color: var(--text); }
+.tab-on { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* ------------------------------------------- Record detail workspaces */
 .back-link { display: inline-block; font-size: 13px; color: var(--text-muted); text-decoration: none; margin-bottom: 6px; }
 .back-link:hover { color: var(--accent); }
+/* Breadcrumb trail on record headers (Home › Section › Record) */
+.breadcrumb { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.breadcrumb a { color: var(--text-muted); text-decoration: none; }
+.breadcrumb a:hover { color: var(--accent); }
+.breadcrumb-sep { color: var(--text-faint); margin: 0 2px; }
+.breadcrumb [aria-current="page"] { color: var(--text); font-weight: 550; }
 .record-head { align-items: flex-start; }
 .record-actions { flex-shrink: 0; }
 .record-section { border-top: 1px solid var(--border-soft); padding-top: 18px; margin-top: 18px; }
@@ -377,7 +402,7 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 /* --------------------------------------------- Segmented toggle */
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg-btn { background: none; border: none; padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 550; color: var(--text-muted); cursor: pointer; }
-.seg-btn.on { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.seg-btn.on { background: var(--accent-tint); color: var(--accent); }
 .seg-btn:not(.on):hover { color: var(--text); }
 
 /* --------------------------------------------- Calendar month grid */
@@ -410,9 +435,6 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 /* --------------------------------------------- Calendar risk accents */
 .cal-table tr.risk-red td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .cal-table tr.risk-amber td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
-.pill-today { background: var(--danger); color: #fff; }
-.pill-thisweek { background: var(--warning); color: #fff; }
-.pill-soon { background: var(--accent-tint); color: var(--accent); }
 .cal-table tr.upcoming { background: var(--accent-tint-2); }
 .cal-table tr.upcoming td:first-child { font-weight: 600; }
 .cal-table tr.upcoming:hover { background: var(--accent-tint); }
@@ -514,7 +536,7 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .seg-btn { background: var(--card); border: none; padding: 5px 9px; font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: inherit; transition: background 0.12s var(--ease), color 0.12s var(--ease); }
 .seg .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
 .seg-btn:hover { background: var(--bg-subtle); color: var(--text); }
-.seg-btn.on { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.seg-btn.on { background: var(--accent-tint); color: var(--accent); }
 .seg-btn.density { border: 1px solid var(--border); border-radius: var(--radius-sm); }
 
 /* =========================================================== Toaster */
@@ -525,6 +547,12 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .toast-success .toast-dot { background: var(--success); }
 .toast-error .toast-dot { background: var(--danger); }
 .toast-info .toast-dot { background: var(--accent); }
+.toast-action {
+  background: none; border: 1px solid currentColor; color: var(--accent);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+}
+.toast-action:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* =========================================================== Skeleton */
 .skeleton {
@@ -570,19 +598,184 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 }
 .nav-list > .nav-group:first-child { padding-top: 4px; }
 
-/* Computed session-health pills (see src/lib/health.ts) */
-.health-blocked   { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
-.health-risk      { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
-.health-attention { background: color-mix(in srgb, var(--warning) 11%, transparent); color: var(--warning); }
-.health-healthy   { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
-.health-done      { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
+/* The one attention scale — blocked · risk · ok · done (see src/lib/health.ts).
+   Session health, order flags, and lead/quote badges all render with these. */
+.health-blocked { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
+.health-risk    { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+.health-ok      { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.health-done    { background: color-mix(in srgb, var(--text) 8%, transparent);     color: var(--text-muted); }
 /* small dot form for dense calendars */
-.health-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
-.health-dot.health-blocked { background: var(--danger); }
-.health-dot.health-risk { background: var(--warning); }
-.health-dot.health-attention { background: color-mix(in srgb, var(--warning) 60%, var(--card)); }
-.health-dot.health-healthy { background: var(--success); }
-.health-dot.health-done { background: var(--text-faint); }
+
+/* Dashboard "Needs you now" band (#132) — the non-zero alert cards, lifted above
+   the quieter metrics grid so the urgent item is unmissable. */
+.needs-now-label { display: flex; align-items: center; gap: 7px; color: var(--warning); }
+.needs-now-label::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--warning); display: inline-block;
+}
+.needs-now .kpi { border-left: 3px solid var(--warning); }
+
+/* My Work rows (#132): a per-type left severity stripe on the shared attention
+   scale + a leading verb, so "what is this and is it mine?" reads at a glance.
+   The stripe rides the first cell (the verb cell) as an inset shadow. */
+.mywork-lead { width: 1%; white-space: nowrap; vertical-align: top; padding-left: 12px !important; }
+.mywork-lead .verb {
+  display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px;
+}
+tr.stripe-blocked > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+tr.stripe-risk    > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+tr.stripe-ok      > td:first-child { box-shadow: inset 3px 0 0 var(--success); }
+tr.stripe-done    > td:first-child { box-shadow: inset 3px 0 0 var(--border); }
+
+/* Saved views (#123): a chip row for applying/saving/deleting filter presets on
+   Orders, Calendar and the fulfilment queue. */
+.saved-views { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sv-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg-subtle);
+}
+.sv-chip.sv-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.sv-chip.sv-saving { border-radius: 8px; padding: 2px 4px; gap: 4px; }
+.sv-apply {
+  border: none; background: none; cursor: pointer; color: inherit; font: inherit;
+  font-size: 13px; padding: 3px 10px; border-radius: 999px;
+}
+.sv-chip.sv-active .sv-apply { color: var(--accent); font-weight: 600; }
+.sv-del {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 15px; line-height: 1; padding: 0 8px 0 2px; border-radius: 999px;
+}
+.sv-del:hover { color: var(--danger); }
+.sv-saving input { font-size: 13px; padding: 3px 8px; min-width: 150px; }
+/* A shared role default reads as a state, not a rating — a quiet word beats the
+   ★ it replaced. */
+.sv-default {
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  background: var(--bg-muted, var(--bg-subtle)); border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+/* Active-filter summary: what is actually narrowing the list right now, each
+   one individually removable. */
+.saved-views-wrap { display: flex; flex-direction: column; gap: 8px; }
+.sv-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sv-filter {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 12px;
+  padding: 2px 4px 2px 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.sv-filter-k { color: var(--text-muted); }
+.sv-filter-x {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 14px; line-height: 1; padding: 0 4px; border-radius: 4px;
+}
+.sv-filter-x:hover { color: var(--danger); }
+
+/* Owner picker in a record header — label and control on one line. */
+.owner-assign { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Input primitives (#140) ─────────────────────────────────────────────── */
+/* Combobox (typeahead) */
+.combobox { position: relative; }
+.combobox-field { position: relative; display: flex; align-items: center; }
+.combobox-field input { width: 100%; padding-right: 26px; }
+.combobox-clear {
+  position: absolute; right: 4px; border: none; background: none; cursor: pointer;
+  color: var(--text-muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-pill);
+}
+.combobox-clear:hover { color: var(--danger); }
+.combobox-list {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 260px; overflow-y: auto; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); padding: 4px;
+}
+.combobox-item {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  border: none; background: none; cursor: pointer; color: inherit; font: inherit;
+  padding: 6px 9px; border-radius: var(--radius-sm);
+}
+.combobox-item.on { background: var(--bg-subtle); }
+.combobox-item[aria-selected="true"] { color: var(--accent); font-weight: 600; }
+.combobox-sub { font-size: 12px; color: var(--text-muted); }
+.combobox-empty { padding: 8px 9px; color: var(--text-muted); font-size: 13px; }
+.combobox-field input.is-linked { padding-right: 26px; }
+.combobox-linked { position: absolute; right: 8px; font-size: 13px; pointer-events: none; }
+
+/* Tooltip */
+.tooltip-wrap { position: relative; display: inline-flex; }
+.tooltip {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 50;
+  background: var(--text); color: var(--bg); font-size: 12px; line-height: 1.35;
+  padding: 5px 8px; border-radius: var(--radius-sm); box-shadow: var(--shadow-md);
+  white-space: normal; width: max-content; max-width: 240px; pointer-events: none;
+}
+.tooltip-top { bottom: calc(100% + 6px); }
+.tooltip-bottom { top: calc(100% + 6px); }
+
+/* Multi-select */
+.multiselect { position: relative; }
+.multiselect-btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: inherit; font: inherit; padding: 6px 10px;
+}
+.multiselect-panel {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; min-width: 180px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md); padding: 4px; max-height: 260px; overflow-y: auto;
+}
+.multiselect-opt {
+  display: flex; align-items: center; gap: 8px; padding: 6px 9px;
+  border-radius: var(--radius-sm); cursor: pointer; font-size: 13px;
+}
+.multiselect-opt:hover { background: var(--bg-subtle); }
+.multiselect-clear {
+  display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer;
+  color: var(--text-muted); font: inherit; font-size: 12px; padding: 4px 9px 6px;
+}
+.multiselect-clear:hover { color: var(--danger); }
+
+/* Filter chip */
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-pill);
+  font-size: 12px; padding: 2px 4px 2px 10px;
+}
+.filter-chip-x {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 14px; line-height: 1; padding: 0 6px; border-radius: var(--radius-pill);
+}
+.filter-chip-x:hover { color: var(--danger); }
+
+/* Status legend "?" popover (#139) */
+.legend { position: relative; display: inline-flex; }
+.legend-btn {
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--border); background: var(--card); color: var(--text-muted);
+  font-size: 13px; font-weight: 600; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+}
+.legend-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.legend-panel {
+  position: absolute; z-index: 45; top: calc(100% + 6px); right: 0; width: 300px; max-width: 84vw;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md); padding: 12px;
+}
+.legend-title { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.legend-list { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.legend-row { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 10px; align-items: start; }
+.legend-row dt { margin: 0; }
+.legend-row dd { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+/* Deep-link focus flash — a row a notification linked to, briefly highlighted so
+   the eye lands on it (#139). */
+@keyframes row-flash {
+  0%, 40% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background: transparent; }
+}
+tr.row-focus > td { animation: row-flash 2.4s ease-out; }
 
 /* Notification center */
 .notif-wrap { position: relative; display: inline-flex; margin-left: 8px; }
@@ -620,4 +813,27 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .notif-title { font-weight: 600; font-size: 13px; flex: 1 1 auto; }
 .notif-time { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); flex: 0 0 auto; }
 .notif-text { font-size: 12px; color: var(--text-muted); margin: 3px 0 0 15px; }
+/* Grouped notifications (#131): "Needs action" vs "For your information", each
+   row prefixed with a per-kind type icon. */
+.notif-group-head {
+  display: flex; align-items: center; gap: 6px; padding: 8px 14px 4px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+}
+.notif-group-count {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 0 6px;
+}
+.notif-group:first-child .notif-group-head { padding-top: 4px; }
+.notif-flex { display: flex; align-items: flex-start; gap: 9px; }
+.notif-kind { font-size: 15px; line-height: 1.3; flex: 0 0 auto; }
 @media (max-width: 860px) { .notif-panel { position: fixed; top: 52px; right: 8px; left: 8px; width: auto; } }
+
+/* WCAG 2.5.5 target size (#135): on coarse (touch) pointers, raise the small
+   controls — btn-sm, nav links, tabs, the notification bell — to a 44px minimum
+   without changing the tighter desktop density on fine pointers. */
+@media (pointer: coarse) {
+  .btn, .btn-sm { min-height: 44px; }
+  .nav-link { min-height: 44px; }
+  .tab, .seg-btn { min-height: 44px; }
+  .notif-bell { width: 44px; height: 44px; }
+}

@@ -25,7 +25,8 @@ export default function QuoteDetail() {
   const total = useQuoteTotal(id)
   const courses = useCourses()
   const fees = useCourseFees()
-  const canEdit = ['super_admin', 'sales'].includes(profile?.role as string)
+  // Quote writes per live RLS (20260812210000): super_admin + coordinator/sales (own).
+  const canEdit = ['super_admin', 'coordinator', 'sales'].includes(profile?.role as string)
 
   const [row, setRow] = useState<any>({ course_id: '', modality: 'Face-to-face', seats: 1, unit_price: '' })
   const [busy, setBusy] = useState(false)
@@ -33,7 +34,7 @@ export default function QuoteDetail() {
   if (quote.isLoading) return <Spinner label="Loading quote" />
   if (quote.error) return <ErrorNote error={quote.error} />
   const q: any = quote.data
-  if (!q) return (<><RecordHeader title="Quote not found" back={{ href: '/quotations', label: 'Quotations' }} /><div className="card"><div className="empty">This quote does not exist.</div></div></>)
+  if (!q) return (<><RecordHeader title="Quote not found" back={{ href: '/crm?tab=quotes', label: 'Quotations' }} /><div className="card"><div className="empty">This quote does not exist.</div></div></>)
 
   const feeFor = (courseId: string, modality: string) => fees.data?.find((f: any) => f.course_id === courseId && f.modality === modality)?.fee_php ?? ''
 
@@ -80,7 +81,7 @@ export default function QuoteDetail() {
   return (
     <>
       <RecordHeader
-        back={{ href: '/quotations', label: 'Quotations' }}
+        crumbs={[{ href: '/my-work', label: 'My Work' }, { href: '/crm?tab=quotes', label: 'Quotations' }, { label: q.quote_number }]}
         title={`${q.quote_number}`}
         subtitle={`${q.client?.company || q.client?.name || 'No client'}${q.valid_until ? ` · valid to ${shortDate(q.valid_until)}` : ''}`}
         badges={<><Badge tone={q.status === 'Accepted' ? 'ok' : q.status === 'Declined' || q.status === 'Expired' ? 'danger' : 'info'}>{q.status}</Badge>{q.converted_order_id && <Badge tone="neutral">Order {q.converted_order_id}</Badge>}</>}
