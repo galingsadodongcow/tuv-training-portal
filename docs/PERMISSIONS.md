@@ -1,0 +1,43 @@
+# Permissions
+
+Database RLS is authoritative. `Own/team` means the profile owns the row or has
+the administrator-controlled Sales Supervisor scope. `Safe read` excludes sensitive cost,
+rate, access, audit payload, and unnecessary participant/contact fields.
+
+| Resource/action | Administrator | Operations | Sales | Manager | Auditor |
+|---|---|---|---|---|---|
+| Own profile | Read | Read | Read | Read | Read |
+| Users/roles/scopes | CRUD + audited | — | — | Read own | Read safe identity |
+| Categories/courses/prices | CRUD | CRUD | Read active | Read | Read |
+| Trainers/qualifications/venues | CRUD | CRUD | Safe read | Safe read | Safe read |
+| Sessions | Repair/CRUD | CRUD/lifecycle | Read | Read | Read |
+| Participants/attendance | Repair/CRUD | CRUD | Scoped read only if approved | Masked read | Masked read |
+| Customers/contacts | Repair/CRUD | Fulfilment-context read | Own/team CRUD + dedupe search | Read | Masked read |
+| Inquiries | Repair/CRUD | — | Own/team CRUD | Read | Read |
+| Quotes/lines | Repair/CRUD | — | Own/team CRUD/issue/convert; Supervisor approves >10% discounts | Read | Read |
+| Orders/lines before handoff | Repair/CRUD | Read pending | Own/team CRUD/send | Read | Read |
+| Accept/return order | Override, audited | Execute | — | — | — |
+| Orders after acceptance | Repair | Operational update | Own/team commercial read | Read | Read |
+| Complete/cancel session | Override, audited | Execute | — | Optional approval only | — |
+| Audit events | Read/export | Own action receipt | Own action receipt | Summary | Read/export |
+| Sensitive rate/margin | Only if required | Only if required | Never | Approved summary only | Policy-specific |
+
+## Policy rules
+
+1. Missing or inactive profiles receive no business access.
+2. Anonymous users receive no table or function access.
+3. Manager and Auditor have no ordinary insert, update, or delete policy.
+4. Sales cannot change ownership to escape scope; update policies repeat scope in `WITH CHECK`.
+5. Operations cannot edit commercial snapshot amounts unless an explicit action permits it.
+6. Privileged functions validate the caller internally even when execution is granted.
+7. Application users receive no hard-delete privilege on retained business records.
+8. Access changes, overrides, returns, cancellations, removals, and sensitive corrections are audited.
+
+## Current slice
+
+The database now enforces catalogue plus customer-to-handoff permissions. Individual
+Sales users see only their commercial portfolio; the Sales Supervisor sees the team
+and can decide another owner’s high-discount quotation. Operations sees orders only
+once sent for handoff, never the inquiry/quotation pipeline. Manager and Auditor are
+read-only. Anonymous and inactive users have no business access. The UI mirrors these
+boundaries in Sales, Customers, My Work, order detail, Overview, and Administration.
