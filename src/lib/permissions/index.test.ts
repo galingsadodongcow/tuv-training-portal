@@ -12,6 +12,7 @@ import {
   homePath,
   navigationForProfile,
   navigationForRole,
+  capabilitiesForProfile,
 } from './index'
 import type { Profile } from '@/types/auth'
 
@@ -55,5 +56,15 @@ describe('permissions', () => {
     expect(canViewReporting({ ...base, is_sales_supervisor: true })).toBe(true)
     expect(navigationForProfile({ ...base, is_sales_supervisor: true }).find((item) => item.area === 'overview')?.label).toBe('Team reports')
     expect(canViewReporting({ ...base, role: 'operations', is_sales_supervisor: false })).toBe(true)
+  })
+
+  it('describes each role with backend-aligned workflow capabilities', () => {
+    const profile = (role: Profile['role'], is_sales_supervisor = false): Profile => ({ id: role, full_name: role, role, is_active: true, is_sales_supervisor })
+    expect(capabilitiesForProfile(profile('administrator')).find((item) => item.area === 'Training delivery')?.access).toBe('manage')
+    expect(capabilitiesForProfile(profile('operations')).find((item) => item.area === 'Sales pipeline')?.access).toBe('none')
+    expect(capabilitiesForProfile(profile('sales')).find((item) => item.area === 'Training delivery')?.access).toBe('view')
+    expect(capabilitiesForProfile(profile('sales', true)).find((item) => item.area === 'Discount exception')?.access).toBe('approve')
+    expect(capabilitiesForProfile(profile('manager')).find((item) => item.area === 'Reporting')?.access).toBe('view')
+    expect(capabilitiesForProfile(profile('auditor')).find((item) => item.area === 'Sales pipeline')?.access).toBe('none')
   })
 })

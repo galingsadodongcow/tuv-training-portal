@@ -8,12 +8,18 @@ export interface NavigationItem {
   area: WorkArea
 }
 
+export interface RoleCapability {
+  area: string
+  access: 'manage' | 'approve' | 'view' | 'none'
+  detail: string
+}
+
 const NAVIGATION: Record<Role, NavigationItem[]> = {
   administrator: [
     { href: '/administration', label: 'Administration', area: 'administration' },
     { href: '/my-work', label: 'My Work', area: 'my-work' },
     { href: '/training', label: 'Training calendar', area: 'training' },
-    { href: '/participants', label: 'Participants', area: 'participants' },
+    { href: '/participants', label: 'Participants & certificates', area: 'participants' },
     { href: '/sales', label: 'Sales', area: 'sales' },
     { href: '/customers', label: 'Customers', area: 'customers' },
     { href: '/overview', label: 'Reports', area: 'overview' },
@@ -21,7 +27,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
   operations: [
     { href: '/my-work', label: 'My Work', area: 'my-work' },
     { href: '/training', label: 'Training calendar', area: 'training' },
-    { href: '/participants', label: 'Participants', area: 'participants' },
+    { href: '/participants', label: 'Participants & certificates', area: 'participants' },
     { href: '/overview', label: 'Delivery reports', area: 'overview' },
     { href: '/customers', label: 'Customers', area: 'customers' },
     { href: '/administration', label: 'Training setup', area: 'administration' },
@@ -30,18 +36,18 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: '/my-work', label: 'My Work', area: 'my-work' },
     { href: '/sales', label: 'Sales', area: 'sales' },
     { href: '/training', label: 'Training calendar', area: 'training' },
-    { href: '/participants', label: 'Participants', area: 'participants' },
+    { href: '/participants', label: 'Participants & certificates', area: 'participants' },
     { href: '/customers', label: 'Customers', area: 'customers' },
   ],
   manager: [
     { href: '/overview', label: 'Management reports', area: 'overview' },
     { href: '/training', label: 'Training calendar', area: 'training' },
-    { href: '/participants', label: 'Participants', area: 'participants' },
+    { href: '/participants', label: 'Participants & certificates', area: 'participants' },
   ],
   auditor: [
     { href: '/overview', label: 'Audit & reports', area: 'overview' },
     { href: '/training', label: 'Training calendar', area: 'training' },
-    { href: '/participants', label: 'Participants', area: 'participants' },
+    { href: '/participants', label: 'Participants & certificates', area: 'participants' },
   ],
 }
 
@@ -104,4 +110,15 @@ export function canViewOverview(role: Role): boolean {
 
 export function canViewReporting(profile: Profile): boolean {
   return canViewOverview(profile.role) || profile.role === 'operations' || (profile.role === 'sales' && profile.is_sales_supervisor)
+}
+
+export function capabilitiesForProfile(profile: Profile): RoleCapability[] {
+  return [
+    { area: 'Training catalogue', access: canManageTraining(profile.role) ? 'manage' : 'view', detail: canManageTraining(profile.role) ? 'Create and maintain courses, prices, trainers, and venues.' : 'Use active catalogue facts in permitted workflows.' },
+    { area: 'Sales pipeline', access: canWriteSales(profile) ? 'manage' : canViewSales(profile.role) ? 'view' : 'none', detail: canWriteSales(profile) ? 'Own inquiries, quotes, orders, and operations handoff.' : 'No commercial write authority.' },
+    { area: 'Discount exception', access: canApproveDiscount(profile) ? 'approve' : 'none', detail: canApproveDiscount(profile) ? 'Approve controlled discount exceptions.' : 'Cannot approve pricing exceptions.' },
+    { area: 'Training delivery', access: canManageDelivery(profile.role) ? 'manage' : canViewDelivery(profile.role) ? 'view' : 'none', detail: canManageDelivery(profile.role) ? 'Schedule, register, record outcomes, and issue certificates.' : 'Read-only, database-scoped delivery evidence.' },
+    { area: 'Customers', access: canViewCustomers(profile.role) ? 'view' : 'none', detail: canViewCustomers(profile.role) ? 'See customer records permitted by database scope.' : 'No customer access.' },
+    { area: 'Reporting', access: canViewReporting(profile) ? 'view' : 'none', detail: canViewReporting(profile) ? 'See the role-appropriate reporting scope.' : 'No management reporting access.' },
+  ]
 }

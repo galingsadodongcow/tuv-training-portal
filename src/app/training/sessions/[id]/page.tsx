@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { MetricCard } from '@/components/ui/MetricCard'
 import {
   issueCertificateAction,
+  issueEligibleCertificatesAction,
   recordParticipantOutcomeAction,
   registerParticipantAction,
   rescheduleSessionAction,
@@ -56,6 +57,7 @@ export default async function SessionDetailPage({
   const activeRoster = roster.filter((item) => !['waitlisted', 'cancelled', 'transferred'].includes(item.status))
   const outcomesComplete = activeRoster.filter((item) => item.attendance_status !== 'pending' && item.assessment_status !== 'pending').length
   const issued = roster.filter((item) => item.certificate_status === 'issued').length
+  const eligible = roster.filter((item) => item.certificate_status === 'eligible').length
   const durationMinutes = Math.round((new Date(session.ends_at).getTime() - new Date(session.starts_at).getTime()) / 60000)
 
   return (
@@ -91,7 +93,7 @@ export default async function SessionDetailPage({
           </section>
 
           <section className="workspace-section" aria-labelledby="roster-title">
-            <div className="section-heading"><div><h2 id="roster-title">Participant roster</h2><p>Seat state, attendance, assessment, and certificate evidence stay on one controlled registration record.</p></div></div>
+            <div className="section-heading"><div><h2 id="roster-title">Participant roster</h2><p>Seat state, attendance, assessment, and certificate evidence stay on one controlled registration record.</p></div><a className="button button-secondary button-small" href={`/api/exports/participants?session=${session.id}`}>Export roster</a></div>
             {roster.length === 0 ? <EmptyState>No participants are registered.</EmptyState> : (
               <div className="participant-list">
                 {roster.map((participant) => (
@@ -100,7 +102,7 @@ export default async function SessionDetailPage({
                       <div><span className="code">{displayParticipantNumber(participant.participant_number)}</span><h3>{participant.full_name}</h3><p>{participant.email ?? participant.phone ?? participant.employee_reference ?? 'No contact detail'}</p></div>
                       <div className="status-cluster"><span className={`workflow-status status-${participant.status}`}>{participant.status.replaceAll('_', ' ')}</span><span className={`workflow-status status-${participant.attendance_status}`}>{participant.attendance_status}</span><span className={`workflow-status status-${participant.certificate_status}`}>{participant.certificate_status.replaceAll('_', ' ')}</span></div>
                     </div>
-                    <div className="participant-facts"><span>Employee ref: {participant.employee_reference ?? '—'}</span><span>Assessment: {participant.assessment_status.replaceAll('_', ' ')}{participant.assessment_score !== null ? ` · ${participant.assessment_score}%` : ''}</span><span>Certificate: {participant.certificate_number ?? '—'}</span></div>
+                    <div className="participant-facts"><span>Employee ref: {participant.employee_reference ?? '—'}</span><span>Assessment: {participant.assessment_status.replaceAll('_', ' ')}{participant.assessment_score !== null ? ` · ${participant.assessment_score}%` : ''}</span><span>Certificate: {participant.certificate_number ? <Link className="table-link" href={`/certificates/${participant.id}`}>{participant.certificate_number}</Link> : '—'}</span></div>
                     {canManage ? (
                       <div className="participant-actions">
                         {participant.status === 'registered' ? <form action={transitionParticipantAction}><input type="hidden" name="session_id" value={session.id} /><input type="hidden" name="participant_id" value={participant.id} /><input type="hidden" name="transition" value="confirm" /><Button className="button-small" type="submit">Confirm seat</Button></form> : null}
@@ -119,7 +121,7 @@ export default async function SessionDetailPage({
 
           {canManage && ['scheduled', 'open'].includes(session.status) ? (
             <section className="workspace-section" aria-labelledby="register-title">
-              <div className="section-heading"><div><h2 id="register-title">Add participant</h2><p>When all seats are occupied, the database creates a waitlisted registration.</p></div></div>
+              <div className="section-heading"><div><h2 id="register-title">Add participant</h2><p>When all seats are occupied, the database creates a waitlisted registration.</p></div><Link className="button button-secondary button-small" href={`/training/sessions/${session.id}/import`}>Import CSV</Link></div>
               <form action={registerParticipantAction} className="workflow-form"><input type="hidden" name="session_id" value={session.id} /><div className="field-grid"><label className="field"><span>Full name</span><input name="full_name" required minLength={2} maxLength={160} /></label><label className="field"><span>Employee reference</span><input name="employee_reference" maxLength={80} /></label><label className="field"><span>Email</span><input name="email" type="email" maxLength={254} /></label><label className="field"><span>Phone</span><input name="phone" maxLength={40} /></label></div><Button type="submit">Add to roster</Button></form>
             </section>
           ) : null}
@@ -132,6 +134,7 @@ export default async function SessionDetailPage({
             {session.status === 'scheduled' ? <form action={transitionSessionAction}><input type="hidden" name="session_id" value={session.id} /><input type="hidden" name="transition" value="open" /><Button type="submit">Open registration</Button></form> : null}
             {['scheduled', 'open'].includes(session.status) ? <form action={transitionSessionAction}><input type="hidden" name="session_id" value={session.id} /><input type="hidden" name="transition" value="start" /><Button type="submit">Start session</Button></form> : null}
             {session.status === 'in_progress' ? <form action={transitionSessionAction}><input type="hidden" name="session_id" value={session.id} /><input type="hidden" name="transition" value="complete" /><Button type="submit">Complete session</Button><p className="action-note">Requires final outcomes for every active participant.</p></form> : null}
+            {session.status === 'completed' && eligible > 0 ? <form action={issueEligibleCertificatesAction}><input type="hidden" name="session_id" value={session.id} /><Button type="submit">Issue all eligible certificates</Button><p className="action-note">Creates {eligible} controlled certificate number{eligible === 1 ? '' : 's'} and PDF downloads.</p></form> : null}
             {['scheduled', 'open'].includes(session.status) ? <details><summary>Change schedule</summary><form action={rescheduleSessionAction} className="action-form"><input type="hidden" name="session_id" value={session.id} /><label className="field"><span>Trainer</span><select name="trainer_id" required defaultValue={session.trainer_id}>{workspace.trainers.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="field"><span>Venue</span><select name="venue_id" required defaultValue={session.venue_id}>{workspace.venues.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="field"><span>Starts</span><input name="starts_at" type="datetime-local" required defaultValue={dateTimeLocal(session.starts_at)} /></label><label className="field"><span>Ends</span><input name="ends_at" type="datetime-local" required defaultValue={dateTimeLocal(session.ends_at)} /></label><label className="field"><span>Capacity</span><input name="capacity" type="number" min="1" required defaultValue={session.capacity} /></label><label className="field"><span>Notes</span><textarea name="notes" rows={3} maxLength={2000} defaultValue={session.notes ?? ''} /></label><Button type="submit">Validate and save</Button></form></details> : null}
             {['scheduled', 'open', 'in_progress'].includes(session.status) ? <details><summary>Cancel session</summary><form action={transitionSessionAction} className="action-form"><input type="hidden" name="session_id" value={session.id} /><input type="hidden" name="transition" value="cancel" /><label className="field"><span>Reason</span><textarea name="reason" minLength={5} required rows={3} /></label><Button type="submit">Cancel session</Button></form></details> : null}
           </aside>

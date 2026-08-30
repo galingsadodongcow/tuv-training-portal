@@ -53,7 +53,27 @@ function refreshSession(sessionId?: string) {
   revalidatePath('/participants')
   revalidatePath('/my-work')
   revalidatePath('/overview')
+  revalidatePath('/certificates')
   if (sessionId) revalidatePath(`/training/sessions/${sessionId}`)
+}
+
+export async function issueEligibleCertificatesAction(formData: FormData) {
+  const sessionId = value(formData, 'session_id')
+  const returnPath = `/training/sessions/${sessionId}`
+  await requireDeliveryManager(returnPath)
+  const supabase = await createClient()
+  const { data: participants, error: listError } = await supabase.rpc('list_participants')
+  if (listError) finish(returnPath, 'error', databaseMessage(listError))
+  const eligible = (participants ?? []).filter((item: { session_id: string; certificate_status: string }) => item.session_id === sessionId && item.certificate_status === 'eligible')
+  if (!eligible.length) finish(returnPath, 'error', 'No eligible certificates are waiting for issuance.')
+  let issued = 0
+  for (const participant of eligible) {
+    const { error } = await supabase.rpc('issue_certificate', { p_participant_id: participant.id })
+    if (error) finish(returnPath, 'error', `${issued} certificates were issued before a database validation stopped the batch.`)
+    issued += 1
+  }
+  refreshSession(sessionId)
+  finish(returnPath, 'message', `${issued} eligible certificate${issued === 1 ? '' : 's'} issued and ready for controlled PDF download.`)
 }
 
 export async function createSessionAction(formData: FormData) {

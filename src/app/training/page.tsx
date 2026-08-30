@@ -55,7 +55,7 @@ export default async function TrainingDeliveryPage({
           <h1>Session calendar and control desk</h1>
           <p>{canManage ? 'Schedule accepted orders, prevent resource conflicts, and move each delivery through a controlled lifecycle.' : 'Read-only delivery visibility is scoped to the work your role is allowed to see.'}</p>
         </div>
-        <div className="summary-chip">Calendar · {upcoming.length} upcoming</div>
+        <div className="heading-actions"><a className="button button-secondary" href="/api/exports/sessions">Export sessions</a><div className="summary-chip">Calendar · {upcoming.length} upcoming</div></div>
       </div>
       {notice.message ? <div className="alert alert-success" role="status">{notice.message}</div> : null}
       {notice.error ? <div className="alert alert-error" role="alert">{notice.error}</div> : null}

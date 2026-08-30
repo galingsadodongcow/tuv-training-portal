@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
 import { Button } from '@/components/ui/Button'
@@ -86,6 +87,7 @@ export default async function AdministrationPage({
         <a href="#trainers">Trainers</a>
         <a href="#venues">Venues</a>
         {profile.role === 'administrator' ? <a href="#users">Users & roles</a> : null}
+        {profile.role === 'administrator' ? <Link href="/administration/role-preview">Role preview</Link> : null}
       </nav>
 
       <section className="workspace-section" aria-labelledby="categories">
