@@ -10,7 +10,10 @@ rate, access, audit payload, and unnecessary participant/contact fields.
 | Users/roles/scopes | CRUD + audited | — | — | Read own | Read safe identity |
 | Categories/courses/prices | CRUD | CRUD | Read active | Read | Read |
 | Trainers/qualifications/venues | CRUD | CRUD | Safe read | Safe read | Safe read |
+| Rooms/trainer blackouts | CRUD | CRUD | Rooms safe read; no blackout read | Blackout/room read | Blackout/room read |
 | Sessions | Repair/CRUD | CRUD/lifecycle | Read | Read | Read |
+| Public inventory/reservations | Repair/CRUD | CRUD/allocate | Select published + own/team reservations | Read | Read |
+| Schedule blocks and Go/No-Go | Override, audited | CRUD/decide | Read | Read | Read |
 | Participants/attendance/assessment | Repair/CRUD | CRUD | Own/team delivery read | Masked read | Masked read |
 | Certificate issue/revoke | Issue/revoke | Issue | Read own/team | Read status | Read status |
 | Customers/contacts | Repair/CRUD | Fulfilment-context read | Own/team CRUD + dedupe search | Read | Masked read |
@@ -48,4 +51,7 @@ once sent for handoff, then controls sessions and participants through validated
 functions. Manager and Auditor are read-only and participant contact/employee fields
 are masked at the database listing boundary. Anonymous and inactive users have no
 business access. The UI mirrors these boundaries in Sales, Customers, My Work,
-Training Delivery, Participants, Overview, and Administration.
+Training Delivery, Participants, Overview, Administration, and the Administrator/Auditor-only Audit workspace.
+Sales can select published public inventory but cannot mutate delivery; Operations owns
+publication, schedule blocks, reservations/roster allocation, and Go/No-Go. A named
+Operations target (or Administrator override) is required to accept/return a handoff.

@@ -54,7 +54,101 @@ function refreshSession(sessionId?: string) {
   revalidatePath('/my-work')
   revalidatePath('/overview')
   revalidatePath('/certificates')
+  revalidatePath('/sales')
   if (sessionId) revalidatePath(`/training/sessions/${sessionId}`)
+}
+
+export async function createCatalogueSessionAction(formData: FormData) {
+  await requireDeliveryManager('/training')
+  const startsAt = manilaTimestamp(value(formData, 'starts_at'))
+  const endsAt = manilaTimestamp(value(formData, 'ends_at'))
+  const capacity = positiveInteger(value(formData, 'capacity'))
+  const minimum = positiveInteger(value(formData, 'minimum_participants'))
+  const offeringType = value(formData, 'offering_type')
+  if (!['public', 'internal'].includes(offeringType) || !startsAt || !endsAt || !capacity || !minimum || minimum > capacity) {
+    finish('/training', 'error', 'Choose a valid offering type, schedule, capacity, and minimum participant threshold.')
+  }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('create_catalogue_session', {
+    p_offering_type: offeringType,
+    p_course_id: value(formData, 'course_id'),
+    p_learning_type: value(formData, 'learning_type'),
+    p_trainer_id: value(formData, 'trainer_id'),
+    p_venue_id: value(formData, 'venue_id'),
+    p_room_id: optional(formData, 'room_id'),
+    p_starts_at: startsAt,
+    p_ends_at: endsAt,
+    p_capacity: capacity,
+    p_minimum_participants: minimum,
+    p_notes: optional(formData, 'notes'),
+  })
+  if (error || !data) finish('/training', 'error', databaseMessage(error))
+  refreshSession(String(data))
+  finish(`/training/sessions/${String(data)}`, 'message', 'Session created as draft inventory. Review its blocks and publish when ready.')
+}
+
+export async function addScheduleBlockAction(formData: FormData) {
+  const sessionId = value(formData, 'session_id')
+  const returnPath = `/training/sessions/${sessionId}`
+  await requireDeliveryManager(returnPath)
+  const startsAt = manilaTimestamp(value(formData, 'starts_at'))
+  const endsAt = manilaTimestamp(value(formData, 'ends_at'))
+  if (!startsAt || !endsAt) finish(returnPath, 'error', 'Enter a valid start and end for the schedule block.')
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('add_session_schedule_block', {
+    p_session_id: sessionId,
+    p_trainer_id: value(formData, 'trainer_id'),
+    p_venue_id: value(formData, 'venue_id'),
+    p_room_id: optional(formData, 'room_id'),
+    p_starts_at: startsAt,
+    p_ends_at: endsAt,
+  })
+  if (error) finish(returnPath, 'error', databaseMessage(error))
+  refreshSession(sessionId)
+  finish(returnPath, 'message', 'Schedule block added after trainer, room, and availability checks.')
+}
+
+export async function removeScheduleBlockAction(formData: FormData) {
+  const sessionId = value(formData, 'session_id')
+  const returnPath = `/training/sessions/${sessionId}`
+  await requireDeliveryManager(returnPath)
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('remove_session_schedule_block', {
+    p_session_id: sessionId,
+    p_block_id: value(formData, 'block_id'),
+    p_reason: value(formData, 'reason'),
+  })
+  if (error) finish(returnPath, 'error', databaseMessage(error))
+  refreshSession(sessionId)
+  finish(returnPath, 'message', 'Schedule block removed with an audit reason.')
+}
+
+export async function publishSessionAction(formData: FormData) {
+  const sessionId = value(formData, 'session_id')
+  const returnPath = `/training/sessions/${sessionId}`
+  await requireDeliveryManager(returnPath)
+  const publish = value(formData, 'publish') === 'true'
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('publish_session', { p_session_id: sessionId, p_publish: publish })
+  if (error) finish(returnPath, 'error', databaseMessage(error))
+  refreshSession(sessionId)
+  finish(returnPath, 'message', publish ? 'Public session is now available to Sales.' : 'Public session withdrawn from new quotation selection.')
+}
+
+export async function decideGoNoGoAction(formData: FormData) {
+  const sessionId = value(formData, 'session_id')
+  const returnPath = `/training/sessions/${sessionId}`
+  await requireDeliveryManager(returnPath)
+  const decision = value(formData, 'decision')
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('decide_session_go_no_go', {
+    p_session_id: sessionId,
+    p_decision: decision,
+    p_reason: optional(formData, 'reason'),
+  })
+  if (error) finish(returnPath, 'error', databaseMessage(error))
+  refreshSession(sessionId)
+  finish(returnPath, 'message', decision === 'go' ? 'Go decision recorded. Named registration and delivery can proceed.' : 'No-Go recorded; the session is closed and cancelled.')
 }
 
 export async function issueEligibleCertificatesAction(formData: FormData) {
@@ -109,13 +203,17 @@ export async function rescheduleSessionAction(formData: FormData) {
   const capacity = positiveInteger(value(formData, 'capacity'))
   if (!startsAt || !endsAt || !capacity) finish(returnPath, 'error', 'Schedule and positive capacity are required.')
   const supabase = await createClient()
-  const { error } = await supabase.rpc('reschedule_session', {
+  const minimum = positiveInteger(value(formData, 'minimum_participants'))
+  if (!minimum || minimum > capacity) finish(returnPath, 'error', 'Minimum participants must be between one and capacity.')
+  const { error } = await supabase.rpc('reschedule_session_v2', {
     p_session_id: sessionId,
     p_trainer_id: value(formData, 'trainer_id'),
     p_venue_id: value(formData, 'venue_id'),
+    p_room_id: optional(formData, 'room_id'),
     p_starts_at: startsAt,
     p_ends_at: endsAt,
     p_capacity: capacity,
+    p_minimum_participants: minimum,
     p_notes: optional(formData, 'notes'),
   })
   if (error) finish(returnPath, 'error', databaseMessage(error))
@@ -152,8 +250,10 @@ export async function registerParticipantAction(formData: FormData) {
   const fullName = value(formData, 'full_name')
   if (fullName.length < 2) finish(returnPath, 'error', 'Enter the participant’s full name.')
   const supabase = await createClient()
-  const { error } = await supabase.rpc('register_participant', {
+  const { error } = await supabase.rpc('register_participant_v2', {
     p_session_id: sessionId,
+    p_customer_id: optional(formData, 'customer_id'),
+    p_order_line_id: optional(formData, 'order_line_id'),
     p_full_name: fullName,
     p_email: optional(formData, 'email'),
     p_phone: optional(formData, 'phone'),

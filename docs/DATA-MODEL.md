@@ -2,9 +2,8 @@
 
 ## Target model
 
-The approved target is 17 public business tables. `auth.users` remains owned by
-Supabase and is not counted. Finance would add an eighteenth table only after the
-product owner confirms scope. Reports, work queues, notifications, preferences,
+The approved target is 21 business tables in the exposed `academy_v2` schema. `auth.users` remains owned by
+Supabase and is not counted. Reports, work queues, notifications, preferences,
 and attention are queries over source records, not stored copies.
 
 ```mermaid
@@ -19,6 +18,10 @@ erDiagram
   COURSES ||--o{ SESSIONS : scheduled
   TRAINERS o|--o{ SESSIONS : teaches
   VENUES o|--o{ SESSIONS : hosts
+  VENUES ||--o{ VENUE_ROOMS : contains
+  TRAINERS ||--o{ TRAINER_UNAVAILABILITY : blocks
+  SESSIONS ||--|{ SESSION_SCHEDULE_BLOCKS : schedules
+  VENUE_ROOMS o|--o{ SESSION_SCHEDULE_BLOCKS : reserves
   CUSTOMERS ||--o{ CONTACTS : has
   CUSTOMERS ||--o{ INQUIRIES : raises
   INQUIRIES o|--o{ QUOTATIONS : becomes
@@ -26,7 +29,9 @@ erDiagram
   CUSTOMERS ||--o{ ORDERS : places
   QUOTATIONS o|--o| ORDERS : converts
   ORDERS ||--o{ ORDER_LINES : contains
-  SESSIONS o|--o{ ORDER_LINES : fulfils
+  ORDER_LINES ||--o{ SESSION_RESERVATIONS : purchases
+  SESSIONS ||--o{ SESSION_RESERVATIONS : holds
+  SESSIONS o|--o{ ORDER_LINES : selected_or_fulfils
   SESSIONS ||--o{ PARTICIPANTS : enrolls
   ORDER_LINES o|--o{ PARTICIPANTS : sponsors
   PROFILES ||--o{ AUDIT_EVENTS : acts
@@ -44,7 +49,11 @@ erDiagram
 | `trainers` | Scheduling resource; Operations | Active/inactive | stable record; safe read, Ops/Admin write |
 | `trainer_courses` | Trainer competency; Operations | Active/inactive | unique trainer/course; qualification expiry optional |
 | `venues` | Physical/virtual location; Operations | Active/inactive | physical capacity positive; safe read, Ops/Admin write |
-| `sessions` | One accepted order-line delivery interval; Operations | Scheduled/Open/In progress/Completed/Cancelled | end after start; conflict/qualification/modality/capacity enforcement; scoped read, RPC-only writes |
+| `venue_rooms` | Bookable room within physical venue; Operations | Active/inactive | venue/name unique; positive capacity; forced RLS |
+| `trainer_unavailability` | Trainer blackout exception; Operations | Active/inactive | valid interval/reason; scheduling transaction checks overlap |
+| `sessions` | Public/private/internal delivery aggregate; Operations | Scheduled/Open/In progress/Completed/Cancelled plus publication and Go state | minimum ≤ capacity; scoped read; RPC-only lifecycle writes |
+| `session_schedule_blocks` | Dated trainer/venue/room reservations | Active while parent session is active | ordered blocks; qualification/blackout/resource conflict validation |
+| `session_reservations` | Commercial seats held by an order line | Confirmed/Partial/Waitlisted/Released | confirmed + waitlisted = requested unless released; one line/session |
 | `participants` | Roster, waitlist, transfer, attendance, assessment, certificate evidence; Operations | Registered/Waitlisted/Confirmed/Transferred/Cancelled/Completed/No show | unique session identity; atomic capacity promotion; masked oversight reads; RPC-only writes |
 | `customers` | Authoritative company record; Sales | Active/Archived/Merged | normalized identity search; own/team write; fulfilment-safe read |
 | `contacts` | Customer people; Sales | Active/inactive | belongs to one customer; contact method required when used |
@@ -63,7 +72,7 @@ archive, cancellation, soft removal, and audit replace destructive deletion.
 
 1. Customer → inquiry → quote → order lineage is retained without requiring every step.
 2. Quote/order lines retain course, description, modality, seats, currency, and price snapshots.
-3. An order can contain multiple course lines; each accepted order line produces one controlled session in v1.
+3. An order can contain multiple course lines; a line can reserve a public session or be fulfilled by a controlled private session.
 4. Responsibility is derived from handoff facts, not duplicated across assignments, tasks, and notifications.
 5. Attention reasons derive from dates, missing data, conflicts, capacity, and responsibility.
 6. Ordinary edits use `updated_at` for optimistic concurrency; handoff, conflict, capacity, and completion transactions lock/recheck.
@@ -78,6 +87,9 @@ archive, cancellation, soft removal, and audit replace destructive deletion.
 | `accept_order(order_id)` | Lock and transfer responsibility atomically |
 | `return_order(order_id, reason)` | Controlled regression with mandatory reason and audit |
 | `create_session(...)` / `reschedule_session(...)` | Recheck order lineage, qualification, modality, capacity, and conflicts atomically |
+| `create_catalogue_session(...)` / schedule-block commands | Create public/internal delivery and enforce per-block resource rules |
+| reservation allocation/rebalance helpers | Serialize commercial capacity, waitlist, transfer and release |
+| `publish_session(...)` / `decide_session_go_no_go(...)` | Centralize public inventory and minimum-pax decisions |
 | `transition_session(...)` | Enforce lifecycle and complete the order when all lines are delivered |
 | `register/transition/transfer_participant(...)` | Keep capacity, waitlist promotion, and transfer history transactional |
 | `record_participant_outcome(...)` | Update attendance, assessment, completion, and certificate eligibility together |
@@ -122,11 +134,11 @@ This inventory covers major tables found in the base schema and later migrations
 | `order_note` | Defer | One order notes field initially; table only if collaboration proves it |
 | `participant` | Recreate | `participants` with soft removal/attendance |
 | `salesperson` | Merge | `profiles` plus optional team scope |
-| `schedule` | Recreate | `sessions` |
+| `schedule` | Recreate | `sessions` + `session_schedule_blocks` |
 | `session_note` | Eliminate | Focused delivery notes on session |
 | `trainer` | Recreate | `trainers` |
 | `trainer_course` | Recreate | `trainer_courses` |
-| `trainer_availability` | Defer | Conflict checking covers v1 evidence |
+| `trainer_availability` | Recreate | `trainer_unavailability`, explicit blackout exceptions |
 | `session_trainer` | Merge | One trainer on `sessions`; co-trainer deferred |
 | `venue` | Recreate | `venues` |
 | `webshop_product` | Eliminate | No web shop integration |
@@ -154,4 +166,7 @@ tables (`customers`, `contacts`, `inquiries`, `quotations`, `quotation_lines`,
 `orders`, `order_lines`) together with their UI workflow, RLS, atomic transitions,
 and audit evidence. `0008_training_delivery_and_participants.sql` adds the final
 two approved v1 tables and their role-scoped workflow. The delivered schema is now
-the complete 17-table target; `0009` and `0010` add advisor and masking hardening.
+the original 17-table target; `0009` and `0010` add advisor and masking hardening.
+`20260830195609_v2_5_integrated_rollout.sql` adds the four focused convergence
+tables, backfills existing private delivery, and safely seeds public/block examples,
+bringing the authoritative v2 model to 21 business tables.

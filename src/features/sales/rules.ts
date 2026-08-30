@@ -18,6 +18,6 @@ export function isOverdueInquiry(inquiry: Inquiry, today: string): boolean {
   )
 }
 
-export function displayNumber(prefix: 'INQ' | 'Q' | 'ORD', value: number): string {
+export function displayNumber(prefix: 'INQ' | 'Q' | 'ORD' | 'SES', value: number): string {
   return `${prefix}-${String(value).padStart(5, '0')}`
 }

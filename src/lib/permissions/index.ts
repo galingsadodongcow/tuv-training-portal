@@ -1,6 +1,6 @@
 import type { Profile, Role } from '@/types/auth'
 
-export type WorkArea = 'administration' | 'my-work' | 'sales' | 'customers' | 'training' | 'participants' | 'overview'
+export type WorkArea = 'administration' | 'my-work' | 'sales' | 'customers' | 'training' | 'participants' | 'overview' | 'audit'
 
 export interface NavigationItem {
   href: `/${string}`
@@ -23,6 +23,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: '/sales', label: 'Sales', area: 'sales' },
     { href: '/customers', label: 'Customers', area: 'customers' },
     { href: '/overview', label: 'Reports', area: 'overview' },
+    { href: '/audit', label: 'Audit trail', area: 'audit' },
   ],
   operations: [
     { href: '/my-work', label: 'My Work', area: 'my-work' },
@@ -45,7 +46,8 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: '/participants', label: 'Participants & certificates', area: 'participants' },
   ],
   auditor: [
-    { href: '/overview', label: 'Audit & reports', area: 'overview' },
+    { href: '/overview', label: 'Reports', area: 'overview' },
+    { href: '/audit', label: 'Audit trail', area: 'audit' },
     { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants & certificates', area: 'participants' },
   ],
@@ -106,6 +108,10 @@ export function canApproveDiscount(profile: Profile): boolean {
 
 export function canViewOverview(role: Role): boolean {
   return role === 'administrator' || role === 'manager' || role === 'auditor'
+}
+
+export function canViewAudit(role: Role): boolean {
+  return role === 'administrator' || role === 'auditor'
 }
 
 export function canViewReporting(profile: Profile): boolean {

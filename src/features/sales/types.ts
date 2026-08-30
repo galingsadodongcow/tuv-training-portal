@@ -3,6 +3,7 @@ export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expi
 export type ApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected'
 export type OrderStatus = 'draft' | 'pending_operations' | 'returned' | 'with_operations' | 'fulfillment' | 'completed' | 'cancelled'
 export type LearningType = 'classroom' | 'virtual' | 'onsite'
+export type DeliveryIntent = 'existing_session' | 'private_session' | 'operations_to_assign'
 
 export interface Customer {
   id: string
@@ -63,6 +64,8 @@ export interface QuotationLine {
   participant_count: number
   unit_price: number
   currency: string
+  delivery_intent: DeliveryIntent
+  session_id: string | null
 }
 
 export interface SalesOrder {
@@ -74,6 +77,7 @@ export interface SalesOrder {
   contact_id: string | null
   sales_owner_id: string
   operations_owner_id: string | null
+  operations_target_id: string | null
   status: OrderStatus
   requested_start_date: string | null
   delivery_notes: string | null
@@ -91,6 +95,31 @@ export interface OrderLine {
   participant_count: number
   unit_price: number
   currency: string
+  delivery_intent: DeliveryIntent
+  session_id: string | null
+}
+
+export interface PublicSessionOption {
+  id: string
+  session_number: number
+  course_id: string
+  learning_type: LearningType
+  starts_at: string
+  capacity: number
+  minimum_participants: number
+  status: string
+  offering_type: 'public' | 'private' | 'internal'
+  publication_status: 'draft' | 'published' | 'closed'
+}
+
+export interface CommercialReservation {
+  id: string
+  session_id: string
+  order_line_id: string
+  requested_seats: number
+  confirmed_seats: number
+  waitlisted_seats: number
+  status: 'confirmed' | 'partial' | 'waitlisted' | 'released'
 }
 
 export interface CommercialProfile {
@@ -124,4 +153,6 @@ export interface CommercialWorkspace {
   profiles: CommercialProfile[]
   courses: CourseOption[]
   prices: PriceOption[]
+  sessions: PublicSessionOption[]
+  reservations: CommercialReservation[]
 }

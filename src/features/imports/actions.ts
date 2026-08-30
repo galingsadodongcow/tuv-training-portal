@@ -20,6 +20,8 @@ export async function participantImportAction(_state: ParticipantImportState, fo
   const sessionId = String(formData.get('session_id') ?? '')
   const csv = String(formData.get('csv') ?? '')
   const intent = String(formData.get('intent') ?? 'preview')
+  const orderLineId = String(formData.get('order_line_id') ?? '') || null
+  const customerId = String(formData.get('customer_id') ?? '') || null
   const profile = await getCurrentProfile()
   if (!profile?.is_active || !canManageDelivery(profile.role)) return { status: 'error', message: 'Operations access is required.', rows: [], fileErrors: [] }
   const workspace = await getDeliveryWorkspace()
@@ -46,8 +48,10 @@ export async function participantImportAction(_state: ParticipantImportState, fo
   const supabase = await createClient()
   let imported = 0
   for (const row of result.rows) {
-    const { error } = await supabase.rpc('register_participant', {
+    const { error } = await supabase.rpc('register_participant_v2', {
       p_session_id: sessionId,
+      p_customer_id: customerId,
+      p_order_line_id: orderLineId ?? session.order_line_id,
       p_full_name: row.full_name,
       p_email: row.email || null,
       p_phone: row.phone || null,

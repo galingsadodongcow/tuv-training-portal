@@ -1,6 +1,9 @@
 import type { LearningType } from '@/features/training/types'
 
 export type SessionStatus = 'scheduled' | 'open' | 'in_progress' | 'completed' | 'cancelled'
+export type OfferingType = 'public' | 'private' | 'internal'
+export type PublicationStatus = 'draft' | 'published' | 'closed'
+export type GoStatus = 'pending' | 'go' | 'no_go'
 export type ParticipantStatus = 'registered' | 'waitlisted' | 'confirmed' | 'transferred' | 'cancelled' | 'completed' | 'no_show'
 export type AttendanceStatus = 'pending' | 'present' | 'partial' | 'absent'
 export type AssessmentStatus = 'not_required' | 'pending' | 'passed' | 'failed'
@@ -9,18 +12,26 @@ export type CertificateStatus = 'not_eligible' | 'eligible' | 'issued' | 'revoke
 export interface DeliverySession {
   id: string
   session_number: number
-  order_id: string
-  order_line_id: string
+  order_id: string | null
+  order_line_id: string | null
   course_id: string
   learning_type: LearningType
   trainer_id: string
   venue_id: string
+  room_id: string | null
   operations_owner_id: string
   status: SessionStatus
   starts_at: string
   ends_at: string
   timezone: string
   capacity: number
+  minimum_participants: number
+  offering_type: OfferingType
+  publication_status: PublicationStatus
+  go_status: GoStatus
+  go_decided_by: string | null
+  go_decided_at: string | null
+  go_reason: string | null
   notes: string | null
   cancellation_reason: string | null
   created_at: string
@@ -31,6 +42,7 @@ export interface Participant {
   participant_number: number
   session_id: string
   customer_id: string
+  order_line_id: string | null
   full_name: string
   email: string | null
   phone: string | null
@@ -53,6 +65,7 @@ export interface DeliveryOrder {
   customer_id: string
   sales_owner_id: string
   operations_owner_id: string | null
+  operations_target_id: string | null
   status: string
   requested_start_date: string | null
 }
@@ -63,14 +76,18 @@ export interface DeliveryOrderLine {
   course_id: string
   learning_type: LearningType
   participant_count: number
+  delivery_intent: 'existing_session' | 'private_session' | 'operations_to_assign'
+  session_id: string | null
 }
 
 export interface DeliveryCourse {
   id: string
+  category_id: string
   code: string
   title: string
   duration_minutes: number
   default_capacity: number
+  default_min_participants: number
 }
 
 export interface DeliveryTrainer {
@@ -95,6 +112,42 @@ export interface DeliveryVenue {
   is_active: boolean
 }
 
+export interface DeliveryRoom {
+  id: string
+  venue_id: string
+  name: string
+  capacity: number
+  equipment: string | null
+  is_active: boolean
+}
+
+export interface DeliveryScheduleBlock {
+  id: string
+  session_id: string
+  block_number: number
+  trainer_id: string
+  venue_id: string
+  room_id: string | null
+  starts_at: string
+  ends_at: string
+}
+
+export interface SessionReservation {
+  id: string
+  session_id: string
+  order_line_id: string
+  requested_seats: number
+  confirmed_seats: number
+  waitlisted_seats: number
+  status: 'confirmed' | 'partial' | 'waitlisted' | 'released'
+}
+
+export interface DeliveryCategory {
+  id: string
+  parent_id: string | null
+  name: string
+}
+
 export interface DeliveryCustomer {
   id: string
   name: string
@@ -116,4 +169,8 @@ export interface DeliveryWorkspace {
   venues: DeliveryVenue[]
   customers: DeliveryCustomer[]
   profiles: DeliveryProfile[]
+  rooms: DeliveryRoom[]
+  scheduleBlocks: DeliveryScheduleBlock[]
+  reservations: SessionReservation[]
+  categories: DeliveryCategory[]
 }

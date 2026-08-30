@@ -32,7 +32,8 @@ async function requireCommercialWriter(returnPath: string) {
   return profile
 }
 
-function databaseMessage(code?: string): string {
+function databaseMessage(code?: string, message?: string): string {
+  if (['23514', '23P01', 'P0002'].includes(code ?? '') && message) return message.split('\n')[0]
   if (code === '23505') return 'A matching record already exists. Search before creating another.'
   if (code === '23503') return 'A selected customer, contact, course, or owner is no longer available.'
   if (code === '23514') return 'The requested change does not meet the workflow requirements.'
@@ -135,8 +136,14 @@ export async function addQuotationLineAction(formData: FormData) {
   await requireCommercialWriter(returnPath)
   const participantCount = positiveInteger(value(formData, 'participant_count'))
   const unitPrice = Number(value(formData, 'unit_price'))
+  const deliveryIntent = value(formData, 'delivery_intent')
+  const sessionId = optional(formData, 'session_id')
   if (!participantCount || !Number.isFinite(unitPrice) || unitPrice < 0) {
     finish(returnPath, 'error', 'Participants must be positive and unit price cannot be negative.')
+  }
+  if (!['existing_session', 'private_session', 'operations_to_assign'].includes(deliveryIntent)
+    || (deliveryIntent === 'existing_session' && !sessionId)) {
+    finish(returnPath, 'error', 'Choose how this line will be delivered and select a public session when required.')
   }
   const supabase = await createClient()
   const { error } = await supabase.from('quotation_lines').insert({
@@ -146,8 +153,10 @@ export async function addQuotationLineAction(formData: FormData) {
     participant_count: participantCount,
     unit_price: unitPrice,
     currency: value(formData, 'currency').toUpperCase() || 'PHP',
+    delivery_intent: deliveryIntent,
+    session_id: deliveryIntent === 'existing_session' ? sessionId : null,
   })
-  if (error) finish(returnPath, 'error', databaseMessage(error.code))
+  if (error) finish(returnPath, 'error', databaseMessage(error.code, error.message))
   revalidatePath(returnPath)
   finish(returnPath, 'message', 'Quotation line added.')
 }
@@ -214,12 +223,15 @@ export async function prepareOrderAction(formData: FormData) {
   const returnPath = `/sales/orders/${orderId}`
   await requireCommercialWriter(returnPath)
   const supabase = await createClient()
-  const { error } = await supabase.rpc('prepare_order', {
+  const operationsTargetId = value(formData, 'operations_target_id')
+  if (!operationsTargetId) finish(returnPath, 'error', 'Choose the Operations owner who should receive this handoff.')
+  const { error } = await supabase.rpc('prepare_order_v2', {
     p_order_id: orderId,
     p_requested_start_date: value(formData, 'requested_start_date'),
     p_delivery_notes: value(formData, 'delivery_notes'),
+    p_operations_target_id: operationsTargetId,
   })
-  if (error) finish(returnPath, 'error', databaseMessage(error.code))
+  if (error) finish(returnPath, 'error', databaseMessage(error.code, error.message))
   revalidatePath(returnPath)
   finish(returnPath, 'message', 'Order preparation details saved.')
 }
@@ -234,6 +246,9 @@ export async function transitionOrderAction(formData: FormData) {
   const operationsAction = ['accept', 'return', 'start', 'complete'].includes(action)
   if (salesAction && !canWriteSales(profile)) finish(returnPath, 'error', 'Sales access is required.')
   if (operationsAction && !['administrator', 'operations'].includes(profile.role)) finish(returnPath, 'error', 'Operations access is required.')
+  if (action === 'cancel' && !(canWriteSales(profile) || ['administrator', 'operations'].includes(profile.role))) {
+    finish(returnPath, 'error', 'Sales or Operations access is required to cancel this order.')
+  }
 
   const supabase = await createClient()
   const { error } = await supabase.rpc('transition_order', {
@@ -241,7 +256,7 @@ export async function transitionOrderAction(formData: FormData) {
     p_action: action,
     p_reason: optional(formData, 'reason'),
   })
-  if (error) finish(returnPath, 'error', databaseMessage(error.code))
+  if (error) finish(returnPath, 'error', databaseMessage(error.code, error.message))
   revalidatePath('/sales')
   revalidatePath('/my-work')
   revalidatePath(returnPath)
@@ -251,6 +266,7 @@ export async function transitionOrderAction(formData: FormData) {
     return: 'Order returned to Sales for correction.',
     start: 'Fulfillment started.',
     complete: 'Order marked completed.',
+    cancel: 'Order cancelled and its public-session reservations released.',
   }
   finish(returnPath, 'message', messages[action] ?? 'Order updated.')
 }

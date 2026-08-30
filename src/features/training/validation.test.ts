@@ -12,7 +12,7 @@ describe('training validation', () => {
     const result = parseCourse(form({ category_id: 'cat', code: ' iso-9001 ', title: 'Lead Auditor', duration_hours: '8', default_capacity: '20' }))
     expect(result).toEqual({
       ok: true,
-      value: { category_id: 'cat', code: 'ISO-9001', title: 'Lead Auditor', duration_minutes: 480, default_capacity: 20 },
+      value: { category_id: 'cat', code: 'ISO-9001', title: 'Lead Auditor', duration_minutes: 480, default_capacity: 20, default_min_participants: 8 },
     })
   })
 
@@ -31,4 +31,3 @@ describe('training validation', () => {
     expect(parseVenue(form({ name: 'Room A', venue_type: 'physical', capacity: '' })).ok).toBe(false)
   })
 })
-

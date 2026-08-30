@@ -23,6 +23,12 @@ export function AppShell({
           <span className="brand-mark">AP</span>
           <span>Academy Portal</span>
         </Link>
+        <details className="mobile-navigation">
+          <summary aria-label="Open navigation">Menu</summary>
+          <nav aria-label="Mobile primary navigation">
+            {navigation.map((item) => <Link key={item.href} className={`nav-link${active === item.area ? ' nav-link-active' : ''}`} href={item.href}>{item.label}</Link>)}
+          </nav>
+        </details>
         <div className="topbar-user">
           <span>{profile.full_name}</span>
           <span className="role-label">{authorityLabel}</span>

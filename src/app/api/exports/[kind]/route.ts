@@ -1,5 +1,5 @@
 import { getDeliveryWorkspace } from '@/features/delivery/queries'
-import { displayParticipantNumber, displaySessionNumber } from '@/features/delivery/rules'
+import { displayParticipantNumber, displaySessionNumber, sessionSeatSummary } from '@/features/delivery/rules'
 import { toCsv } from '@/features/exports/csv'
 import { getCurrentProfile } from '@/lib/auth/profile'
 import { canViewDelivery } from '@/lib/permissions'
@@ -35,10 +35,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     return download(toCsv(workspace.sessions, [
       { header: 'Session number', value: (row) => displaySessionNumber(row.session_number) },
       { header: 'Course', value: (row) => `${courses.get(row.course_id)?.code ?? ''} ${courses.get(row.course_id)?.title ?? ''}`.trim() },
-      { header: 'Customer', value: (row) => customers.get(orders.get(row.order_id)?.customer_id ?? '')?.name },
-      { header: 'Trainer', value: (row) => trainers.get(row.trainer_id)?.name }, { header: 'Status', value: (row) => row.status },
+      { header: 'Customer', value: (row) => row.order_id ? customers.get(orders.get(row.order_id)?.customer_id ?? '')?.name : row.offering_type === 'public' ? 'Public inventory' : 'Internal delivery' },
+      { header: 'Trainer', value: (row) => trainers.get(row.trainer_id)?.name }, { header: 'Offering', value: (row) => row.offering_type },
+      { header: 'Publication', value: (row) => row.publication_status }, { header: 'Go / No-Go', value: (row) => row.go_status },
+      { header: 'Status', value: (row) => row.status },
       { header: 'Starts at', value: (row) => row.starts_at }, { header: 'Ends at', value: (row) => row.ends_at },
-      { header: 'Capacity', value: (row) => row.capacity }, { header: 'Registered', value: (row) => workspace.participants.filter((item) => item.session_id === row.id && !['cancelled', 'transferred'].includes(item.status)).length },
+      { header: 'Minimum participants', value: (row) => row.minimum_participants }, { header: 'Capacity', value: (row) => row.capacity },
+      { header: 'Confirmed seats', value: (row) => sessionSeatSummary(row, workspace.participants, workspace.reservations).occupied },
+      { header: 'Waitlisted seats', value: (row) => sessionSeatSummary(row, workspace.participants, workspace.reservations).waitlisted },
+      { header: 'Named participants', value: (row) => workspace.participants.filter((item) => item.session_id === row.id && !['cancelled', 'transferred'].includes(item.status)).length },
     ]), 'training-sessions.csv')
   }
   if (kind === 'certificates') {

@@ -1,8 +1,10 @@
 node_modules/
 .pnpm-store/
 .next/
+.vinext/
 dist/
 .wrangler/
+supabase/.temp/
 coverage/
 playwright-report/
 test-results/

@@ -22,6 +22,7 @@ export function parseCourse(formData: FormData): ValidationResult<{
   title: string
   duration_minutes: number
   default_capacity: number
+  default_min_participants: number
 }> {
   const category_id = text(formData.get('category_id'))
   const code = text(formData.get('code')).toUpperCase()
@@ -33,7 +34,11 @@ export function parseCourse(formData: FormData): ValidationResult<{
   if (title.length < 3 || title.length > 160) return { ok: false, message: 'Course title must be 3–160 characters.' }
   if (!Number.isFinite(hours) || hours < 0.5 || hours > 1000) return { ok: false, message: 'Duration must be between 0.5 and 1,000 hours.' }
   if (!capacity.ok) return capacity
-  return { ok: true, value: { category_id, code, title, duration_minutes: Math.round(hours * 60), default_capacity: capacity.value } }
+  const minimumText = text(formData.get('default_min_participants'))
+  const minimum = minimumText ? positiveInteger(minimumText, 'Default minimum participants') : { ok: true as const, value: Math.min(8, capacity.value) }
+  if (!minimum.ok) return minimum
+  if (minimum.value > capacity.value) return { ok: false, message: 'Default minimum participants cannot exceed capacity.' }
+  return { ok: true, value: { category_id, code, title, duration_minutes: Math.round(hours * 60), default_capacity: capacity.value, default_min_participants: minimum.value } }
 }
 
 export function parsePrice(formData: FormData): ValidationResult<{
@@ -85,4 +90,3 @@ export function parseVenue(formData: FormData): ValidationResult<{
   if (!capacity.ok) return capacity
   return { ok: true, value: { name, venue_type: venueType, capacity: capacity.value, address } }
 }
-

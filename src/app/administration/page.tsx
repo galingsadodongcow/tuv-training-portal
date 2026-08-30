@@ -11,7 +11,9 @@ import {
   createCourseAction,
   createPriceAction,
   createQualificationAction,
+  createRoomAction,
   createTrainerAction,
+  createTrainerUnavailabilityAction,
   createVenueAction,
   setActiveAction,
 } from '@/features/training/actions'
@@ -85,7 +87,9 @@ export default async function AdministrationPage({
         <a href="#categories">Categories</a>
         <a href="#courses">Courses & prices</a>
         <a href="#trainers">Trainers</a>
+        <a href="#availability">Availability</a>
         <a href="#venues">Venues</a>
+        <a href="#rooms">Rooms</a>
         {profile.role === 'administrator' ? <a href="#users">Users & roles</a> : null}
         {profile.role === 'administrator' ? <Link href="/administration/role-preview">Role preview</Link> : null}
       </nav>
@@ -130,7 +134,7 @@ export default async function AdministrationPage({
         <div className="table-wrap">
           {catalogue.courses.length === 0 ? <EmptyState>No courses yet. Create a category first, then add a course.</EmptyState> : (
             <table>
-              <thead><tr><th>Course</th><th>Category</th><th>Duration</th><th>Capacity</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th>Course</th><th>Category</th><th>Duration</th><th>Capacity</th><th>Minimum</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {catalogue.courses.map((course) => (
                   <tr key={course.id}>
@@ -138,6 +142,7 @@ export default async function AdministrationPage({
                     <td>{categoryName.get(course.category_id) ?? '—'}</td>
                     <td>{course.duration_minutes / 60}h</td>
                     <td>{course.default_capacity}</td>
+                    <td>{course.default_min_participants}</td>
                     <td><StatusBadge active={course.is_active} /></td>
                     <td className="cell-action"><ActiveToggle entity="courses" id={course.id} active={course.is_active} /></td>
                   </tr>
@@ -156,6 +161,7 @@ export default async function AdministrationPage({
               <label className="field field-wide"><span>Title</span><input name="title" maxLength={160} required /></label>
               <label className="field"><span>Duration (hours)</span><input name="duration_hours" type="number" min="0.5" max="1000" step="0.5" defaultValue="8" required /></label>
               <label className="field"><span>Default capacity</span><input name="default_capacity" type="number" min="1" step="1" defaultValue="20" required /></label>
+              <label className="field"><span>Default minimum participants</span><input name="default_min_participants" type="number" min="1" step="1" defaultValue="8" required /></label>
             </div>
             <Button type="submit" disabled={activeCategories.length === 0}>Create course</Button>
           </form>
@@ -189,6 +195,30 @@ export default async function AdministrationPage({
               ))}</tbody>
             </table>
           )}
+        </div>
+      </section>
+
+      <section className="workspace-section" aria-labelledby="availability">
+        <SectionHeader id="availability" title="Trainer availability" description="Unavailable periods are checked transactionally against every new schedule block." />
+        <div className="split-layout">
+          <div className="table-wrap">
+            {catalogue.trainerUnavailability.length === 0 ? <EmptyState>No trainer unavailability has been recorded.</EmptyState> : (
+              <table><thead><tr><th>Trainer</th><th>From</th><th>To</th><th>Reason</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
+                {catalogue.trainerUnavailability.map((item) => {
+                  const trainer = catalogue.trainers.find((candidate) => candidate.id === item.trainer_id)
+                  return <tr key={item.id}><td className="cell-strong">{trainer?.name ?? 'Trainer unavailable'}</td><td>{new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' }).format(new Date(item.starts_at))}</td><td>{new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' }).format(new Date(item.ends_at))}</td><td>{item.reason}</td><td><StatusBadge active={item.is_active} /></td><td className="cell-action"><ActiveToggle entity="trainer_unavailability" id={item.id} active={item.is_active} /></td></tr>
+                })}
+              </tbody></table>
+            )}
+          </div>
+          <form action={createTrainerUnavailabilityAction} className="side-form">
+            <h3>Block trainer time</h3>
+            <label className="field"><span>Trainer</span><select name="trainer_id" required defaultValue=""><option value="" disabled>Choose trainer</option>{activeTrainers.map((trainer) => <option value={trainer.id} key={trainer.id}>{trainer.name}</option>)}</select></label>
+            <label className="field"><span>Starts (Manila)</span><input name="starts_at" type="datetime-local" required /></label>
+            <label className="field"><span>Ends (Manila)</span><input name="ends_at" type="datetime-local" required /></label>
+            <label className="field"><span>Reason</span><input name="reason" minLength={3} maxLength={300} required /></label>
+            <Button type="submit">Record unavailability</Button>
+          </form>
         </div>
       </section>
 
@@ -259,6 +289,27 @@ export default async function AdministrationPage({
               <label className="field"><span>Address or joining reference</span><textarea name="address" rows={3} maxLength={500} /></label>
             </details>
             <Button type="submit">Create venue</Button>
+          </form>
+        </div>
+      </section>
+
+      <section className="workspace-section" aria-labelledby="rooms">
+        <SectionHeader id="rooms" title="Venue rooms" description="Different rooms may run concurrently; venue-wide bookings still block the entire venue." />
+        <div className="split-layout">
+          <div className="table-wrap">
+            {catalogue.rooms.length === 0 ? <EmptyState>No rooms are configured.</EmptyState> : (
+              <table><thead><tr><th>Venue</th><th>Room</th><th>Capacity</th><th>Equipment</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
+                {catalogue.rooms.map((room) => <tr key={room.id}><td>{catalogue.venues.find((venue) => venue.id === room.venue_id)?.name ?? '—'}</td><td className="cell-strong">{room.name}</td><td>{room.capacity}</td><td>{room.equipment ?? '—'}</td><td><StatusBadge active={room.is_active} /></td><td className="cell-action"><ActiveToggle entity="venue_rooms" id={room.id} active={room.is_active} /></td></tr>)}
+              </tbody></table>
+            )}
+          </div>
+          <form action={createRoomAction} className="side-form">
+            <h3>New room</h3>
+            <label className="field"><span>Physical venue</span><select name="venue_id" required defaultValue=""><option value="" disabled>Choose venue</option>{catalogue.venues.filter((venue) => venue.is_active && venue.venue_type === 'physical').map((venue) => <option value={venue.id} key={venue.id}>{venue.name}</option>)}</select></label>
+            <label className="field"><span>Room name</span><input name="name" maxLength={120} required /></label>
+            <label className="field"><span>Capacity</span><input name="capacity" type="number" min="1" step="1" required /></label>
+            <label className="field"><span>Equipment <small>optional</small></span><textarea name="equipment" rows={3} maxLength={1000} /></label>
+            <Button type="submit">Create room</Button>
           </form>
         </div>
       </section>

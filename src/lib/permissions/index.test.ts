@@ -9,6 +9,7 @@ import {
   canViewDelivery,
   canViewSales,
   canViewReporting,
+  canViewAudit,
   homePath,
   navigationForProfile,
   navigationForRole,
@@ -46,6 +47,10 @@ describe('permissions', () => {
     expect(canViewDelivery('auditor')).toBe(true)
     expect(canManageDelivery('operations')).toBe(true)
     expect(canManageDelivery('sales')).toBe(false)
+    expect(canViewAudit('administrator')).toBe(true)
+    expect(canViewAudit('auditor')).toBe(true)
+    expect(canViewAudit('manager')).toBe(false)
+    expect(navigationForRole('auditor').map((item) => item.href)).toContain('/audit')
   })
 
   it('models Sales Supervisor as a scope rather than a sixth role', () => {

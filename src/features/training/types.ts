@@ -15,6 +15,7 @@ export interface Course {
   title: string
   duration_minutes: number
   default_capacity: number
+  default_min_participants: number
   is_active: boolean
 }
 
@@ -50,6 +51,24 @@ export interface Venue {
   is_active: boolean
 }
 
+export interface VenueRoom {
+  id: string
+  venue_id: string
+  name: string
+  capacity: number
+  equipment: string | null
+  is_active: boolean
+}
+
+export interface TrainerUnavailability {
+  id: string
+  trainer_id: string
+  starts_at: string
+  ends_at: string
+  reason: string
+  is_active: boolean
+}
+
 export interface TrainingCatalogue {
   categories: Category[]
   courses: Course[]
@@ -57,5 +76,6 @@ export interface TrainingCatalogue {
   trainers: Trainer[]
   trainerCourses: TrainerCourse[]
   venues: Venue[]
+  rooms: VenueRoom[]
+  trainerUnavailability: TrainerUnavailability[]
 }
-

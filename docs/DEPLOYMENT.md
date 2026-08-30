@@ -21,9 +21,10 @@ secret key in the Next.js application.
 1. Confirm a current backup and verify that `academy_v2` and
    `academy_v2_private` do not already exist.
 2. In **Integrations > Data API**, add `academy_v2` to **Exposed schemas**.
-3. Apply `supabase/migrations/0001_initial_schema.sql` through the reviewed
-   migration workflow. It creates only `academy_v2` and `academy_v2_private`
-   objects and does not modify legacy `public` tables.
+3. Apply every reviewed file in `supabase/migrations/` in filename order. The
+   v2.5 convergence migration is `20260830195609_v2_5_integrated_rollout.sql`.
+   These migrations create/alter only `academy_v2` and `academy_v2_private`
+   application objects and do not make legacy `public` tables authoritative.
 4. Create the first Auth user in Supabase Auth. New users receive an inactive
    Sales profile and therefore no business access by default.
 5. Bootstrap the first administrator once from the SQL editor:

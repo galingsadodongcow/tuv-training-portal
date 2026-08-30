@@ -33,7 +33,7 @@ export default async function ParticipantsPage({
 
   return (
     <AppShell profile={profile} active="participants">
-      <div className="page-heading"><div><p className="eyebrow">Participant operations</p><h1>Participant registry</h1><p>{canManageDelivery(profile.role) ? 'Search every visible registration, then open its session to manage confirmation, waitlists, transfer, outcomes, and certificates.' : 'Read-only participant evidence is limited by your delivery access.'}</p></div><div className="heading-actions"><Link className="button button-secondary" href="/certificates">Certificate register</Link><a className="button button-secondary" href="/api/exports/participants">Export CSV</a><div className="summary-chip">{workspace.participants.length} records</div></div></div>
+      <div className="page-heading"><div><p className="eyebrow">Participant operations</p><h1>Participant registry</h1><p>{canManageDelivery(profile.role) ? 'Search every visible registration, then open its session to manage confirmation, waitlists, transfer, outcomes, and certificates.' : 'Read-only participant evidence is limited by your delivery access.'}</p></div><div className="heading-actions"><Link className="button button-secondary" href="/certificates">Certificate register</Link><Link prefetch={false} className="button button-secondary" href="/api/exports/participants">Export CSV</Link><div className="summary-chip">{workspace.participants.length} records</div></div></div>
       <section className="metric-grid" aria-label="Participant summary">
         <MetricCard label="Active seats" value={active} detail="Registered or confirmed" />
         <MetricCard label="Waitlisted" value={waitlisted} detail="Awaiting a released seat" />

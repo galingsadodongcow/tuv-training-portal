@@ -15,7 +15,7 @@ import {
   type ValidationResult,
 } from './validation'
 
-type Entity = 'categories' | 'courses' | 'course_prices' | 'trainers' | 'trainer_courses' | 'venues'
+type Entity = 'categories' | 'courses' | 'course_prices' | 'trainers' | 'trainer_courses' | 'venues' | 'venue_rooms' | 'trainer_unavailability'
 
 function finish(kind: 'message' | 'error', message: string): never {
   redirect(`/administration?${kind}=${encodeURIComponent(message)}`)
@@ -71,12 +71,43 @@ export async function createVenueAction(formData: FormData) {
   await insert('venues', valid(parseVenue(formData)), 'Venue created.')
 }
 
+export async function createRoomAction(formData: FormData) {
+  const venueId = String(formData.get('venue_id') ?? '').trim()
+  const name = String(formData.get('name') ?? '').trim()
+  const capacity = Number(formData.get('capacity'))
+  const equipment = String(formData.get('equipment') ?? '').trim() || null
+  if (!venueId || name.length < 1 || name.length > 120 || !Number.isInteger(capacity) || capacity <= 0) {
+    finish('error', 'Choose a venue and enter a room name and positive whole-number capacity.')
+  }
+  await insert('venue_rooms', { venue_id: venueId, name, capacity, equipment }, 'Venue room created.')
+}
+
+export async function createTrainerUnavailabilityAction(formData: FormData) {
+  await requireWriter()
+  const profile = await getCurrentProfile()
+  const trainerId = String(formData.get('trainer_id') ?? '').trim()
+  const starts = String(formData.get('starts_at') ?? '').trim()
+  const ends = String(formData.get('ends_at') ?? '').trim()
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!profile || !trainerId || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(starts)
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(ends) || reason.length < 3) {
+    finish('error', 'Trainer, start, end, and a short unavailability reason are required.')
+  }
+  await insert('trainer_unavailability', {
+    trainer_id: trainerId,
+    starts_at: `${starts}:00+08:00`,
+    ends_at: `${ends}:00+08:00`,
+    reason,
+    created_by: profile.id,
+  }, 'Trainer unavailability recorded and conflict checks updated.')
+}
+
 export async function setActiveAction(formData: FormData) {
   await requireWriter()
   const entity = String(formData.get('entity') ?? '') as Entity
   const id = String(formData.get('id') ?? '')
   const isActive = String(formData.get('is_active')) === 'true'
-  const allowed: Entity[] = ['categories', 'courses', 'course_prices', 'trainers', 'trainer_courses', 'venues']
+  const allowed: Entity[] = ['categories', 'courses', 'course_prices', 'trainers', 'trainer_courses', 'venues', 'venue_rooms', 'trainer_unavailability']
   if (!allowed.includes(entity) || !id) finish('error', 'The requested record is invalid.')
 
   const supabase = await createClient()
@@ -85,4 +116,3 @@ export async function setActiveAction(formData: FormData) {
   revalidatePath('/administration')
   finish('message', isActive ? 'Record activated.' : 'Record deactivated.')
 }
-

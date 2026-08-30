@@ -70,7 +70,7 @@ export function buildManagementReport(
   const orderIdsForCourse = new Set(commercialOrderLines.filter((line) => !filters.courseId || line.course_id === filters.courseId).map((line) => line.order_id))
 
   const sessions = delivery.sessions.filter((session) => {
-    const order = deliveryOrder.get(session.order_id)
+    const order = session.order_id ? deliveryOrder.get(session.order_id) : undefined
     return inDateRange(sessionDateKey(session), filters.from, filters.to)
       && (!filters.customerId || order?.customer_id === filters.customerId)
       && (!filters.courseId || session.course_id === filters.courseId)
@@ -78,7 +78,7 @@ export function buildManagementReport(
       && (!filters.venueId || session.venue_id === filters.venueId)
   })
   const sessionIds = new Set(sessions.map((session) => session.id))
-  const linkedOrderIds = new Set(sessions.map((session) => session.order_id))
+  const linkedOrderIds = new Set(sessions.map((session) => session.order_id).filter((id): id is string => Boolean(id)))
   const participants = delivery.participants.filter((participant) => sessionIds.has(participant.session_id))
 
   const orders = commercial.orders.filter((order) => {

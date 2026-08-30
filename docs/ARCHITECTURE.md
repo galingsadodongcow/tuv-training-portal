@@ -21,7 +21,7 @@ to remove controls the user cannot use.
 ## Final navigation and routes
 
 Primary navigation is role-specific across My Work, Training Delivery,
-Participants, Sales, Customers, Administration, and Overview.
+Participants, Sales, Customers, Administration, Overview, and the scoped Audit workspace.
 
 Target authenticated route budget:
 
@@ -38,6 +38,7 @@ Target authenticated route budget:
 | `/customers` | Search/list/create |
 | `/customers/[id]` | Customer 360 |
 | `/administration` | Catalogue, trainers, venues, access |
+| `/audit` | Administrator/Auditor immutable event review |
 
 `/login` is public and `/` is role-aware. There are no compatibility routes.
 
@@ -46,8 +47,8 @@ Target authenticated route budget:
 | Feature | Owns | References |
 |---|---|---|
 | auth/access | profiles, roles, scopes | Auth users |
-| training | categories, courses, prices, trainers, venues | profiles for actors |
-| delivery | sessions, participants | courses/resources/order lines/customers |
+| training | categories, courses, prices, trainers, availability, venues, rooms | profiles for actors |
+| delivery | sessions, schedule blocks, reservations, participants | courses/resources/order lines/customers |
 | customers | customers, contacts | sales owner |
 | sales | inquiries, quotes, orders, lines, handoff facts | customers/courses/sessions |
 | my-work/overview | derived queries only | source records |
@@ -106,7 +107,7 @@ workers in the launch architecture.
 | Authority roles | 5 | Any sixth role must prove distinct data/transactions/approval |
 | Primary work areas | 7 role-filtered | New navigation requires a new high-frequency workflow |
 | Authenticated main routes | 12 | Drawers/actions should not become routes by default |
-| Business tables | 17 | Finance approval may raise to 18 |
+| Business tables | 21 | A new aggregate requires an evidenced lifecycle/security need |
 | Persisted reporting views | 0 | Add only for measured correctness/performance need |
 | Privileged workflow RPCs | Narrow and role-checked | Each RPC needs atomicity/security justification |
 | Runtime dependencies | 5 initially; 6 with Query | No speculative packages |
@@ -133,3 +134,4 @@ workers in the launch architecture.
 6. Training Delivery and session conflicts (delivered).
 7. Participant roster, waitlist, transfer, outcomes, and certificates (delivered).
 8. Only approved management/administration additions.
+9. v2.5 convergence: public inventory, delivery intent, reservations, schedule blocks, rooms, blackouts, Go/No-Go, mobile navigation, and audit workspace (delivered).

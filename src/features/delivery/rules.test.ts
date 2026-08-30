@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { monthCalendarDays, moveCalendarAnchor, sessionDateKey, weekCalendarDays } from './calendar'
 import { hasIncompleteOutcome, sessionSeatSummary } from './rules'
-import type { DeliverySession, Participant } from './types'
+import type { DeliverySession, Participant, SessionReservation } from './types'
 
 const session = { id: 's1', capacity: 2 } as DeliverySession
 const participant = (status: Participant['status'], attendance_status: Participant['attendance_status'] = 'pending', assessment_status: Participant['assessment_status'] = 'pending') => ({
@@ -14,6 +14,23 @@ describe('delivery rules', () => {
       occupied: 2,
       waitlisted: 1,
       available: 0,
+    })
+  })
+
+  it('does not double-count named participants already covered by a commercial reservation', () => {
+    const allocated = { ...participant('confirmed'), order_line_id: 'line-1' } as Participant
+    const reservation = {
+      session_id: 's1',
+      order_line_id: 'line-1',
+      confirmed_seats: 2,
+      waitlisted_seats: 1,
+      status: 'partial',
+    } as SessionReservation
+
+    expect(sessionSeatSummary({ ...session, capacity: 5 }, [allocated], [reservation])).toEqual({
+      occupied: 2,
+      waitlisted: 1,
+      available: 3,
     })
   })
 

@@ -14,8 +14,11 @@ customer and contact management, inquiry pipeline, quotation pricing and focused
 discount approval, quote-to-order conversion, Sales-to-Operations handoff, Customer
 360, role-driven My Work/Overview screens, session scheduling, participant rosters,
 waitlists, transfers, attendance, assessment outcomes, and certificate control.
-Training Delivery includes role-scoped month, week, and list calendar views with
-trainer, venue, status, and capacity signals linked to each session workspace.
+Training Delivery includes public, private, and internal offerings; commercial seat
+reservations; configurable Go/No-Go; multi-day schedule blocks; trainer blackout
+periods; venue rooms; and transactional trainer, venue, room, and capacity checks.
+Its role-scoped month, week, and list calendar views expose course, category, trainer,
+venue, status, offering, and capacity signals linked to each session workspace.
 Management Reporting adds live role-scoped KPIs, filters, delivery and pipeline
 charts, course/trainer performance, and a clearly isolated simulation scenario.
 It is read-only and does not send emails, reminders, or notifications.
@@ -53,6 +56,7 @@ pnpm build
 - [Data model](docs/DATA-MODEL.md)
 - [Permissions](docs/PERMISSIONS.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [System rebuild and parity record](docs/system-rebuild/00-executive-summary.md)
 
 These five documents are the maintained design record. Review diaries, duplicate
 manuals, and generated recommendation backlogs are deliberately excluded.

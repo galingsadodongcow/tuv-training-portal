@@ -32,6 +32,12 @@ discounts above 10%. A quotation owner cannot approve their own discount.
 
 ## Version 1 workflows
 
+### v2.5 convergence extension
+
+The live workflow now supports public, private, and internal training offerings in the same delivery model. A quotation line chooses one of three explicit delivery intents: reserve a published public session, request a private session, or let Operations assign delivery. Accepted public selections reserve commercial seats atomically; named participants later allocate against that reservation without consuming capacity twice.
+
+Operations schedules one or more dated blocks, with course qualification, trainer blackout, trainer overlap, venue/room overlap, modality, and capacity checks enforced transactionally. Each course and session has a configurable minimum; an explicit Go decision is required before opening/starting, while No-Go closes and cancels the session atomically.
+
 ### Training catalogue
 
 Operations maintains a two-level category hierarchy, courses, allowed learning
@@ -41,15 +47,17 @@ sellable catalogue data.
 
 ### Scheduling and delivery
 
-Operations creates a session from an accepted order line, selecting interval,
-qualified trainer, compatible venue, and capacity. The database rechecks trainer
-and venue conflicts, qualification, dates, ordered headcount, and capacity. Session
+Operations creates a private session from an accepted order line or a public/internal
+session directly from the calendar, selecting dated blocks, qualified trainer,
+compatible venue/room, and capacity. The database rechecks trainer blackout and
+resource conflicts, qualification, dates, ordered headcount, and capacity. Session
 lifecycle is Scheduled, Open, In Progress, Completed, or Cancelled. Registration,
 confirmation, automatic waitlist promotion, course-preserving transfer, attendance,
 assessment, and certificate control live on the session record.
 
 The Training Calendar is the primary delivery workspace. It provides Monday-first
-month and week views plus a monthly list, with trainer, venue, and status filters.
+month and week views plus a monthly list, with course, category, trainer, venue,
+status, and offering filters.
 Capacity states distinguish open, full, and waitlisted sessions, and every calendar
 entry opens the authoritative session record.
 
@@ -146,17 +154,17 @@ waitlist/transfer, attendance, assessment, certificate control, completion,
 Customer 360, essential Overview, and audit.
 
 Excluded unless separately approved: receivables/payments, trainer rates/margin,
-certificate document rendering, cancellation approval, e-learning provisioning,
-attachments, outbound email, advanced reporting, automation, recurring or
-multi-segment sessions, drag-and-drop scheduling, and full historical
+cancellation reversal approval, e-learning provisioning, attachments, outbound email,
+advanced reporting, automation, recurring sessions, drag-and-drop scheduling, and full historical
 data migration.
 
 ## Current delivery boundary
 
-The complete 17-table v1 workflow is live in `academy_v2`. Conspicuously labeled
-sample records demonstrate commercial queues plus an open onsite session with a
-full roster and waitlist. Training Delivery and Participant Operations are now
-integrated with accepted order lines, My Work, Overview, and immutable audit events.
+The integrated 21-table workflow is live in `academy_v2`. Conspicuously labeled
+sample records demonstrate commercial queues, public inventory, multi-block delivery,
+configurable Go/No-Go and synthetic rosters. Training Delivery and Participant
+Operations are integrated with quote delivery intent, accepted order lines,
+reservations, My Work, Overview, and immutable audit events.
 
 ## Decisions still requiring the product owner
 
