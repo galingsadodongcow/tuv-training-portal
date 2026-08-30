@@ -12,7 +12,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
   administrator: [
     { href: '/administration', label: 'Administration', area: 'administration' },
     { href: '/my-work', label: 'My Work', area: 'my-work' },
-    { href: '/training', label: 'Training delivery', area: 'training' },
+    { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
     { href: '/sales', label: 'Sales', area: 'sales' },
     { href: '/customers', label: 'Customers', area: 'customers' },
@@ -20,7 +20,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
   ],
   operations: [
     { href: '/my-work', label: 'My Work', area: 'my-work' },
-    { href: '/training', label: 'Training delivery', area: 'training' },
+    { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
     { href: '/customers', label: 'Customers', area: 'customers' },
     { href: '/administration', label: 'Training setup', area: 'administration' },
@@ -28,18 +28,18 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
   sales: [
     { href: '/my-work', label: 'My Work', area: 'my-work' },
     { href: '/sales', label: 'Sales', area: 'sales' },
-    { href: '/training', label: 'Training delivery', area: 'training' },
+    { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
     { href: '/customers', label: 'Customers', area: 'customers' },
   ],
   manager: [
     { href: '/overview', label: 'Overview', area: 'overview' },
-    { href: '/training', label: 'Training delivery', area: 'training' },
+    { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
   ],
   auditor: [
     { href: '/overview', label: 'Audit overview', area: 'overview' },
-    { href: '/training', label: 'Training delivery', area: 'training' },
+    { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
   ],
 }

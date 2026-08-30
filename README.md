@@ -14,6 +14,8 @@ customer and contact management, inquiry pipeline, quotation pricing and focused
 discount approval, quote-to-order conversion, Sales-to-Operations handoff, Customer
 360, role-driven My Work/Overview screens, session scheduling, participant rosters,
 waitlists, transfers, attendance, assessment outcomes, and certificate control.
+Training Delivery includes role-scoped month, week, and list calendar views with
+trainer, venue, status, and capacity signals linked to each session workspace.
 
 ## Local setup
 

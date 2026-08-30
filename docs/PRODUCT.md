@@ -48,6 +48,11 @@ lifecycle is Scheduled, Open, In Progress, Completed, or Cancelled. Registration
 confirmation, automatic waitlist promotion, course-preserving transfer, attendance,
 assessment, and certificate control live on the session record.
 
+The Training Calendar is the primary delivery workspace. It provides Monday-first
+month and week views plus a monthly list, with trainer, venue, and status filters.
+Capacity states distinguish open, full, and waitlisted sessions, and every calendar
+entry opens the authoritative session record.
+
 ### Lead to order
 
 Sales searches for a customer before creating one, records an inquiry and next

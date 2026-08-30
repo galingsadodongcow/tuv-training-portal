@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { monthCalendarDays, moveCalendarAnchor, sessionDateKey, weekCalendarDays } from './calendar'
 import { hasIncompleteOutcome, sessionSeatSummary } from './rules'
 import type { DeliverySession, Participant } from './types'
 
@@ -20,5 +21,24 @@ describe('delivery rules', () => {
     expect(hasIncompleteOutcome(participant('confirmed'))).toBe(true)
     expect(hasIncompleteOutcome(participant('completed', 'present', 'passed'))).toBe(false)
     expect(hasIncompleteOutcome(participant('waitlisted'))).toBe(false)
+  })
+
+  it('builds a stable Monday-first six-week month grid', () => {
+    const days = monthCalendarDays('2026-09-15')
+    expect(days).toHaveLength(42)
+    expect(days[0]).toBe('2026-08-31')
+    expect(days[41]).toBe('2026-10-11')
+  })
+
+  it('builds Monday-first weeks and moves between periods', () => {
+    expect(weekCalendarDays('2026-09-09')).toEqual([
+      '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13',
+    ])
+    expect(moveCalendarAnchor('2026-01-31', 'month', 1)).toBe('2026-02-28')
+    expect(moveCalendarAnchor('2026-09-09', 'week', -1)).toBe('2026-09-02')
+  })
+
+  it('places sessions on their Asia/Manila calendar date', () => {
+    expect(sessionDateKey({ starts_at: '2026-09-07T16:30:00.000Z' })).toBe('2026-09-08')
   })
 })

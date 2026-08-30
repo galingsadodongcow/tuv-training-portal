@@ -5,8 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { MetricCard } from '@/components/ui/MetricCard'
 import { createSessionAction } from '@/features/delivery/actions'
+import { currentManilaDate, isDateKey, type CalendarView } from '@/features/delivery/calendar'
+import { DeliveryCalendar } from '@/features/delivery/DeliveryCalendar'
 import { getDeliveryWorkspace } from '@/features/delivery/queries'
-import { displaySessionNumber, formatSessionDate, formatSessionTime, hasIncompleteOutcome, sessionSeatSummary } from '@/features/delivery/rules'
+import { hasIncompleteOutcome } from '@/features/delivery/rules'
+import type { SessionStatus } from '@/features/delivery/types'
 import { displayNumber } from '@/features/sales/rules'
 import { getCurrentProfile } from '@/lib/auth/profile'
 import { canManageDelivery, canViewDelivery } from '@/lib/permissions'
@@ -14,7 +17,7 @@ import { canManageDelivery, canViewDelivery } from '@/lib/permissions'
 export default async function TrainingDeliveryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string; error?: string }>
+  searchParams: Promise<{ message?: string; error?: string; view?: string; date?: string; trainer?: string; venue?: string; status?: string }>
 }) {
   const profile = await getCurrentProfile()
   if (!profile?.is_active) redirect('/')
@@ -23,6 +26,13 @@ export default async function TrainingDeliveryPage({
   const [workspace, notice] = await Promise.all([getDeliveryWorkspace(), searchParams])
   const canManage = canManageDelivery(profile.role)
   const sessions = [...workspace.sessions].sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+  const today = currentManilaDate()
+  const view: CalendarView = ['month', 'week', 'list'].includes(notice.view ?? '') ? notice.view as CalendarView : 'month'
+  const anchorDate = isDateKey(notice.date) ? notice.date : today
+  const trainerId = workspace.trainers.some((item) => item.id === notice.trainer) ? notice.trainer ?? '' : ''
+  const venueId = workspace.venues.some((item) => item.id === notice.venue) ? notice.venue ?? '' : ''
+  const status: SessionStatus | '' = ['scheduled', 'open', 'in_progress', 'completed', 'cancelled'].includes(notice.status ?? '') ? notice.status as SessionStatus : ''
+  const calendarSessions = sessions.filter((session) => (!trainerId || session.trainer_id === trainerId) && (!venueId || session.venue_id === venueId) && (!status || session.status === status))
   const upcoming = sessions.filter((item) => ['scheduled', 'open'].includes(item.status))
   const inProgress = sessions.filter((item) => item.status === 'in_progress')
   const waitlisted = workspace.participants.filter((item) => item.status === 'waitlisted').length
@@ -35,8 +45,6 @@ export default async function TrainingDeliveryPage({
   const orderById = new Map(workspace.orders.map((item) => [item.id, item]))
   const customerName = new Map(workspace.customers.map((item) => [item.id, item.name]))
   const courseById = new Map(workspace.courses.map((item) => [item.id, item]))
-  const trainerName = new Map(workspace.trainers.map((item) => [item.id, item.name]))
-  const venueName = new Map(workspace.venues.map((item) => [item.id, item.name]))
   const ownerName = new Map(workspace.profiles.map((item) => [item.id, item.full_name]))
 
   return (
@@ -47,7 +55,7 @@ export default async function TrainingDeliveryPage({
           <h1>Session calendar and control desk</h1>
           <p>{canManage ? 'Schedule accepted orders, prevent resource conflicts, and move each delivery through a controlled lifecycle.' : 'Read-only delivery visibility is scoped to the work your role is allowed to see.'}</p>
         </div>
-        <div className="summary-chip">{upcoming.length} upcoming</div>
+        <div className="summary-chip">Calendar · {upcoming.length} upcoming</div>
       </div>
       {notice.message ? <div className="alert alert-success" role="status">{notice.message}</div> : null}
       {notice.error ? <div className="alert alert-error" role="alert">{notice.error}</div> : null}
@@ -61,24 +69,7 @@ export default async function TrainingDeliveryPage({
 
       <section className="workspace-section" aria-labelledby="calendar-title">
         <div className="section-heading"><div><h2 id="calendar-title">Delivery calendar</h2><p>Dates and times are shown in Asia/Manila. Trainer and venue overlaps are blocked in the database.</p></div></div>
-        {sessions.length === 0 ? <EmptyState>No sessions are visible yet.</EmptyState> : (
-          <div className="session-grid">
-            {sessions.map((session) => {
-              const seats = sessionSeatSummary(session, workspace.participants)
-              const order = orderById.get(session.order_id)
-              const course = courseById.get(session.course_id)
-              return (
-                <Link className="session-card" href={`/training/sessions/${session.id}`} key={session.id}>
-                  <div className="session-card-top"><span className="code">{displaySessionNumber(session.session_number)}</span><span className={`workflow-status status-${session.status}`}>{session.status.replaceAll('_', ' ')}</span></div>
-                  <strong>{course?.title ?? 'Course unavailable'}</strong>
-                  <span>{formatSessionDate(session.starts_at)} · {formatSessionTime(session.starts_at)}–{formatSessionTime(session.ends_at)}</span>
-                  <span>{trainerName.get(session.trainer_id)} · {venueName.get(session.venue_id)}</span>
-                  <div className="session-card-footer"><span>{seats.occupied}/{session.capacity} seats</span><span>{seats.waitlisted ? `${seats.waitlisted} waitlisted` : customerName.get(order?.customer_id ?? '')}</span></div>
-                </Link>
-              )
-            })}
-          </div>
-        )}
+        <DeliveryCalendar workspace={workspace} sessions={calendarSessions} view={view} anchorDate={anchorDate} today={today} filters={{ trainerId, venueId, status }} />
       </section>
 
       {canManage ? (
