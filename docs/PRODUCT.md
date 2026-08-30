@@ -101,7 +101,13 @@ performed before creation; controlled merge remains an administrator repair.
 | Sales | Pipeline, Quotes, and Orders views; creation is contextual |
 | Customers | Directory and authoritative Customer 360 |
 | Administration | Catalogue, trainers, venues, users, permissions |
-| Overview | Read-only replacement for My Work for Manager/Auditor |
+| Overview | Role-scoped Management Reporting plus immutable audit evidence |
+
+Management Reporting expands Overview for Administrator, Manager, Auditor,
+Operations, and Sales Supervisor. Live mode calculates role-scoped commercial,
+delivery, capacity, participant-outcome, trainer, and course metrics directly from
+source records. Simulation mode is an explicitly labeled fixture that changes no
+database records. Neither mode sends reminders or other communications.
 
 ## Existing-to-new mapping
 

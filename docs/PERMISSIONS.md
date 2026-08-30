@@ -23,6 +23,11 @@ rate, access, audit payload, and unnecessary participant/contact fields.
 | Audit events | Read/export | Own action receipt | Own action receipt | Summary | Read/export |
 | Sensitive rate/margin | Only if required | Only if required | Never | Approved summary only | Policy-specific |
 
+Management Reporting is read-only. Administrator, Manager, Auditor, and Operations
+can open it; Sales can open the team-scoped report only when the Sales Supervisor
+flag is enabled. Supabase RLS continues to determine which commercial, delivery,
+participant, and audit records each viewer contributes to the calculations.
+
 ## Policy rules
 
 1. Missing or inactive profiles receive no business access.

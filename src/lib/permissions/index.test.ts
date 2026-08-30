@@ -8,7 +8,9 @@ import {
   canViewOverview,
   canViewDelivery,
   canViewSales,
+  canViewReporting,
   homePath,
+  navigationForProfile,
   navigationForRole,
 } from './index'
 import type { Profile } from '@/types/auth'
@@ -49,5 +51,9 @@ describe('permissions', () => {
     const base = { id: '1', full_name: 'Sales user', role: 'sales', is_active: true } as Profile
     expect(canApproveDiscount({ ...base, is_sales_supervisor: false })).toBe(false)
     expect(canApproveDiscount({ ...base, is_sales_supervisor: true })).toBe(true)
+    expect(canViewReporting({ ...base, is_sales_supervisor: false })).toBe(false)
+    expect(canViewReporting({ ...base, is_sales_supervisor: true })).toBe(true)
+    expect(navigationForProfile({ ...base, is_sales_supervisor: true }).find((item) => item.area === 'overview')?.label).toBe('Team reports')
+    expect(canViewReporting({ ...base, role: 'operations', is_sales_supervisor: false })).toBe(true)
   })
 })

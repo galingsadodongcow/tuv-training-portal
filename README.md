@@ -16,6 +16,9 @@ discount approval, quote-to-order conversion, Sales-to-Operations handoff, Custo
 waitlists, transfers, attendance, assessment outcomes, and certificate control.
 Training Delivery includes role-scoped month, week, and list calendar views with
 trainer, venue, status, and capacity signals linked to each session workspace.
+Management Reporting adds live role-scoped KPIs, filters, delivery and pipeline
+charts, course/trainer performance, and a clearly isolated simulation scenario.
+It is read-only and does not send emails, reminders, or notifications.
 
 ## Local setup
 

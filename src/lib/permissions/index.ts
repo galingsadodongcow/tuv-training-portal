@@ -16,12 +16,13 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: '/participants', label: 'Participants', area: 'participants' },
     { href: '/sales', label: 'Sales', area: 'sales' },
     { href: '/customers', label: 'Customers', area: 'customers' },
-    { href: '/overview', label: 'Overview', area: 'overview' },
+    { href: '/overview', label: 'Reports', area: 'overview' },
   ],
   operations: [
     { href: '/my-work', label: 'My Work', area: 'my-work' },
     { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
+    { href: '/overview', label: 'Delivery reports', area: 'overview' },
     { href: '/customers', label: 'Customers', area: 'customers' },
     { href: '/administration', label: 'Training setup', area: 'administration' },
   ],
@@ -33,12 +34,12 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: '/customers', label: 'Customers', area: 'customers' },
   ],
   manager: [
-    { href: '/overview', label: 'Overview', area: 'overview' },
+    { href: '/overview', label: 'Management reports', area: 'overview' },
     { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
   ],
   auditor: [
-    { href: '/overview', label: 'Audit overview', area: 'overview' },
+    { href: '/overview', label: 'Audit & reports', area: 'overview' },
     { href: '/training', label: 'Training calendar', area: 'training' },
     { href: '/participants', label: 'Participants', area: 'participants' },
   ],
@@ -65,7 +66,12 @@ export function navigationForRole(role: Role): NavigationItem[] {
 }
 
 export function navigationForProfile(profile: Profile): NavigationItem[] {
-  return navigationForRole(profile.role)
+  const navigation = navigationForRole(profile.role)
+  if (profile.role === 'sales' && profile.is_sales_supervisor) {
+    const salesIndex = navigation.findIndex((item) => item.area === 'sales')
+    return [...navigation.slice(0, salesIndex + 1), { href: '/overview', label: 'Team reports', area: 'overview' }, ...navigation.slice(salesIndex + 1)]
+  }
+  return navigation
 }
 
 export function homePath(role: Role): NavigationItem['href'] {
@@ -94,4 +100,8 @@ export function canApproveDiscount(profile: Profile): boolean {
 
 export function canViewOverview(role: Role): boolean {
   return role === 'administrator' || role === 'manager' || role === 'auditor'
+}
+
+export function canViewReporting(profile: Profile): boolean {
+  return canViewOverview(profile.role) || profile.role === 'operations' || (profile.role === 'sales' && profile.is_sales_supervisor)
 }
