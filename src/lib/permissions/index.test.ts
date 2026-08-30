@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   canApproveDiscount,
+  canManageDelivery,
   canManageTraining,
   canViewCustomers,
   canViewMyWork,
   canViewOverview,
+  canViewDelivery,
   canViewSales,
   homePath,
   navigationForRole,
@@ -29,7 +31,7 @@ describe('permissions', () => {
   })
 
   it('keeps role navigation small and authority-aligned', () => {
-    expect(navigationForRole('sales').map((item) => item.href)).toEqual(['/my-work', '/sales', '/customers'])
+    expect(navigationForRole('sales').map((item) => item.href)).toEqual(['/my-work', '/sales', '/training', '/participants', '/customers'])
     expect(canViewMyWork('operations')).toBe(true)
     expect(canViewMyWork('sales')).toBe(true)
     expect(canViewSales('sales')).toBe(true)
@@ -37,6 +39,10 @@ describe('permissions', () => {
     expect(canViewCustomers('operations')).toBe(true)
     expect(canViewOverview('manager')).toBe(true)
     expect(canViewOverview('operations')).toBe(false)
+    expect(canViewDelivery('sales')).toBe(true)
+    expect(canViewDelivery('auditor')).toBe(true)
+    expect(canManageDelivery('operations')).toBe(true)
+    expect(canManageDelivery('sales')).toBe(false)
   })
 
   it('models Sales Supervisor as a scope rather than a sixth role', () => {

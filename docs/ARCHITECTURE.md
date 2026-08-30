@@ -5,7 +5,7 @@
 Build one Next.js 16 App Router application backed by one clean Supabase/Postgres
 schema. It is a modular monolith organized by business feature. Ordinary work is
 direct CRUD protected by RLS; privileged database functions exist only for
-atomic handoff/order/completion transactions.
+atomic handoff, scheduling, participant, outcome, and completion transactions.
 
 Current Supabase guidance is applied: Node.js 22+, publishable browser key,
 `@supabase/ssr` cookie clients, verified claims in `proxy.ts`, explicit Data API
@@ -20,8 +20,8 @@ to remove controls the user cannot use.
 
 ## Final navigation and routes
 
-Regular primary navigation is My Work, Calendar, Sales, Customers, and
-Administration. Overview replaces My Work for Manager/Auditor.
+Primary navigation is role-specific across My Work, Training Delivery,
+Participants, Sales, Customers, Administration, and Overview.
 
 Target authenticated route budget:
 
@@ -29,16 +29,15 @@ Target authenticated route budget:
 |---|---|
 | `/my-work` | Sales/Operations action queue |
 | `/overview` | Manager/Auditor read-only oversight |
-| `/calendar` | Schedule and quick session drawer |
-| `/calendar/sessions/[id]` | Session, roster, attendance, completion |
+| `/training` | Delivery calendar and accepted-order scheduling |
+| `/training/sessions/[id]` | Session lifecycle, roster, outcomes, certificates |
+| `/participants` | Cross-session participant registry |
 | `/sales` | Pipeline, Quotes, Orders views |
-| `/sales/inquiries/[id]` | Inquiry record/context |
 | `/sales/quotes/[id]` | Quote lines and conversion |
 | `/sales/orders/[id]` | Order, ownership, handoff, fulfilment context |
 | `/customers` | Search/list/create |
 | `/customers/[id]` | Customer 360 |
 | `/administration` | Catalogue, trainers, venues, access |
-| `/administration/users/[id]` | Controlled user access change |
 
 `/login` is public and `/` is role-aware. There are no compatibility routes.
 
@@ -48,7 +47,7 @@ Target authenticated route budget:
 |---|---|---|
 | auth/access | profiles, roles, scopes | Auth users |
 | training | categories, courses, prices, trainers, venues | profiles for actors |
-| calendar | sessions, participants | courses/resources/order lines |
+| delivery | sessions, participants | courses/resources/order lines/customers |
 | customers | customers, contacts | sales owner |
 | sales | inquiries, quotes, orders, lines, handoff facts | customers/courses/sessions |
 | my-work/overview | derived queries only | source records |
@@ -65,7 +64,7 @@ src/
   app/
   features/
     training/
-    calendar/
+    delivery/
     sales/
     customers/
     my-work/
@@ -95,8 +94,8 @@ Folders are added with their slice, not pre-created.
 
 The browser connects to Supabase with the project URL and publishable key. Next.js
 Server Components/Actions use the same caller cookie and remain subject to RLS.
-Supabase hosts Auth, Postgres, and the Data API. Netlify is the initial web host;
-Vercel remains a low-friction alternative if a measured adapter issue appears.
+Supabase hosts Auth, Postgres, and the Data API. OpenAI Sites hosts the private
+portal deployment from the reviewed source repository.
 There are no Edge Functions, cron jobs, queues, storage buckets, or background
 workers in the launch architecture.
 
@@ -105,11 +104,11 @@ workers in the launch architecture.
 | Measure | Target | Review trigger |
 |---|---:|---|
 | Authority roles | 5 | Any sixth role must prove distinct data/transactions/approval |
-| Primary work areas | 5 + optional Overview | New navigation requires a new high-frequency workflow |
+| Primary work areas | 7 role-filtered | New navigation requires a new high-frequency workflow |
 | Authenticated main routes | 12 | Drawers/actions should not become routes by default |
 | Business tables | 17 | Finance approval may raise to 18 |
 | Persisted reporting views | 0 | Add only for measured correctness/performance need |
-| Privileged workflow RPCs | 5 | Each additional RPC needs atomicity/security justification |
+| Privileged workflow RPCs | Narrow and role-checked | Each RPC needs atomicity/security justification |
 | Runtime dependencies | 5 initially; 6 with Query | No speculative packages |
 | Lifecycle vocabularies | 5 core, 26 values total maximum | Attention must remain separate/derived |
 | CI workflows | 2 | App quality and controlled database/security only |
@@ -127,10 +126,10 @@ workers in the launch architecture.
 ## Delivery sequence
 
 1. Foundation and authentication.
-2. Training catalogue/resources (current slice).
+2. Training catalogue/resources (delivered).
 3. Customers and Customer 360 (delivered).
 4. Inquiry, quotation, and Sales Supervisor approval (delivered).
 5. Order creation, handoff, and My Work (delivered).
-6. Calendar and session conflicts.
-7. Roster, attendance, completion.
+6. Training Delivery and session conflicts (delivered).
+7. Participant roster, waitlist, transfer, outcomes, and certificates (delivered).
 8. Only approved management/administration additions.

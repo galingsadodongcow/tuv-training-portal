@@ -44,8 +44,8 @@ erDiagram
 | `trainers` | Scheduling resource; Operations | Active/inactive | stable record; safe read, Ops/Admin write |
 | `trainer_courses` | Trainer competency; Operations | Active/inactive | unique trainer/course; qualification expiry optional |
 | `venues` | Physical/virtual location; Operations | Active/inactive | physical capacity positive; safe read, Ops/Admin write |
-| `sessions` | One course delivery interval; Operations | Draft/Confirmed/Running/Completed/Cancelled | end after start; confirmed conflict/qualification/capacity enforcement; safe read, Ops/Admin write |
-| `participants` | Session roster/attendance; Operations | Active/Removed; Not recorded/Present/Absent | active email unique per session; soft removal; capacity and same-session order line |
+| `sessions` | One accepted order-line delivery interval; Operations | Scheduled/Open/In progress/Completed/Cancelled | end after start; conflict/qualification/modality/capacity enforcement; scoped read, RPC-only writes |
+| `participants` | Roster, waitlist, transfer, attendance, assessment, certificate evidence; Operations | Registered/Waitlisted/Confirmed/Transferred/Cancelled/Completed/No show | unique session identity; atomic capacity promotion; masked oversight reads; RPC-only writes |
 | `customers` | Authoritative company record; Sales | Active/Archived/Merged | normalized identity search; own/team write; fulfilment-safe read |
 | `contacts` | Customer people; Sales | Active/inactive | belongs to one customer; contact method required when used |
 | `inquiries` | Training opportunity; Sales | New/Qualified/Quoted/Won/Lost | owner/customer required; loss reason for Lost; own/team write |
@@ -63,7 +63,7 @@ archive, cancellation, soft removal, and audit replace destructive deletion.
 
 1. Customer → inquiry → quote → order lineage is retained without requiring every step.
 2. Quote/order lines retain course, description, modality, seats, currency, and price snapshots.
-3. An order can contain multiple courses/sessions; a session can fulfil multiple order lines.
+3. An order can contain multiple course lines; each accepted order line produces one controlled session in v1.
 4. Responsibility is derived from handoff facts, not duplicated across assignments, tasks, and notifications.
 5. Attention reasons derive from dates, missing data, conflicts, capacity, and responsibility.
 6. Ordinary edits use `updated_at` for optimistic concurrency; handoff, conflict, capacity, and completion transactions lock/recheck.
@@ -77,7 +77,11 @@ archive, cancellation, soft removal, and audit replace destructive deletion.
 | `send_order_to_operations(order_id)` | Lock, validate completeness/scope, stamp, audit |
 | `accept_order(order_id)` | Lock and transfer responsibility atomically |
 | `return_order(order_id, reason)` | Controlled regression with mandatory reason and audit |
-| `complete_session(session_id)` | Recheck roster/attendance and make the session terminal |
+| `create_session(...)` / `reschedule_session(...)` | Recheck order lineage, qualification, modality, capacity, and conflicts atomically |
+| `transition_session(...)` | Enforce lifecycle and complete the order when all lines are delivered |
+| `register/transition/transfer_participant(...)` | Keep capacity, waitlist promotion, and transfer history transactional |
+| `record_participant_outcome(...)` | Update attendance, assessment, completion, and certificate eligibility together |
+| `issue/revoke_certificate(...)` | Enforce eligibility/completion and preserve auditable certificate state |
 
 Conflict lookup and completeness preview are ordinary RLS-safe queries. Trigger
 functions that enforce timestamps/audit/category depth are database internals,
@@ -148,5 +152,6 @@ intentional vertical delivery, not an incomplete attempt to pre-create all 17
 tables. `0005_sales_handoff_workflow.sql` adds the seven approved commercial
 tables (`customers`, `contacts`, `inquiries`, `quotations`, `quotation_lines`,
 `orders`, `order_lines`) together with their UI workflow, RLS, atomic transitions,
-and audit evidence. The delivered schema is now 15 tables; `sessions` and
-`participants` remain the final two approved v1 business tables.
+and audit evidence. `0008_training_delivery_and_participants.sql` adds the final
+two approved v1 tables and their role-scoped workflow. The delivered schema is now
+the complete 17-table target; `0009` and `0010` add advisor and masking hardening.

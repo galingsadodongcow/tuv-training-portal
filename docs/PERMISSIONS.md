@@ -11,7 +11,8 @@ rate, access, audit payload, and unnecessary participant/contact fields.
 | Categories/courses/prices | CRUD | CRUD | Read active | Read | Read |
 | Trainers/qualifications/venues | CRUD | CRUD | Safe read | Safe read | Safe read |
 | Sessions | Repair/CRUD | CRUD/lifecycle | Read | Read | Read |
-| Participants/attendance | Repair/CRUD | CRUD | Scoped read only if approved | Masked read | Masked read |
+| Participants/attendance/assessment | Repair/CRUD | CRUD | Own/team delivery read | Masked read | Masked read |
+| Certificate issue/revoke | Issue/revoke | Issue | Read own/team | Read status | Read status |
 | Customers/contacts | Repair/CRUD | Fulfilment-context read | Own/team CRUD + dedupe search | Read | Masked read |
 | Inquiries | Repair/CRUD | — | Own/team CRUD | Read | Read |
 | Quotes/lines | Repair/CRUD | — | Own/team CRUD/issue/convert; Supervisor approves >10% discounts | Read | Read |
@@ -35,9 +36,11 @@ rate, access, audit payload, and unnecessary participant/contact fields.
 
 ## Current slice
 
-The database now enforces catalogue plus customer-to-handoff permissions. Individual
+The database now enforces the complete catalogue, commercial, delivery, and participant permissions. Individual
 Sales users see only their commercial portfolio; the Sales Supervisor sees the team
 and can decide another owner’s high-discount quotation. Operations sees orders only
-once sent for handoff, never the inquiry/quotation pipeline. Manager and Auditor are
-read-only. Anonymous and inactive users have no business access. The UI mirrors these
-boundaries in Sales, Customers, My Work, order detail, Overview, and Administration.
+once sent for handoff, then controls sessions and participants through validated
+functions. Manager and Auditor are read-only and participant contact/employee fields
+are masked at the database listing boundary. Anonymous and inactive users have no
+business access. The UI mirrors these boundaries in Sales, Customers, My Work,
+Training Delivery, Participants, Overview, and Administration.

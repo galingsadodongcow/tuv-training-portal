@@ -41,11 +41,12 @@ sellable catalogue data.
 
 ### Scheduling and delivery
 
-Operations creates a session from Calendar, selecting course, interval, modality,
-trainer, venue, and capacity. Confirmation rechecks trainer and venue conflicts,
-qualification, dates, and capacity in the database. Session lifecycle is Draft,
-Confirmed, Running, Completed, or Cancelled. Roster, attendance, and participant
-removal live on the session record.
+Operations creates a session from an accepted order line, selecting interval,
+qualified trainer, compatible venue, and capacity. The database rechecks trainer
+and venue conflicts, qualification, dates, ordered headcount, and capacity. Session
+lifecycle is Scheduled, Open, In Progress, Completed, or Cancelled. Registration,
+confirmation, automatic waitlist promotion, course-preserving transfer, attendance,
+assessment, and certificate control live on the session record.
 
 ### Lead to order
 
@@ -90,7 +91,8 @@ performed before creation; controlled merge remains an administrator repair.
 | Area | Purpose |
 |---|---|
 | My Work | Only records that require the current user's action |
-| Calendar | Primary Operations scheduling and delivery workspace |
+| Training Delivery | Primary Operations scheduling calendar and session workspace |
+| Participants | Searchable cross-session registry; mutations remain on the session roster |
 | Sales | Pipeline, Quotes, and Orders views; creation is contextual |
 | Customers | Directory and authoritative Customer 360 |
 | Administration | Catalogue, trainers, venues, users, permissions |
@@ -101,16 +103,16 @@ performed before creation; controlled merge remains an administrator repair.
 | Existing | Decision | New destination | Reason |
 |---|---|---|---|
 | My Work | Keep | My Work | Core action queue |
-| Operations Today | Merge | My Work + Calendar | Duplicate aggregator |
+| Operations Today | Merge | My Work + Training Delivery | Duplicate aggregator |
 | Worklist | Merge | My Work + Sales/Orders | Duplicate operational queue |
 | Dashboard/Home | Merge | My Work or Overview | One role-appropriate start |
-| Calendar | Keep | Calendar | Primary Operations workspace |
-| Session create/edit/detail | Simplify | Calendar drawer + Session | Fewer route transitions |
+| Calendar | Keep | Training Delivery | Primary Operations workspace |
+| Session create/edit/detail | Simplify | Delivery calendar + Session | Fewer route transitions |
 | Training/Courses/Pricing | Merge | Administration | One low-frequency setup area |
-| Resources | Merge | Administration + Calendar | Resources are setup and assignments |
+| Resources | Merge | Administration + Training Delivery | Resources are setup and assignments |
 | CRM/Inquiries/Quotations/Orders/Sales Entry | Merge | Sales | One commercial workspace |
 | Clients + Organizations | Merge | Customers | One company model |
-| Participants | Merge | Session roster | Not a primary module |
+| Participants | Simplify | Participant registry + Session roster | Global search with contextual operations |
 | Team | Merge | My Work + Sales scope | Scope is not a module |
 | Approvals | Remove as module | Entity actions | No generic approval engine |
 | Reports/Analytics/Financial | Simplify | Overview + workflow filters | Avoid embedded BI/ERP |
@@ -119,7 +121,7 @@ performed before creation; controlled merge remains an administrator repair.
 | Communications/notifications/SLA tasks | Remove | Derived My Work | Avoid synchronized duplicate state |
 | E-learning | Defer | None in launch | Portal is not an LMS |
 | Quality/feedback/complaints | Defer | None in launch | Not in the approved workflow spine |
-| Certificates/assessments | Defer | Session if confirmed | Business-owner decision required |
+| Certificates/assessments | Keep focused | Session participant outcome | Eligibility and issuance are auditable |
 | Rollover/calendar year | Remove | Date filters | No copied annual configuration |
 | Saved views/themes/density | Remove | Fixed useful defaults | Personalization has no v1 outcome |
 | Attachments | Defer | External link if required | Storage/security cost unproven |
@@ -127,30 +129,29 @@ performed before creation; controlled merge remains an administrator repair.
 
 ## Version 1 scope
 
-Included: authentication/access, catalogue/resources, Calendar/session safety,
+Included: authentication/access, catalogue/resources, Training Delivery/session safety,
 customers/contacts, inquiries, quotes, orders, handoff, My Work, roster,
-attendance, completion, Customer 360, essential Overview, and audit.
+waitlist/transfer, attendance, assessment, certificate control, completion,
+Customer 360, essential Overview, and audit.
 
 Excluded unless separately approved: receivables/payments, trainer rates/margin,
-certificates/assessments, cancellation approval, e-learning provisioning,
+certificate document rendering, cancellation approval, e-learning provisioning,
 attachments, outbound email, advanced reporting, automation, recurring or
-multi-segment sessions, drag-and-drop scheduling, waitlists, and full historical
+multi-segment sessions, drag-and-drop scheduling, and full historical
 data migration.
 
 ## Current delivery boundary
 
-The customer-to-handoff workflow is live in `academy_v2`. Conspicuously labeled
-sample records demonstrate overdue follow-up, supervisor approval, pending
-Operations review, returned correction work, and successful quote conversion.
-Scheduling and participant fulfillment remain the next vertical slice.
+The complete 17-table v1 workflow is live in `academy_v2`. Conspicuously labeled
+sample records demonstrate commercial queues plus an open onsite session with a
+full roster and waitlist. Training Delivery and Participant Operations are now
+integrated with accepted order lines, My Work, Overview, and immutable audit events.
 
 ## Decisions still requiring the product owner
 
 1. Whether receivable/payment references belong in launch and which system owns them.
 2. Whether confirmed-session cancellation needs manager approval or only an audited reason.
-3. Whether assessment and certificate outcomes are mandatory at launch.
-4. Whether any modality may be handed off without an assigned session.
-5. Whether customer duplicates are blocked or warned for explicit confirmation.
-6. Whether Operations sees all customer history or fulfilment-related context only.
-7. Whether trainer rates or margin are required anywhere.
-8. Whether legacy data is selectively migrated or retained read-only in the old portal.
+3. Whether customer duplicates are blocked or warned for explicit confirmation.
+4. Whether Operations sees all customer history or fulfilment-related context only.
+5. Whether trainer rates or margin are required anywhere.
+6. Whether legacy data is selectively migrated or retained read-only in the old portal.

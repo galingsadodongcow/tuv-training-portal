@@ -136,6 +136,28 @@ tbody tr:hover { background: #fbfcfc; }
 .status-pending, .status-pending_operations, .status-qualified, .status-quoted, .status-sent, .status-fulfillment { background: #fff6dc; color: #7a5700; }
 .status-rejected, .status-returned, .status-lost, .status-cancelled { background: var(--danger-bg); color: var(--danger); }
 .status-with_operations { background: var(--blue-soft); color: var(--blue); }
+.status-scheduled, .status-open, .status-registered, .status-confirmed, .status-eligible, .status-present { background: var(--blue-soft); color: var(--blue); }
+.status-in_progress, .status-waitlisted, .status-partial, .status-pending, .status-not_eligible { background: #fff6dc; color: #7a5700; }
+.status-absent, .status-no_show, .status-failed, .status-revoked, .status-transferred { background: var(--danger-bg); color: var(--danger); }
+.status-issued, .status-passed, .status-not_required { background: var(--success-bg); color: var(--success); }
+.session-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.session-card { display: grid; gap: 9px; min-height: 190px; padding: 18px; border: 1px solid var(--line); border-radius: 9px; background: #fbfcfc; color: inherit; text-decoration: none; transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease; }
+.session-card:hover { border-color: #b7c8d2; box-shadow: 0 8px 22px rgba(16, 42, 61, 0.07); transform: translateY(-1px); }
+.session-card > strong { color: var(--navy); line-height: 1.4; }
+.session-card > span { color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
+.session-card-top, .session-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.session-card-footer { align-self: end; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+.participant-list { display: grid; gap: 12px; }
+.participant-card { padding: 17px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfc; }
+.participant-summary { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.participant-summary h3 { margin: 4px 0; font-size: 1rem; }
+.participant-summary p { margin: 0; color: var(--muted); font-size: 0.78rem; }
+.participant-facts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+.participant-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 9px; margin-top: 14px; }
+.participant-actions details { min-width: 180px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: white; }
+.participant-actions details .action-form, .participant-actions details .outcome-form { margin-top: 12px; }
+.outcome-form { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 10px; min-width: min(560px, 76vw); }
+.outcome-form .button { align-self: end; }
 .detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; align-items: start; }
 .action-panel { position: sticky; top: 88px; display: grid; gap: 16px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: white; box-shadow: var(--shadow); }
 .action-panel h2 { margin: 0; }
@@ -169,6 +191,7 @@ a.timeline-item:hover { border-color: #b9c8d1; background: #fafcfc; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-layout { grid-template-columns: 1fr; }
   .action-panel { position: static; }
+  .session-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
@@ -187,6 +210,9 @@ a.timeline-item:hover { border-color: #b9c8d1; background: #fafcfc; }
   .detail-grid { grid-template-columns: 1fr; }
   .detail-grid .detail-wide { grid-column: auto; }
   .timeline-item { grid-template-columns: 1fr; }
+  .session-grid { grid-template-columns: 1fr; }
+  .participant-summary { display: grid; }
+  .outcome-form { grid-template-columns: 1fr; min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

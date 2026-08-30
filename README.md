@@ -4,17 +4,16 @@ Academy Portal is a clean replacement for the internal training sales, schedulin
 handoff, and fulfilment application. This repository is greenfield: the previous
 portal is evidence for business behavior, not a code or migration base.
 
-The product is intentionally a modular monolith with five work areas: My Work,
-Calendar, Sales, Customers, and Administration. Management and audit users receive
-a read-only Overview instead of an action queue.
+The product is intentionally a modular monolith with focused work areas for My Work,
+Training Delivery, Participants, Sales, Customers, Administration, and Overview.
 
 ## Current delivery state
 
 The repository currently contains authentication, catalogue/resource administration,
 customer and contact management, inquiry pipeline, quotation pricing and focused
 discount approval, quote-to-order conversion, Sales-to-Operations handoff, Customer
-360, and role-driven My Work/Overview screens. Calendar, sessions, rosters, and
-attendance remain the next separate delivery slice rather than placeholder records.
+360, role-driven My Work/Overview screens, session scheduling, participant rosters,
+waitlists, transfers, attendance, assessment outcomes, and certificate control.
 
 ## Local setup
 
