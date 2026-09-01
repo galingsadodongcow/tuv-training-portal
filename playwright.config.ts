@@ -12,5 +12,5 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
-    : { command: 'pnpm dev', url: 'http://127.0.0.1:3000', reuseExistingServer: !process.env.CI },
+    : { command: 'pnpm dev --hostname 0.0.0.0', url: 'http://127.0.0.1:3000', reuseExistingServer: !process.env.CI },
 })
