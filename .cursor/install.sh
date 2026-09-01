@@ -11,11 +11,14 @@ cd "$REPO_ROOT"
 SUPABASE_CLI_VERSION="2.116.0"
 
 echo "[install] installing system packages..."
-sudo apt-get update -qq
+# Non-interactive, and auto-resolve conffile prompts (e.g. /etc/fuse.conf) so the
+# install never blocks waiting on stdin.
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
+APT_OPTS=(-y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+sudo -E apt-get update -qq
 # docker.io + fuse-overlayfs: run Supabase locally in this nested VM.
 # postgresql-client: apply migrations / inspect the database.
-sudo apt-get install -y -qq docker.io fuse-overlayfs postgresql-client ca-certificates curl >/dev/null 2>&1 || \
-  sudo apt-get install -y -qq docker.io fuse-overlayfs postgresql-client ca-certificates curl || true
+sudo -E apt-get install "${APT_OPTS[@]}" docker.io fuse-overlayfs postgresql-client ca-certificates curl
 
 echo "[install] installing supabase CLI ${SUPABASE_CLI_VERSION}..."
 if ! command -v supabase >/dev/null 2>&1 || [ "$(supabase --version 2>/dev/null)" != "$SUPABASE_CLI_VERSION" ]; then
@@ -29,6 +32,8 @@ fi
 supabase --version
 
 echo "[install] installing node dependencies..."
+# Never block on corepack's "about to download" confirmation.
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 corepack enable >/dev/null 2>&1 || true
 pnpm install --frozen-lockfile
 
