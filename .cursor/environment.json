@@ -1,0 +1,12 @@
+{
+  "name": "Academy Portal",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "pnpm dev --hostname 0.0.0.0"
+    }
+  ],
+  "ports": [3000, 54321, 54323]
+}
