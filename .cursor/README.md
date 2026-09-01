@@ -16,10 +16,6 @@ VM, so the login-gated app works end to end without any external secrets.
 migrations on a fresh database, exposes the `academy_v2` schema to PostgREST, and writes
 `.env.local` (pointed at the local Supabase URL and publishable key).
 
-`local-supabase/prerequisite-seed.sql` is a local-only workaround for a gap in the
-committed migrations (the `PH-C03-DPO-PERSCERT-VC` course is never inserted). It becomes
-a no-op once that gap is fixed in `supabase/migrations/0002_demo_roles_and_catalogue.sql`.
-
 ## Demo accounts
 
 All seeded accounts share the password `portaldev123` (override with `ACADEMY_DEV_PASSWORD`).
