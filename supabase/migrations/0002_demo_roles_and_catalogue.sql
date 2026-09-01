@@ -7,7 +7,8 @@ from (values
   ('Management Systems'),
   ('Food Safety'),
   ('Sustainability'),
-  ('Professional Development')
+  ('Professional Development'),
+  ('Data Privacy')
 ) as seed(name)
 where not exists (
   select 1 from academy_v2.categories c
@@ -40,7 +41,8 @@ with course_seed(code, title, category_name, duration_minutes, default_capacity)
     ('ISO-45001-LA', 'ISO 45001:2018 Lead Auditor', 'Occupational Health and Safety', 2400, 20),
     ('HACCP-L3', 'HACCP Level 3 for Food Manufacturing', 'HACCP and Food Hygiene', 960, 24),
     ('ESG-FOUND', 'ESG and Sustainability Foundations', 'ESG Fundamentals', 480, 30),
-    ('TOT-PRO', 'Professional Training of Trainers', 'Train the Trainer', 960, 20)
+    ('TOT-PRO', 'Professional Training of Trainers', 'Train the Trainer', 960, 20),
+    ('PH-C03-DPO-PERSCERT-VC', 'Data Protection Officer Personal Certification', 'Data Protection', 960, 25)
 )
 insert into academy_v2.courses(category_id, code, title, duration_minutes, default_capacity)
 select category.id, seed.code, seed.title, seed.duration_minutes, seed.default_capacity
